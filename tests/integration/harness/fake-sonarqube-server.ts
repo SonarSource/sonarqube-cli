@@ -630,7 +630,6 @@ export class FakeSonarQubeServerBuilder {
   private organizationsSearchErrorCode?: number;
   private projectsSearchErrorStatusCode?: number;
   private projectsSearchErrorBody?: string;
-  private projectCreateErrorBody?: string;
   private organizationCreateErrorStatus?: number;
   private subscriptionCreateErrorStatus?: number;
   private organizationHiddenLookups = 0;
@@ -849,12 +848,6 @@ export class FakeSonarQubeServerBuilder {
   /** Make POST /billing/subscriptions fail with this status, so the organization stays unsubscribed. */
   withSubscriptionCreateRejected(status: number): this {
     this.subscriptionCreateErrorStatus = status;
-    return this;
-  }
-
-  /** Make POST /api/projects/create reject with a 400 and this body. */
-  withProjectCreateRejected(body: string): this {
-    this.projectCreateErrorBody = body;
     return this;
   }
 
@@ -1212,7 +1205,6 @@ export class FakeSonarQubeServerBuilder {
       organizationsSearchErrorCode,
       projectsSearchErrorStatusCode,
       projectsSearchErrorBody,
-      projectCreateErrorBody,
       organizationCreateErrorStatus,
       subscriptionCreateErrorStatus,
       organizationHiddenLookups,
@@ -2191,22 +2183,6 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               entitlements: allowed ? [{ allowedFeatures: ['privateProjects'] }] : [],
-            }),
-            { headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-
-        if (path === '/api/projects/create' && req.method === 'POST') {
-          if (projectCreateErrorBody !== undefined) {
-            return new Response(projectCreateErrorBody, {
-              status: 400,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          const params = new URLSearchParams(body ?? '');
-          return new Response(
-            JSON.stringify({
-              project: { key: params.get('project'), name: params.get('name') },
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

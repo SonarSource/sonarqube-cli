@@ -49,6 +49,7 @@ export async function runNoProject(
   const { projectKey } = generateProjectProposal(projectRoot, remote, auth.orgKey);
   const existing = await new ProjectsClient(http).findProject(projectKey, auth.orgKey).orThrow();
   if (existing) {
+    deps.telemetry?.project(0)?.setPath('link_existing');
     const outcome = await runLinkExisting(
       { path: 'link-existing', projectRoot, remote, projectKey: existing.key },
       deps,

@@ -220,8 +220,8 @@ describe('sonar init telemetry', () => {
       });
       expect(projectEvents()).toEqual([
         expect.objectContaining({
-          init_path: 'unbound_new',
-          steps: ['project_bind:declined', 'create_project:skipped'],
+          init_path: 'no_project',
+          steps: ['project_bind:declined', 'link:skipped'],
           stopped_at: 'project_bind',
           failure_reason: 'cancelled',
         }),
@@ -249,7 +249,7 @@ describe('sonar init telemetry', () => {
       expect(projectEvents()).toEqual([
         expect.objectContaining({
           init_path: 'link_existing',
-          steps: ['project_bind:skipped', 'create_project:skipped', 'link:declined'],
+          steps: ['project_bind:skipped', 'link:declined'],
           stopped_at: 'link',
           failure_reason: 'cancelled',
         }),
@@ -372,9 +372,9 @@ describe('sonar init telemetry', () => {
         }),
         expect.objectContaining({
           project_index: 1,
-          init_path: 'unbound_new',
-          steps: ['project_bind:skipped', 'create_project:failed'],
-          stopped_at: 'create_project',
+          init_path: 'no_project',
+          steps: ['project_bind:skipped', 'link:failed'],
+          stopped_at: 'link',
           failure_reason: 'unknown',
         }),
       ]);
@@ -428,9 +428,35 @@ describe('sonar init telemetry', () => {
       expect(run.failure_reason ?? null).toBeNull();
       expect(projectEvents()).toEqual([
         expect.objectContaining({
-          steps: ['project_bind:skipped', 'create_project:skipped'],
+          init_path: 'no_project',
+          steps: ['project_bind:skipped', 'link:skipped'],
         }),
       ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports a missing project as a failed link without attempting creation',
+    async () => {
+      const server = await signInToCloud();
+      initGitRepo(harness.cwd.path);
+
+      const result = await harness.run('init --non-interactive');
+
+      expect(result.exitCode).toBe(2);
+      expect(runEvent()).toMatchObject({ stopped_at: 'link', failure_reason: 'unknown' });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'no_project',
+          steps: ['project_bind:skipped', 'link:failed'],
+          stopped_at: 'link',
+          failure_reason: 'unknown',
+        }),
+      ]);
+      expect(
+        server.getRecordedRequests().filter((request) => request.path === '/api/projects/create'),
+      ).toHaveLength(0);
     },
     TIMEOUT,
   );

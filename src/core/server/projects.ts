@@ -44,18 +44,9 @@ export interface PublicProjectsResponse {
   page?: { total?: number };
 }
 
-export type ProjectVisibility = 'private' | 'public';
-
 /** Same vocabulary as `GitRemoteBinding`; `in-org` also covers a lookup with no organization (Server). */
 export type ProjectLookup =
   { kind: 'in-org'; project: SonarQubeProject } | { kind: 'missing' } | { kind: 'other-org' };
-
-export interface CreateProjectParams {
-  projectKey: string;
-  name: string;
-  visibility: ProjectVisibility;
-  organization?: string;
-}
 
 export class ProjectsClient {
   private readonly client: SonarHttpClient;
@@ -169,17 +160,5 @@ export class ProjectsClient {
       );
     }
     return keys;
-  }
-
-  /** Creates an empty project that is not bound to any repository. */
-  createProject(params: CreateProjectParams): ResultAsync<SonarQubeProject, HttpClientError> {
-    return this.client
-      .postFormJson<{ project: { key: string; name: string } }>('/api/projects/create', {
-        project: params.projectKey,
-        name: params.name,
-        visibility: params.visibility,
-        ...(params.organization ? { organization: params.organization } : {}),
-      })
-      .map(({ project }) => ({ key: project.key, name: project.name }));
   }
 }
