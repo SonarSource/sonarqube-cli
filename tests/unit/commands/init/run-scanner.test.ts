@@ -115,6 +115,7 @@ posixOnly('runScanner', () => {
   it.each([
     ['https://sonarcloud.io', 'https://sonarcloud.io', 'https://api.sonarcloud.io'],
     ['https://sonarqube.us', 'https://sonarqube.us', 'https://api.sonarqube.us'],
+    ['https://sonarqube.au', 'https://sonarqube.au', 'https://api.sonarqube.au'],
   ])(
     'pins the endpoints of the Cloud host %s so a repository cannot redirect the token',
     async (serverUrl, sonarcloudUrl, apiBaseUrl) => {

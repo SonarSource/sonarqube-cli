@@ -162,6 +162,12 @@ For SonarQube Cloud US:
 sonar auth login --server https://sonarqube.us
 ```
 
+For SonarQube Cloud AU:
+
+```bash
+sonar auth login --server https://sonarqube.au
+```
+
 For self-hosted SonarQube Server:
 
 ```bash
@@ -186,7 +192,7 @@ Generate a token first: SonarQube → My Account → Security → Generate Token
 Then define the following environment variables before invoking `sonar` (use your runner's secret store in CI, or your preferred local mechanism — direnv, an untracked `.env` file,
 a password manager CLI, etc.):
 
-- SonarQube Cloud: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`
+- SonarQube Cloud: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`. These default to the EU region; for US or AU, also set `SONARQUBE_CLI_SERVER` to `https://sonarqube.us` or `https://sonarqube.au`
 - Self-hosted SonarQube Server: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_SERVER`
 
 With those exported, any command works without further configuration:
@@ -456,6 +462,7 @@ For SonarQube Cloud, ensure you're using the correct region:
 
 - EU: `https://sonarcloud.io`
 - US: `https://sonarqube.us`
+- AU: `https://sonarqube.au`
 
 ---
 

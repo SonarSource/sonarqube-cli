@@ -65,6 +65,7 @@ describe('scanner engine provisioning', () => {
   it.each([
     ['https://sonarcloud.io', 'https://api.sonarcloud.io/analysis/engine'],
     ['https://sonarqube.us', 'https://api.sonarqube.us/analysis/engine'],
+    ['https://sonarqube.au', 'https://api.sonarqube.au/analysis/engine'],
     ['https://sonar.example/context/', 'https://sonar.example/context/api/v2/analysis/engine'],
   ])('provisions the authenticated engine for %s', async (server, endpoint) => {
     const path = await prepareScannerEngine(new SonarHttpClient(server, token), directory);
