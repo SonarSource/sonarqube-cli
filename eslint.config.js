@@ -5,7 +5,8 @@ import headersPlugin from 'eslint-plugin-headers';
 import neverthrowPlugin from '@ninoseki/eslint-plugin-neverthrow';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
-const SONAR_PRODUCT_NAME_PATTERN = '/\\bSonar projects?\\b|\\bSet up Sonar\\b|\\bSonar CLI\\b/';
+// A bare "Sonar" names the company; "Sonar Vortex" and "Sonar binaries" are the agreed exceptions.
+const SONAR_PRODUCT_NAME_PATTERN = '/\\bSonar\\b(?! Vortex\\b| binaries\\b)/';
 const SONAR_PRODUCT_NAME_MESSAGE =
   'Sonar is the company name: call the product SonarQube (e.g. "SonarQube project").';
 

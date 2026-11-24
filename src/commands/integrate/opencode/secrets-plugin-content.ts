@@ -77,11 +77,11 @@ export default {
         );
         if (!isDecision(decision)) throw new Error('unexpected answer from sonar');
       } catch (error) {
-        throw new Error('Sonar: could not verify this file for secrets (' + errorMessage(error) + '). Blocking as a precaution.');
+        throw new Error('SonarQube could not verify this file for secrets (' + errorMessage(error) + '). Blocking as a precaution.');
       }
 
       if (decision.block) {
-        throw new Error((decision.reason ?? 'Sonar blocked this file read.') + ' ' + BYPASS_WARNING);
+        throw new Error((decision.reason ?? 'SonarQube blocked this file read.') + ' ' + BYPASS_WARNING);
       }
     });
 

@@ -76,7 +76,7 @@ export async function agentPromptSubmit(ctx: CommandInvocationContext): Promise<
       ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      denyPrompt('Sonar detected secrets in prompt');
+      denyPrompt('SonarQube detected secrets in prompt');
     }
   } catch (err) {
     logger.debug(`UserPromptSubmit secrets scan failed: ${(err as Error).message}`);

@@ -99,7 +99,7 @@ describe('agentPromptSubmit (unit — impractical-via-e2e paths)', () => {
     const written = String((stdoutSpy.mock.calls[0] as unknown[])[0]);
     const payload = JSON.parse(written) as { decision: string; reason: string };
     expect(payload.decision).toBe('block');
-    expect(payload.reason).toBe('Sonar detected secrets in prompt');
+    expect(payload.reason).toBe('SonarQube detected secrets in prompt');
   });
 
   it('outputs nothing and does not throw when scan throws an error', async () => {

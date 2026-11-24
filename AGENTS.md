@@ -12,6 +12,7 @@
 
 - Only `src/core/server/fetch.ts` may call runtime `fetch`. Use `fetchAuthenticated` for credentials and `fetchAnonymous` for credential-free CDN requests. Both resolve proxy/TLS/NO_PROXY per redirect hop; authenticated redirects must never leak credentials across origins. Do not override transport options at call sites. Outward SDK traffic must use this transport or equivalent protection. Read the API guidance below before changing network code.
 - Use `InvalidOptionError` and `CommandFailedError` from `src/core/commands/command-error.ts` for production errors. Preserve `CliError.remediationHint` rendering. Test mocks may throw `Error`.
+- Sonar is the company; SonarQube (Cloud or Server) is the product. User-facing text names the product, except "Sonar Vortex" and "Sonar binaries". Keep identifiers and markers (`sonar`, `~/.sonar`, `LEGACY_HOOK_MARKER`) unchanged. ESLint rejects other bare "Sonar" strings in `src/`.
 - Maintain instructions under [the instruction policy](docs/development/agent-instructions.md). Ordinary feature work does not require an instruction update.
 
 ## Read before editing the relevant area

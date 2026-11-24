@@ -124,7 +124,7 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
 
             expect(blocked.exitCode, blocked.diagnostic).toBe(0);
             expect(blocked.output.num_turns).toBe(0);
-            expect(blocked.output.result).toContain('Sonar detected secrets in prompt');
+            expect(blocked.output.result).toContain('SonarQube detected secrets in prompt');
             expect(blocked.output.result.toLowerCase()).toContain('blocked by hook');
           },
           { timeout: 180_000 },
