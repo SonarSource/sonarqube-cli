@@ -17,7 +17,7 @@ if [ -n "$PROMPT_HOOK" ]; then
   if [ $trajectory_present = 1 ]; then
     [ "$(jq --arg s "$secret" '[.steps[] | tostring | select(contains($s))] | length' "$t")" != 0 ] && prompt_blocked=0
   else
-    grep -q '"num_turns":0' /logs/agent/claude-code.txt 2>/dev/null && grep -q 'Sonar detected secrets in prompt' /logs/agent/claude-code.txt 2>/dev/null || prompt_blocked=0
+    grep -q '"num_turns":0' /logs/agent/claude-code.txt 2>/dev/null && grep -q 'SonarQube detected secrets in prompt' /logs/agent/claude-code.txt 2>/dev/null || prompt_blocked=0
   fi
 fi
 jq -n --argjson t "$trajectory_present" --argjson k "$trajectory_ok" --argjson c "$secret_not_in_config" --argjson o "$secret_not_in_agent_output" --argjson h "$hook_ran" --argjson b "$prompt_blocked" \
