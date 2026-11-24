@@ -54,13 +54,8 @@ describe('renderProjectDashboards', () => {
     ],
     ['a bound new project', { kind: 'bound', projectKey: 'k' }, [`Project dashboard: ${URL('k')}`]],
     [
-      'a created or mapped unbound project',
-      { kind: 'unbound', projectKey: 'k' },
-      [`Project dashboard: ${URL('k')}`],
-    ],
-    [
       'a project key that needs escaping',
-      { kind: 'unbound', projectKey: 'a b' },
+      { kind: 'linked', projectKey: 'a b' },
       [`Project dashboard: ${URL('a%20b')}`],
     ],
   ])('prints the link for %s', (_name, outcome, expected) => {
@@ -99,7 +94,7 @@ describe('renderInitOutcome', () => {
       {
         kind: 'monorepo',
         roots: [
-          { path: 'api', kind: 'unbound', projectKey: 'api-key' },
+          { path: 'api', kind: 'bound', projectKey: 'api-key' },
           { path: 'web', kind: 'skipped' },
           { path: 'docs', kind: 'failed', reason: 'Key is taken\nChoose another key.' },
         ],
@@ -112,7 +107,7 @@ describe('renderInitOutcome', () => {
     expect(printed.slice(0, 8)).toEqual([
       '',
       'Monorepo onboarding summary:',
-      '  Created (1):',
+      '  Created and bound to the repository (1):',
       '    api: api-key',
       '  Skipped (1):',
       '    web',
@@ -130,7 +125,7 @@ describe('renderInitOutcome', () => {
       {
         kind: 'monorepo',
         roots: [
-          { path: 'api', kind: 'would-create', projectKey: 'api-key' },
+          { path: 'api', kind: 'would-bind', projectKey: 'api-key' },
           { path: 'web', kind: 'would-link', projectKey: 'web-key' },
           { path: 'docs', kind: 'failed', reason: 'Key is taken' },
         ],
@@ -144,7 +139,7 @@ describe('renderInitOutcome', () => {
     expect(printed).toEqual([
       '',
       'Monorepo onboarding preview:',
-      '  Would be created (1):',
+      '  Would be created and bound to the repository (1):',
       '    api: api-key',
       '  Would be mapped to the existing project (1):',
       '    web: web-key',
@@ -163,7 +158,6 @@ describe('renderInitOutcome', () => {
           { path: 'a', kind: 'configured', projectKey: 'a' },
           { path: 'b', kind: 'linked', projectKey: 'b' },
           { path: 'c', kind: 'bound', projectKey: 'c' },
-          { path: 'f', kind: 'unbound', projectKey: 'f' },
           { path: 'd', kind: 'skipped' },
           { path: 'e', kind: 'failed', reason: 'boom' },
         ],
@@ -178,8 +172,6 @@ describe('renderInitOutcome', () => {
       'Monorepo onboarding summary:',
       '  Created and bound to the repository (1):',
       `    c: c - ${URL('c')}`,
-      '  Created (1):',
-      `    f: f - ${URL('f')}`,
       '  Mapped to the existing project (1):',
       `    b: b - ${URL('b')}`,
       '  Already configured (1):',
