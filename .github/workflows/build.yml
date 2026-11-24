@@ -30,7 +30,6 @@ jobs:
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
-      skip_windows_gpg: ${{ steps.signing_plan.outputs.skip_windows_gpg }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,18 +49,6 @@ jobs:
         run: |
           PROJECT_VERSION=$(bun build-scripts/set-build-number.ts "${BUILD_NUMBER}")
           echo "PROJECT_VERSION=${PROJECT_VERSION}" >> $GITHUB_OUTPUT
-
-      # Authenticode on master and branch-* replaces the Windows bytes, so that GPG signature is created afterwards.
-      - name: Decide whether to defer Windows GPG signing
-        id: signing_plan
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          if [[ "${GITHUB_REF_NAME}" == "${DEFAULT_BRANCH}" || "${GITHUB_REF_NAME}" == branch-* ]]; then
-            echo "skip_windows_gpg=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip_windows_gpg=false" >> "$GITHUB_OUTPUT"
-          fi
 
   build-binaries:
     name: Build All Binaries
@@ -119,18 +106,12 @@ jobs:
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
-          SKIP_WINDOWS_GPG: ${{ needs.prepare.outputs.skip_windows_gpg }}
         run: |
           set -euo pipefail
 
-          find_args=(dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \))
-          if [[ "${SKIP_WINDOWS_GPG}" == "true" ]]; then
-            find_args+=(! -name '*-windows-x86-64.exe')
-          fi
-
           while IFS= read -r -d '' binary; do
             bun build-scripts/sign.ts "$binary"
-          done < <(find "${find_args[@]}" -print0)
+          done < <(find dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \) -print0)
 
       - name: Upload linux-x86-64 binary
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -160,15 +141,6 @@ jobs:
             dist/*-macos-arm64.bin.asc
 
       - name: Upload windows-x86-64 binary
-        if: needs.prepare.outputs.skip_windows_gpg == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: binary-windows-x86-64
-          if-no-files-found: error
-          path: dist/*-windows-x86-64.exe
-
-      - name: Upload windows-x86-64 binary
-        if: needs.prepare.outputs.skip_windows_gpg != 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-windows-x86-64
@@ -181,8 +153,7 @@ jobs:
     name: Sign and Notarize macOS Binaries
     runs-on: macos-latest-xlarge
     needs: [prepare, build-binaries]
-    # Same refs as deferred Windows GPG signing: master and branch-*.
-    if: needs.prepare.outputs.skip_windows_gpg == 'true'
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -281,8 +252,8 @@ jobs:
     name: Authenticode-sign Windows binary
     runs-on: sonar-xs
     needs: [prepare, build-binaries]
-    # Pull requests keep the GPG signature from the build and skip Authenticode.
-    if: needs.prepare.outputs.skip_windows_gpg == 'true'
+    # Release branches only, matching macOS signing. Pull requests keep the unsigned binary.
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
     permissions:
       id-token: write
       contents: read
@@ -317,7 +288,7 @@ jobs:
         with:
           files: dist/*-windows-x86-64.exe
 
-      - name: GPG-sign the Windows binary
+      - name: Re-GPG-sign the Windows binary
         shell: bash
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
