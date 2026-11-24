@@ -22,12 +22,18 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { NetworkConfigError } from '@/core/errors.ts';
 import { MCP_DEFAULT_TOOLSETS } from '@/core/host/mcp/mcp-helper.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
+import {
+  HTTP_STATUS_FORBIDDEN,
+  HTTP_STATUS_OK,
+  HTTP_STATUS_UNAUTHORIZED,
+} from '@/core/server/http-constants.ts';
 import { resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 
 import type { McpRunOptions } from './mcp.ts';
 
 const MCP_ENDPOINT = '/mcp';
 const HEALTH_TIMEOUT_MS = 5000;
+const REQUEST_TIMEOUT_MS = 60000;
 
 type HostedAvailability = { available: boolean; reason: string | null };
 
@@ -49,7 +55,7 @@ export class HostedMcpClient {
       return { available: false, reason: 'health check failed' };
     }
     const status = result.value.response.status;
-    if (status === 401 || status === 403) {
+    if (status === HTTP_STATUS_UNAUTHORIZED || status === HTTP_STATUS_FORBIDDEN) {
       throw new CommandFailedError(
         `Hosted MCP health check at ${this.url}/health returned HTTP ${status}.`,
         {
@@ -58,7 +64,7 @@ export class HostedMcpClient {
         },
       );
     }
-    return status === 200
+    return status === HTTP_STATUS_OK
       ? { available: true, reason: null }
       : { available: false, reason: `returned HTTP ${status}` };
   }
@@ -72,7 +78,10 @@ export class HostedMcpClient {
     const signal =
       init.method === 'GET'
         ? init.signal
-        : AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(60000)]);
+        : AbortSignal.any([
+            ...(init.signal ? [init.signal] : []),
+            AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          ]);
     return this.connection.httpClient.requestRaw(MCP_ENDPOINT, { ...init, headers, signal });
   }
 }
