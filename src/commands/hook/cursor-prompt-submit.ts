@@ -83,7 +83,7 @@ export async function cursorPromptSubmit(
       ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      denyPrompt('Sonar detected secrets in prompt');
+      denyPrompt('SonarQube detected secrets in prompt');
     }
   } catch (err) {
     logger.debug(`beforeSubmitPrompt secrets scan failed: ${(err as Error).message}`);

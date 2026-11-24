@@ -69,7 +69,7 @@ export function renderCodexInstallation(
   console.text(`  • Codex: INSTALLED${suffix}`);
   if (managedHooks) {
     console.text(
-      `    Managed Sonar hooks (${managedHooks.path}): ${managedHooks.events.join(', ')}`,
+      `    Managed SonarQube hooks (${managedHooks.path}): ${managedHooks.events.join(', ')}`,
     );
   }
 }

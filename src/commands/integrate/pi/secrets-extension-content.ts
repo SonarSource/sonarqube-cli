@@ -109,13 +109,13 @@ export default function (pi: ExtensionAPI) {
         sessionID: ctx.sessionManager.getSessionId(),
       });
       if (decision.block) {
-        return { block: true, reason: (decision.reason ?? 'Sonar blocked this file read.') + ' ' + NO_BYPASS_SENTENCE };
+        return { block: true, reason: (decision.reason ?? 'SonarQube blocked this file read.') + ' ' + NO_BYPASS_SENTENCE };
       }
     } catch (error) {
       return {
         block: true,
         reason:
-          'Sonar could not verify ' + path + ' for secrets (' + describeError(error) + '). Blocking as a precaution. ' + NO_BYPASS_SENTENCE,
+          'SonarQube could not verify ' + path + ' for secrets (' + describeError(error) + '). Blocking as a precaution. ' + NO_BYPASS_SENTENCE,
       };
     }
   });
