@@ -23,12 +23,23 @@ import * as yaml from 'js-yaml';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { PROJECT_KEY_SAFE_PATTERN } from '@/core/project-key.ts';
 
+import defaultWorkflow from './workflow.yml';
+
 export const WORKFLOW_PATH = '.github/workflows/sonarqube.yml';
 const DEFAULT_SONAR_TOKEN_VAR_NAME = 'SONAR_TOKEN';
-export const CHECKOUT_ACTION = 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'; // v7.0.1
-export const SCAN_ACTION =
-  'SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4'; // v8.5.0
 const PROJECT_KEY_PLACEHOLDER = '{{SONAR_PROJECT_KEY}}';
+
+interface GeneratedWorkflow {
+  on: Record<string, unknown>;
+  jobs: {
+    sonarqube: {
+      steps: {
+        env?: Record<string, string>;
+        with: Record<string, unknown>;
+      }[];
+    };
+  };
+}
 
 export interface WorkflowOptions {
   triggerOn?: 'main' | 'pr' | 'both';
@@ -111,6 +122,12 @@ function scannerArgument(property: string): string {
   if (separator < 1 || !/^[a-zA-Z][a-zA-Z0-9._-]*$/.test(key) || /[\r\n\0]/.test(property)) {
     throw new InvalidOptionError('Scanner properties must be single-line key=value pairs.');
   }
+  // GitHub expands expressions after generation, so resolved values could introduce extra arguments.
+  if (property.includes('${{')) {
+    throw new InvalidOptionError(
+      'Scanner properties cannot contain GitHub expressions. Use --workflow-template for dynamic values.',
+    );
+  }
   // The scan action parses quoted arguments with string-argv, without executing a shell.
   const quote = property.includes('"') ? "'" : '"';
   if (property.includes(quote)) {
@@ -137,12 +154,16 @@ export function generateWorkflow(
   }
   const secret = options.sonarTokenVarName ?? DEFAULT_SONAR_TOKEN_VAR_NAME;
   const trigger = options.triggerOn ?? 'both';
-  const on: Record<string, unknown> = {};
-  if (trigger === 'main' || trigger === 'both') {
-    on.push = { branches: [defaultBranch] };
+  const workflow = structuredClone(defaultWorkflow as GeneratedWorkflow);
+  if (trigger === 'pr') {
+    delete workflow.on.push;
+  } else {
+    // Git forbids *, ? and [ in branch names, leaving ! and + to escape.
+    const branchPattern = defaultBranch.replace(/[!+]/g, '\\$&');
+    workflow.on.push = { branches: [branchPattern] };
   }
-  if (trigger === 'pr' || trigger === 'both') {
-    on.pull_request = { types: ['opened', 'synchronize', 'reopened'] };
+  if (trigger === 'main') {
+    delete workflow.on.pull_request;
   }
   const args = [
     ...(options.scannerProperty ?? []),
@@ -151,28 +172,10 @@ export function generateWorkflow(
   ]
     .map(scannerArgument)
     .join(' ');
-  return yaml.dump(
-    {
-      name: 'SonarQube analysis',
-      on,
-      permissions: { contents: 'read' },
-      jobs: {
-        sonarqube: {
-          'runs-on': 'ubuntu-latest',
-          steps: [
-            { uses: CHECKOUT_ACTION, with: { 'fetch-depth': 0 } },
-            {
-              name: 'SonarQube scan',
-              uses: SCAN_ACTION,
-              env: { SONAR_HOST_URL: serverUrl, SONAR_TOKEN: `\${{ secrets.${secret} }}` },
-              with: { args },
-            },
-          ],
-        },
-      },
-    },
-    { lineWidth: -1, noRefs: true },
-  );
+  const scan = workflow.jobs.sonarqube.steps[1];
+  scan.env = { SONAR_HOST_URL: serverUrl, SONAR_TOKEN: `\${{ secrets.${secret} }}` };
+  scan.with.args = args;
+  return yaml.dump(workflow, { lineWidth: -1, noRefs: true });
 }
 
 export function generatePrContent(

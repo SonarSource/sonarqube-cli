@@ -20,14 +20,13 @@
 
 import { describe, expect, it } from 'bun:test';
 import * as yaml from 'js-yaml';
+import { parseArgsStringToArgv } from 'string-argv';
 
 import {
-  CHECKOUT_ACTION,
   generatePrContent,
   generateTemplatePrContent,
   generateWorkflow,
   renderWorkflowTemplate,
-  SCAN_ACTION,
   validateWorkflowOptions,
   validateWorkflowTemplate,
 } from '@/commands/admin/onboard-ci/github/templates.ts';
@@ -44,9 +43,9 @@ jobs:
           SONAR_HOST_URL: \${{ vars.SERVER_URL }}
 `;
 
-function workflow(triggerOn: 'main' | 'pr' | 'both' = 'both') {
+function workflow(triggerOn: 'main' | 'pr' | 'both' = 'both', defaultBranch = 'trunk') {
   return yaml.load(
-    generateWorkflow('org:repo', 'https://sonar.example.com/context', 'trunk', { triggerOn }),
+    generateWorkflow('org:repo', 'https://sonar.example.com/context', defaultBranch, { triggerOn }),
   ) as {
     on: Record<string, unknown>;
     jobs: {
@@ -76,16 +75,23 @@ describe('generated GitHub workflow', () => {
     },
   );
 
+  it.each([
+    ['!main', '\\!main'],
+    ['release+stable', 'release\\+stable'],
+  ])('escapes default branch %s for literal matching', (branch, pattern) => {
+    expect(workflow('main', branch).on.push).toEqual({ branches: [pattern] });
+  });
+
   it('sets Server attribution, pinned actions, full checkout and a secret reference', () => {
     const job = workflow().jobs.sonarqube;
-    for (const step of job.steps) {
-      expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
-    }
     expect(job['runs-on']).toBe('ubuntu-latest');
-    expect(job.steps[0]).toEqual({ uses: CHECKOUT_ACTION, with: { 'fetch-depth': 0 } });
+    expect(job.steps[0]).toEqual({
+      uses: expect.stringMatching(/^actions\/checkout@[a-f0-9]{40}$/),
+      with: { 'fetch-depth': 0 },
+    });
     expect(job.steps[1]).toEqual({
       name: 'SonarQube scan',
-      uses: SCAN_ACTION,
+      uses: expect.stringMatching(/^SonarSource\/sonarqube-scan-action@[a-f0-9]{40}$/),
       env: {
         SONAR_HOST_URL: 'https://sonar.example.com/context',
         SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}',
@@ -97,18 +103,37 @@ describe('generated GitHub workflow', () => {
   it('preserves YAML-sensitive values and quotes complete scanner arguments', () => {
     const result = generateWorkflow('org:repo', 'https://sonar.example.com', 'feature: special', {
       sonarTokenVarName: 'ANALYSIS_TOKEN',
-      scannerProperty: [
-        "sonar.projectName=Team: Bob's app #1",
-        'sonar.exclusions=a/**,b/**',
-        'sonar.projectVersion=${{ github.sha }}',
-      ],
+      scannerProperty: ["sonar.projectName=Team: Bob's app #1", 'sonar.exclusions=a/**,b/**'],
     });
     expect(result).toContain('${{ secrets.ANALYSIS_TOKEN }}');
-    expect(result).toContain('${{ github.sha }}');
     const parsed = yaml.load(result) as ReturnType<typeof workflow>;
     expect(parsed.on.push).toEqual({ branches: ['feature: special'] });
     expect(parsed.jobs.sonarqube.steps[1].with.args).toContain(
       '"-Dsonar.projectName=Team: Bob\'s app #1"',
+    );
+  });
+
+  it('blocks PR title expressions whose resolved quotes could add scanner arguments', () => {
+    const expression = '${{ github.event.pull_request.title }}';
+    const resolvedTitle = 'My app" "-Dsonar.host.url=https://other.example';
+    // GitHub resolves the expression before the scan action parses its arguments.
+    const args = `"-Dsonar.projectName=${expression}"`.replace(expression, resolvedTitle);
+
+    expect(parseArgsStringToArgv(args)).toEqual([
+      '-Dsonar.projectName=My app',
+      '-Dsonar.host.url=https://other.example',
+    ]);
+    expect(() =>
+      generateWorkflow('org:repo', 'https://sonar.example.com', 'main', {
+        scannerProperty: [`sonar.projectName=${expression}`],
+      }),
+    ).toThrow('Scanner properties cannot contain GitHub expressions');
+  });
+
+  it('rejects GitHub SHA expressions in scanner properties', () => {
+    const property = 'sonar.projectVersion=${{ github.sha }}';
+    expect(() => validateWorkflowOptions({ scannerProperty: [property] })).toThrow(
+      'Scanner properties cannot contain GitHub expressions',
     );
   });
 

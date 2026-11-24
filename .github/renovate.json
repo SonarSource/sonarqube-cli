@@ -20,16 +20,9 @@
       }
     }
   ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^src/commands/admin/onboard-ci/github/templates\\.ts$/"
-      ],
-      "matchStrings": [
-        "const (?:CHECKOUT|SCAN)_ACTION\\s*=\\s*'(?<depName>[^'@]+)@(?<currentDigest>[a-f0-9]{40})'; // (?<currentValue>v[0-9.]+)"
-      ],
-      "datasourceTemplate": "github-tags"
-    }
-  ]
+  "github-actions": {
+    "managerFilePatterns": [
+      "src/commands/admin/onboard-ci/github/workflow.yml"
+    ]
+  }
 }
