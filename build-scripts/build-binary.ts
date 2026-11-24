@@ -27,6 +27,8 @@
 
 import { join } from 'node:path';
 
+import { sentryBunPlugin } from '@sentry/bun/plugin';
+
 import { resolveDistribution } from '@/core/host/distribution.ts';
 
 import packageJson from '../package.json';
@@ -77,6 +79,15 @@ try {
   const result = await Bun.build({
     entrypoints: [join(PROJECT_ROOT, 'src/index.ts')],
     compile,
+    // Without build-time instrumentation Sentry warns on every run, because Bun cannot patch modules at runtime.
+    // Uploads stay with `sentry:upload-sourcemaps`, so the plugin must not upload or report build telemetry.
+    plugins: [
+      sentryBunPlugin({
+        telemetry: false,
+        sourcemaps: { disable: 'disable-upload' },
+        release: { create: false, inject: false },
+      }),
+    ],
     define: {
       [DISTRIBUTION_DEFINE_KEY]: JSON.stringify(distribution),
       [VERSION_DEFINE_KEY]: JSON.stringify(version),
