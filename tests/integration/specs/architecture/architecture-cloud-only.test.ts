@@ -22,24 +22,24 @@ import { describe, expect, it } from 'bun:test';
 import { TestHarness } from '../../harness';
 
 describe('Architecture requires Cloud', () => {
-  it.each(['2025.1', '2026.6', '26.11'])('blocks every operation on Server %s', async (version) => {
-    const h = await TestHarness.create();
-    try {
-      const server = await h
-        .newFakeServer()
-        .withVersion(version)
-        .withAuthToken('test-token')
-        .start();
-      h.withAuth(server.baseUrl(), 'test-token');
-      for (const command of [
-        'arch current get -p shop',
-        'arch intended get -p shop',
-        'arch intended set -p shop --file missing.json',
-        'arch directives get -p shop',
-        'arch directives set -p shop --file missing.json',
-        'arch findings get -p shop',
-        'arch install-skill',
-      ]) {
+  describe.each(['2025.1', '2026.6', '26.11'])('Server %s', (version) => {
+    it.each([
+      'arch current get -p shop',
+      'arch intended get -p shop',
+      'arch intended set -p shop --file missing.json',
+      'arch directives get -p shop',
+      'arch directives set -p shop --file missing.json',
+      'arch findings get -p shop',
+      'arch install-skill',
+    ])('blocks %s', async (command) => {
+      const h = await TestHarness.create();
+      try {
+        const server = await h
+          .newFakeServer()
+          .withVersion(version)
+          .withAuthToken('test-token')
+          .start();
+        h.withAuth(server.baseUrl(), 'test-token');
         const result = await h.run(command);
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain(
@@ -48,15 +48,15 @@ describe('Architecture requires Cloud', () => {
         expect(result.stderr).toContain(
           'Authenticate against SonarQube Cloud with ‘sonar auth login’ and retry.',
         );
+        expect(
+          server
+            .getRecordedRequests()
+            .filter((r) => r.path.includes('/architecture/') || r.path === '/api/system/status'),
+        ).toHaveLength(0);
+      } finally {
+        await h.dispose();
       }
-      expect(
-        server
-          .getRecordedRequests()
-          .filter((r) => r.path.includes('/architecture/') || r.path === '/api/system/status'),
-      ).toHaveLength(0);
-    } finally {
-      await h.dispose();
-    }
+    });
   });
 
   it('keeps Cloud available and shows the command in help', async () => {

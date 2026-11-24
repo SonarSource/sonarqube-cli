@@ -22,9 +22,15 @@ import { describe, expect, it } from 'bun:test';
 import { TestHarness } from '../../harness';
 
 describe('Architecture Server version', () => {
-  it.each(['2025.1', '2026.5.4', '26.11'])(
-    'rejects Architecture operations on Server %s',
-    async (version) => {
+  describe.each(['2025.1', '2026.5.4', '26.11'])('Server %s', (version) => {
+    it.each([
+      'arch current get -p shop',
+      'arch intended get -p shop',
+      'arch intended set -p shop --file intended.json --dry-run',
+      'arch directives get -p shop',
+      'arch directives set -p shop --file directives.json --dry-run',
+      'arch findings get -p shop',
+    ])('rejects %s', async (command) => {
       const h = await TestHarness.create();
       try {
         const server = await h
@@ -36,23 +42,14 @@ describe('Architecture Server version', () => {
         h.withAuth(server.baseUrl(), 'test-token');
         h.cwd.writeFile('intended.json', JSON.stringify({ models: [] }));
         h.cwd.writeFile('directives.json', JSON.stringify({ create: [] }));
-        for (const command of [
-          'arch current get -p shop',
-          'arch intended get -p shop',
-          'arch intended set -p shop --file intended.json --dry-run',
-          'arch directives get -p shop',
-          'arch directives set -p shop --file directives.json --dry-run',
-          'arch findings get -p shop',
-        ]) {
-          const result = await h.run(command);
-          expect(result.exitCode).toBe(1);
-          expect(result.stderr).toContain(
-            'The sonar architecture command requires a SonarQube Cloud connection.',
-          );
-          expect(result.stderr).toContain(
-            'Authenticate against SonarQube Cloud with ‘sonar auth login’ and retry.',
-          );
-        }
+        const result = await h.run(command);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        expect(result.stderr).toContain(
+          'Authenticate against SonarQube Cloud with ‘sonar auth login’ and retry.',
+        );
         expect(
           server
             .getRecordedRequests()
@@ -61,8 +58,8 @@ describe('Architecture Server version', () => {
       } finally {
         await h.dispose();
       }
-    },
-  );
+    });
+  });
 
   it('keeps Cloud available regardless of the Server version', async () => {
     const h = await TestHarness.create();
