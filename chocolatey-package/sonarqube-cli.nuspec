@@ -15,8 +15,8 @@
     <docsUrl>https://docs.sonarsource.com/sonarqube-cli</docsUrl>
     <bugTrackerUrl>https://github.com/SonarSource/sonarqube-cli/issues</bugTrackerUrl>
     <releaseNotes>https://github.com/SonarSource/sonarqube-cli/releases/tag/__VERSION__</releaseNotes>
-    <summary>Command-line interface for SonarQube Server and SonarQube Cloud</summary>
-    <description>The SonarQube CLI (sonar) analyzes code and works with SonarQube Server and SonarQube Cloud. This package embeds the official Windows executable, so installation does not download from binaries.sonarsource.com.</description>
+    <summary>Code quality and security for terminal workflows, scripts, and AI agents</summary>
+    <description>The SonarQube CLI (sonar) is a command-line companion for SonarQube Cloud and SonarQube Server. It lets you scan for secrets, analyze local changes, query projects and issues, and wire SonarQube into AI coding assistants, all from your terminal.</description>
     <tags>sonar sonarqube cli static-analysis code-quality</tags>
   </metadata>
   <files>
