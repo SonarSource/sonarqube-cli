@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>sonarqube-cli</id>
+    <version>__VERSION__</version>
+    <title>SonarQube CLI</title>
+    <authors>SonarSource</authors>
+    <owners>SonarSource</owners>
+    <projectUrl>https://docs.sonarsource.com/sonarqube-cli</projectUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/SonarSource/sonarqube-cli@master/docs/assets/sonar-lockup-light.svg</iconUrl>
+    <licenseUrl>https://github.com/SonarSource/sonarqube-cli/blob/master/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/SonarSource/sonarqube-cli</projectSourceUrl>
+    <packageSourceUrl>https://github.com/SonarSource/sonarqube-cli/tree/master/chocolatey-package</packageSourceUrl>
+    <docsUrl>https://docs.sonarsource.com/sonarqube-cli</docsUrl>
+    <bugTrackerUrl>https://github.com/SonarSource/sonarqube-cli/issues</bugTrackerUrl>
+    <releaseNotes>https://github.com/SonarSource/sonarqube-cli/releases/tag/__VERSION__</releaseNotes>
+    <summary>Command-line interface for SonarQube Server and SonarQube Cloud</summary>
+    <description>The SonarQube CLI (sonar) analyzes code and works with SonarQube Server and SonarQube Cloud. This package embeds the official Windows executable, so installation does not download from binaries.sonarsource.com.</description>
+    <tags>sonar sonarqube cli static-analysis code-quality</tags>
+  </metadata>
+  <files>
+    <file src="tools/**" target="tools" />
+  </files>
+</package>
