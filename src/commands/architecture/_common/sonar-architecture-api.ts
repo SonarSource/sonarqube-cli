@@ -322,9 +322,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
             `Directive ${id} was not found or is not accessible in the selected project.`,
             {
               cause: error,
-              remediationHint: this.http.isCloud
-                ? undefined
-                : 'If this Server does not expose the public Architecture APIs, update to a Server build that does. Otherwise check the directive id and Browse permission.',
+              remediationHint: 'Check the directive id and Browse permission.',
             },
           );
         return collectionFailure(error, this.http.isCloud);

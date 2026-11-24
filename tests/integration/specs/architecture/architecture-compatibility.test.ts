@@ -252,8 +252,8 @@ describe('Architecture API compatibility diagnostics', () => {
       );
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('was not found or is not accessible');
-      if (cloud) expect(result.stderr).not.toContain('Server build');
-      else expect(result.stderr).toContain('Server build');
+      expect(result.stderr).toContain('Check the directive id and Browse permission.');
+      expect(result.stderr).not.toContain('Server build');
       expect(
         server
           .getRecordedRequests()
