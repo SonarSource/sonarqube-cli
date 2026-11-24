@@ -22,7 +22,10 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
+
 import { hookScriptName, TestHarness } from '../../harness';
+import { readSecretsScanArgvs } from '../../harness/recording-stub.ts';
 import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature } from './state-helpers';
 
@@ -384,6 +387,129 @@ describe('integrate (bare command)', () => {
     expect(harness.stateJsonFile.asJson().integrations.onboarding['claude-code']).toBeUndefined();
   });
 
+  it.each(['MDM', 'direct install'] as const)(
+    'activates Claude and Cursor together after one sign-in through %s',
+    async (mode) => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      const target = server.baseUrl();
+      const cwd = harness.cwd.path;
+      harness.userHome.writeFile('.claude.json', '{}');
+      harness.userHome.writeFile('.cursor/marker', '');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${target}\nsonar.projectKey=sample\n`,
+      );
+      harness
+        .state()
+        .withSecretsBinaryResponding({ exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '{}' });
+
+      const cursorEnv = { CURSOR_VERSION: '1.7.2', CURSOR_PROJECT_DIR: cwd };
+      const claudeStart = JSON.stringify({
+        cwd,
+        session_id: 'session',
+        hook_event_name: 'SessionStart',
+      });
+      const cursorStart = JSON.stringify({ workspace_roots: [cwd], conversation_id: 'session' });
+      const cursorInvitation = () =>
+        harness.runWithStdin('hook agent-onboarding --agent cursor', cursorStart);
+      const signInOptions = {
+        browserToken: 'test-token',
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      };
+      let login;
+      if (mode === 'MDM') {
+        const prepared = await harness.run(`integrate --all --non-interactive --server ${target}`);
+        expect(prepared.exitCode).toBe(0);
+        expect(prepared.stdout).toContain('Cursor: Waiting for sign-in');
+        expect(prepared.stdout).toContain('Claude Code: Waiting for sign-in');
+        harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+        const inherited = await harness.runWithStdin(
+          'hook agent-onboarding --agent claude',
+          claudeStart,
+          { extraEnv: cursorEnv },
+        );
+        expect(inherited.stdout).toBe('');
+        expect((await cursorInvitation()).stdout).toContain('Sign in to SonarQube');
+        harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+        expect((await cursorInvitation()).stdout).toBe('');
+        login = harness.runInteractive(`auth login --server ${target}`, signInOptions);
+      } else {
+        login = harness.runInteractive('integrate', signInOptions);
+        await login.waitText('Select the tool you want to integrate with');
+        login.keyUp();
+        login.keyEnter();
+        await login.waitText('Set up the new coding agents listed above?');
+        login.write('y');
+        await login.accept('When would you like to sign in?');
+      }
+      await login.waitText('Connect to:');
+      login.write('y');
+      const result = await login.waitFinish();
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Cursor: Configured');
+      expect(result.stdout).toContain('Claude Code: Configured');
+      expect(result.stdout + result.stderr).not.toContain('may conflict at the hook level');
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+      expect((await cursorInvitation()).stdout).toBe('');
+
+      const prompt = JSON.stringify({ prompt: 'fixture prompt' });
+      const inherited = await harness.runWithStdin('hook claude-prompt-submit', prompt, {
+        extraEnv: cursorEnv,
+      });
+      const cursor = await harness.runWithStdin('hook cursor-prompt-submit', prompt);
+      const claude = await harness.runWithStdin('hook claude-prompt-submit', prompt);
+      expect(inherited.stdout).toBe('');
+      expect(cursor.stdout).toContain('"continue":false');
+      expect(claude.stdout).toContain('"decision":"block"');
+      expect(readSecretsScanArgvs(harness)).toHaveLength(2);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'preserves an existing Claude setup when Cursor is added and removed',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness
+        .state()
+        .withSecretsBinaryResponding({ exitCode: EXIT_CODE_SECRETS_FOUND, stdout: '{}' });
+      expect((await harness.run('integrate claude --non-interactive')).exitCode).toBe(0);
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+      const claudeSettings = harness.userHome.file('.claude', 'settings.json');
+      const original = claudeSettings.asText();
+
+      harness.userHome.writeFile('.cursor/marker', '');
+      const setup = await harness.run('integrate --all --non-interactive');
+      expect(setup.exitCode).toBe(0);
+      expect(setup.stdout).toContain('Claude Code: Already configured');
+      expect(setup.stdout).toContain('Cursor: Configured');
+      expect(claudeSettings.asText()).toBe(original);
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+      const removal = harness.runInteractive('integrate cursor');
+      await chooseCustomize(removal);
+      for (const feature of ['secrets detection', 'MCP server']) {
+        await removal.decline(`${feature} (currently installed)  Keep?`);
+        await removal.accept('Proceed with removal?');
+      }
+      expect((await removal.waitFinish()).exitCode).toBe(0);
+      expect(claudeSettings.asText()).toBe(original);
+      expect(harness.userHome.exists('.cursor', 'hooks.json')).toBe(false);
+
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+      const inherited = await harness.runWithStdin(
+        'hook claude-prompt-submit',
+        JSON.stringify({ prompt: 'fixture prompt' }),
+        { extraEnv: { CURSOR_VERSION: '1.7.2', CURSOR_PROJECT_DIR: harness.cwd.path } },
+      );
+      expect(inherited.stdout).toContain('"decision":"block"');
+      expect(readSecretsScanArgvs(harness)).toHaveLength(1);
+    },
+    { timeout: 30000 },
+  );
+
   it(
     'signs in without activating prepared agents when setup is disabled',
     async () => {
@@ -636,9 +762,6 @@ describe('integrate (bare command)', () => {
     { timeout: 30000 },
   );
 
-  const CONFLICT_HINT =
-    "→ Run 'sonar integrate' again anytime to add, customize or remove an agent.";
-
   async function runBareIntegrateWithAgents(markers: string[]) {
     const server = await harness.newFakeServer().withAuthToken('test-token').start();
     harness.withAuth(server.baseUrl(), 'test-token');
@@ -653,7 +776,7 @@ describe('integrate (bare command)', () => {
   }
 
   it(
-    'prints one conflict line listing all three agents when Claude, Cursor and Copilot are detected',
+    'lists detected agents without a speculative hook warning',
     async () => {
       const result = await runBareIntegrateWithAgents([
         '.claude.json',
@@ -662,45 +785,9 @@ describe('integrate (bare command)', () => {
       ]);
 
       expect(result.stdout).toContain(
-        'Cursor, Claude Code and Copilot may conflict at the hook level.',
+        'Detected agents on your machine: Cursor, Claude Code, Copilot',
       );
-      expect(result.stdout).toContain(CONFLICT_HINT);
-      expect(result.stdout.match(/may conflict at the hook level/g)).toHaveLength(1);
-      expect(result.stderr).not.toContain('conflict');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'prints the conflict line for two agents when Claude and Cursor are detected',
-    async () => {
-      const result = await runBareIntegrateWithAgents(['.claude.json', '.cursor/marker']);
-
-      expect(result.stdout).toContain('Cursor and Claude Code may conflict at the hook level.');
-      expect(result.stdout).toContain(CONFLICT_HINT);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'prints the conflict line for two agents when Claude and Copilot are detected',
-    async () => {
-      const result = await runBareIntegrateWithAgents(['.claude.json', '.copilot/marker']);
-
-      expect(result.stdout).toContain('Claude Code and Copilot may conflict at the hook level.');
-      expect(result.stdout).toContain(CONFLICT_HINT);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'prints no conflict line when only Cursor and Copilot are detected',
-    async () => {
-      const result = await runBareIntegrateWithAgents(['.cursor/marker', '.copilot/marker']);
-
-      expect(result.stdout).toContain('Detected agents on your machine:');
-      expect(result.stdout).not.toContain('may conflict at the hook level');
-      expect(result.stdout).not.toContain(CONFLICT_HINT);
+      expect(result.stdout + result.stderr).not.toContain('may conflict at the hook level');
     },
     { timeout: 15000 },
   );

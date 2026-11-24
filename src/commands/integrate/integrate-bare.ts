@@ -116,13 +116,6 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
   [PRE_COMMIT_INTEGRATION_ID]: 'Git',
 };
 
-/** Agent pairs known to fight over hook execution when both are integrated on the same machine. */
-const CONFLICTING_AGENT_PAIRS: readonly (readonly [DetectedAgentId, DetectedAgentId])[] = [
-  ['claude', 'cursor'],
-  ['claude', 'copilot'],
-  ['claude', 'devin'],
-];
-
 /** Tools already integrated (any recorded feature), for display alongside detected agents. */
 function findAlreadyIntegrated(): string[] {
   const labels = new Set<string>();
@@ -131,25 +124,6 @@ function findAlreadyIntegrated(): string[] {
     if (label) labels.add(label);
   }
   return [...labels];
-}
-
-function joinNaturally(names: string[]): string {
-  if (names.length < 2) return names.join('');
-  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-}
-
-function noteConflictingAgents(detected: DetectedAgentId[], console: Console): void {
-  const conflicting = detected.filter((agent) =>
-    CONFLICTING_AGENT_PAIRS.some(
-      (pair) => pair.includes(agent) && pair.every((member) => detected.includes(member)),
-    ),
-  );
-  if (conflicting.length === 0) return;
-
-  console.info(
-    `${joinNaturally(conflicting.map((agent) => agentDisplayName(agent)))} may conflict at the hook level.`,
-  );
-  console.print("   → Run 'sonar integrate' again anytime to add, customize or remove an agent.");
 }
 
 export async function integrateBare(
@@ -189,8 +163,6 @@ function selectIntegration(console: Console, detected: DetectedAgentId[]) {
   if (alreadyIntegrated.length > 0) {
     console.info(`Already integrated: ${alreadyIntegrated.join(', ')}`);
   }
-
-  noteConflictingAgents(detected, console);
 
   return console.selectPrompt<(typeof TOOLS)[number] | 'all'>(
     'Select the tool you want to integrate with',
