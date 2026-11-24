@@ -35,6 +35,7 @@ import {
   downloadCompileTargetExecutable,
   REPOX_NPM_REGISTRY,
 } from './compile-target-runtime.ts';
+import { createSentryPlugins } from './sentry-plugins.ts';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
 const DEFAULT_OUTFILE = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');
@@ -77,6 +78,7 @@ try {
   const result = await Bun.build({
     entrypoints: [join(PROJECT_ROOT, 'src/index.ts')],
     compile,
+    plugins: createSentryPlugins(),
     define: {
       [DISTRIBUTION_DEFINE_KEY]: JSON.stringify(distribution),
       [VERSION_DEFINE_KEY]: JSON.stringify(version),
