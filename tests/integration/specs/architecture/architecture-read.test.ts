@@ -625,7 +625,9 @@ describe('sonar architecture reads', () => {
 
       expect(python.exitCode).toBe(0);
       expect((JSON.parse(python.stdout) as { models: unknown[] }).models).toEqual([]);
-      expect(python.stderr).toContain(`No intended architecture yet for '${PROJECT}'`);
+      expect(python.stderr).toContain(
+        `No intended architecture is visible for '${PROJECT}'. Check project access and whether a model is defined.`,
+      );
     },
     { timeout: 15000 },
   );

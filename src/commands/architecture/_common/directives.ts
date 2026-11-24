@@ -393,7 +393,7 @@ export async function applyDirectiveChanges(
   api: DirectivesApi,
   changes: DirectiveChanges,
   dryRun: boolean,
-  onPlan?: (directives: DirectiveInput[]) => Promise<void>,
+  onPlan?: (directives: DirectiveInput[], noneVisible: boolean) => Promise<void>,
 ) {
   const updates = await planUpdates(api, changes.update);
   const toDelete: ProjectDirective[] = [];
@@ -441,7 +441,11 @@ export async function applyDirectiveChanges(
     updated: [] as ProjectDirective[],
     deleted: [] as string[],
   };
-  if (onPlan) await onPlan([...result.toCreate, ...moving.map((change) => change.after)]);
+  if (onPlan)
+    await onPlan(
+      [...result.toCreate, ...moving.map((change) => change.after)],
+      creations.toCreate.length > 0 && existing.count === 0,
+    );
   if (dryRun) return result;
   let attempted = 'creation';
   let target = 'the current list';

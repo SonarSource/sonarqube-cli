@@ -52,7 +52,9 @@ export async function getIntended(
   const models = language ? all.filter((model) => model.language === language) : all;
 
   if (models.length === 0) {
-    ctx.console.warn(`No intended architecture yet for '${projectKey}'.`);
+    ctx.console.warn(
+      `No intended architecture is visible for '${projectKey}'. Check project access and whether a model is defined.`,
+    );
   }
   const partial = options.component !== undefined || options.depth !== undefined;
   if (options.component !== undefined) assertGroupExists(models, options.component);
