@@ -21,43 +21,19 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { DopSetting, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 
-export async function resolveGitlabDopSetting(
+export async function resolveDopSetting(
   bindings: ProjectBindingsClient,
+  platform: 'gitlab' | 'github',
   bindingName?: string,
 ): Promise<DopSetting & { url: string }> {
-  const settings = await bindings.listDopSettings('gitlab').orThrow();
+  const label = platform === 'github' ? 'GitHub' : 'GitLab';
+  const settings = await bindings.listDopSettings(platform).orThrow();
   if (settings.length === 0) {
     throw new CommandFailedError(
-      'No GitLab configuration found in SonarQube.\n' +
-        '  → Configure one at Administration > DevOps Platform Integrations > GitLab.',
+      `No ${label} configuration found in SonarQube.\n` +
+        `  → Configure one at Administration > DevOps Platform Integrations > ${label}.`,
     );
   }
-  return selectDopSetting(settings, 'GitLab', bindingName);
-}
-
-export async function resolveGithubDopSetting(
-  bindings: ProjectBindingsClient,
-  bindingName?: string,
-): Promise<DopSetting & { url: string }> {
-  const configured = await bindings.listDopSettings('github').orThrow();
-  const settings = configured.filter(
-    (setting) => setting.url?.replace(/\/$/, '').toLowerCase() === 'https://api.github.com',
-  );
-  if (settings.length === 0) {
-    throw new CommandFailedError(
-      'No GitHub.com configuration found in SonarQube.\n' +
-        '  → Configure one at Administration > DevOps Platform Integrations > GitHub.\n' +
-        'Only GitHub.com configurations (https://api.github.com) are supported.',
-    );
-  }
-  return selectDopSetting(settings, 'GitHub', bindingName);
-}
-
-function selectDopSetting(
-  settings: DopSetting[],
-  label: string,
-  bindingName?: string,
-): DopSetting & { url: string } {
   const available = settings.map((setting) => `  ${setting.key}  (${setting.url})`).join('\n');
   const setting = bindingName
     ? settings.find((setting) => setting.key === bindingName)
@@ -78,4 +54,12 @@ function selectDopSetting(
     throw new CommandFailedError(`${label} configuration '${setting.key}' has no API URL.`);
   }
   return { ...setting, url: setting.url };
+}
+
+export function assertGithubComUrl(url: string): void {
+  if (url.replace(/\/$/, '').toLowerCase() !== 'https://api.github.com') {
+    throw new CommandFailedError(
+      'Only GitHub.com configurations (https://api.github.com) are supported.',
+    );
+  }
 }

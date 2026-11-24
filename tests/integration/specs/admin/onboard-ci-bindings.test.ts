@@ -20,7 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { resolveGithubDopSetting } from '@/commands/admin/onboard-ci/dop-setting.ts';
+import { assertGithubComUrl, resolveDopSetting } from '@/commands/admin/onboard-ci/dop-setting.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import { clearSecretCache } from '@/core/host/keychain.ts';
@@ -79,7 +79,7 @@ describe('CI onboarding Server bindings', () => {
   const newServer = () => harness.newFakeServer().withAuthToken(TOKEN).withDopSettings([GITHUB]);
   const client = (url: string) => new ProjectBindingsClient(new SonarHttpClient(url, TOKEN));
 
-  it('selects the only GitHub.com integration and keeps its full repository names isolated', async () => {
+  it('selects a named GitHub integration and keeps its full repository names isolated', async () => {
     const server = await newServer()
       .withDopSettings([
         ENTERPRISE,
@@ -98,7 +98,7 @@ describe('CI onboarding Server bindings', () => {
       .start();
     const bindings = client(server.baseUrl());
 
-    const setting = await resolveGithubDopSetting(bindings);
+    const setting = await resolveDopSetting(bindings, 'github', GITHUB.key);
     expect(setting).toEqual(GITHUB);
     expect(await bindings.getAllProjectBindings(setting.id).orThrow()).toEqual(
       new Map([
@@ -111,7 +111,7 @@ describe('CI onboarding Server bindings', () => {
 
   it('explains how to configure GitHub when no integration exists', async () => {
     const server = await newServer().withDopSettings([]).start();
-    const error = await resolveGithubDopSetting(client(server.baseUrl())).catch(
+    const error = await resolveDopSetting(client(server.baseUrl()), 'github').catch(
       (error: unknown) => error,
     );
     expect(error).toMatchObject({
@@ -120,29 +120,29 @@ describe('CI onboarding Server bindings', () => {
     });
   });
 
-  it('lists eligible configurations when a name is required', async () => {
-    const server = await newServer().withDopSettings([GITHUB, SECOND_GITHUB, ENTERPRISE]).start();
-    const error = await resolveGithubDopSetting(client(server.baseUrl())).catch(
+  it('requires a name when GitHub.com and Enterprise integrations coexist', async () => {
+    const server = await newServer().withDopSettings([GITHUB, ENTERPRISE]).start();
+    const error = await resolveDopSetting(client(server.baseUrl()), 'github').catch(
       (error: unknown) => error,
     );
     expect(error).toMatchObject({ exitCode: 2 });
     expect(String(error)).toContain('--binding-name');
     expect(String(error)).toContain('my-github  (https://api.github.com)');
-    expect(String(error)).toContain('second-github  (https://api.github.com)');
-    expect(String(error)).not.toContain(ENTERPRISE.url);
+    expect(String(error)).toContain(`enterprise  (${ENTERPRISE.url})`);
   });
 
   it('selects the explicitly named configuration', async () => {
     const server = await newServer().withDopSettings([GITHUB, SECOND_GITHUB]).start();
-    expect(await resolveGithubDopSetting(client(server.baseUrl()), SECOND_GITHUB.key)).toEqual(
+    expect(await resolveDopSetting(client(server.baseUrl()), 'github', SECOND_GITHUB.key)).toEqual(
       SECOND_GITHUB,
     );
   });
 
   it('reports an unknown configuration name and the available choices', async () => {
     const server = await newServer().start();
-    const error = await resolveGithubDopSetting(
+    const error = await resolveDopSetting(
       client(server.baseUrl()),
+      'github',
       'organization-name',
     ).catch((error: unknown) => error);
     expect(error).toMatchObject({ exitCode: 2 });
@@ -152,19 +152,15 @@ describe('CI onboarding Server bindings', () => {
 
   it('rejects GitHub Enterprise configurations even when explicitly named', async () => {
     const server = await newServer().withDopSettings([ENTERPRISE]).start();
-    const error = await resolveGithubDopSetting(client(server.baseUrl()), ENTERPRISE.key).catch(
-      (error: unknown) => error,
+    const setting = await resolveDopSetting(client(server.baseUrl()), 'github', ENTERPRISE.key);
+    expect(() => assertGithubComUrl(setting.url)).toThrow(
+      'Only GitHub.com configurations (https://api.github.com) are supported.',
     );
-    expect(error).toMatchObject({
-      message: expect.stringContaining(
-        'Only GitHub.com configurations (https://api.github.com) are supported.',
-      ),
-    });
   });
 
   it('propagates a settings API failure', async () => {
     const server = await newServer().withDopSettingsError(403).start();
-    const error = await resolveGithubDopSetting(client(server.baseUrl())).catch(
+    const error = await resolveDopSetting(client(server.baseUrl()), 'github').catch(
       (error: unknown) => error,
     );
     expect(error).toBeInstanceOf(AccessDeniedError);
@@ -173,7 +169,7 @@ describe('CI onboarding Server bindings', () => {
   it('propagates a bindings API failure', async () => {
     const server = await newServer().withProjectBindingsStatus(403).start();
     const bindings = client(server.baseUrl());
-    const setting = await resolveGithubDopSetting(bindings);
+    const setting = await resolveDopSetting(bindings, 'github');
     const error = await bindings
       .getAllProjectBindings(setting.id)
       .orThrow()
