@@ -30,7 +30,7 @@ import type {
   SonarQubeIssue,
 } from '@/core/server/types.ts';
 
-import { recordedCloudAuthServerUrl } from './cloud-auth-url.js';
+import { recordedCloudAuthServerUrl, type RecordedCloudRegion } from './cloud-auth-url.js';
 import {
   FakeArchitecture,
   fakeMainBranchId,
@@ -497,7 +497,7 @@ export class FakeSonarQubeServer {
    * SonarQube Cloud URL stored in auth state / passed to `--server` for Cloud fakes.
    * HTTP still targets {@link baseUrl} via SONARQUBE_CLI_SONARCLOUD_* env overrides.
    */
-  recordedAuthServerUrl(region: 'eu' | 'us' = 'eu'): string {
+  recordedAuthServerUrl(region: RecordedCloudRegion = 'eu'): string {
     if (!this.treatAsCloud) {
       return this.baseUrl();
     }

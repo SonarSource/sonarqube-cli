@@ -54,7 +54,7 @@ The state file persists configuration across CLI invocations and stores:
 | `type`            | 'cloud' \| 'on-premise' | ✅       | Server type classification                  |
 | `serverUrl`       | string                  | ✅       | Server URL (e.g., `https://sonarcloud.io`)  |
 | `orgKey`          | string                  | ❌\*     | Organization key (for SonarQube Cloud only) |
-| `region`          | 'eu' \| 'us'            | ❌\*     | Cloud region (for SonarQube Cloud only)     |
+| `region`          | 'eu' \| 'us' \| 'au'    | ❌\*     | Cloud region (for SonarQube Cloud only)     |
 | `authenticatedAt` | ISO 8601 timestamp      | ✅       | When connection was established             |
 
 \*Required only for SonarQube Cloud connections

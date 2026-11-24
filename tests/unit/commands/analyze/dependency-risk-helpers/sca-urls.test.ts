@@ -53,6 +53,15 @@ describe('buildScaUrls', () => {
     });
   });
 
+  it('returns regional API host and SonarCloud scanner host for cloud AU', () => {
+    expect(
+      buildScaUrls(auth({ serverUrl: 'https://sonarqube.au', connectionType: 'cloud' })),
+    ).toEqual({
+      apiBaseUrl: 'https://api.sonarqube.au/sca',
+      downloadBaseUrl: 'https://scanner.sonarcloud.io/tidelift-cli',
+    });
+  });
+
   it('builds /api/v2/sca paths off the server URL for on-premise', () => {
     expect(buildScaUrls(auth({ serverUrl: 'https://sonar.example.com' }))).toEqual({
       apiBaseUrl: 'https://sonar.example.com/api/v2/sca',

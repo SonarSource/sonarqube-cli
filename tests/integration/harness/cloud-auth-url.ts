@@ -22,8 +22,9 @@
 
 export const RECORDED_SONARCLOUD_EU_URL = 'https://sonarcloud.io';
 export const RECORDED_SONARCLOUD_US_URL = 'https://sonarqube.us';
+export const RECORDED_SONARCLOUD_AU_URL = 'https://sonarqube.au';
 
-export type RecordedCloudRegion = 'eu' | 'us';
+export type RecordedCloudRegion = 'eu' | 'us' | 'au';
 
 export function isLoopbackTestServerUrl(serverUrl: string): boolean {
   try {
@@ -38,11 +39,21 @@ export function inferRecordedCloudRegion(env: Record<string, string>): RecordedC
   if (env.SONARQUBE_CLI_SONARCLOUD_US_URL || env.SONARQUBE_CLI_SONARCLOUD_US_API_URL) {
     return 'us';
   }
+  if (env.SONARQUBE_CLI_SONARCLOUD_AU_URL || env.SONARQUBE_CLI_SONARCLOUD_AU_API_URL) {
+    return 'au';
+  }
   return 'eu';
 }
 
 export function recordedCloudAuthServerUrl(region: RecordedCloudRegion = 'eu'): string {
-  return region === 'us' ? RECORDED_SONARCLOUD_US_URL : RECORDED_SONARCLOUD_EU_URL;
+  switch (region) {
+    case 'us':
+      return RECORDED_SONARCLOUD_US_URL;
+    case 'au':
+      return RECORDED_SONARCLOUD_AU_URL;
+    default:
+      return RECORDED_SONARCLOUD_EU_URL;
+  }
 }
 
 /** Makes loopback URLs resolvable as SonarCloud inside the compiled CLI under test. */
@@ -57,6 +68,9 @@ export function applyLoopbackSonarCloudEnvOverrides(
   if (region === 'us') {
     target.SONARQUBE_CLI_SONARCLOUD_US_URL = serverUrl;
     target.SONARQUBE_CLI_SONARCLOUD_US_API_URL = serverUrl;
+  } else if (region === 'au') {
+    target.SONARQUBE_CLI_SONARCLOUD_AU_URL = serverUrl;
+    target.SONARQUBE_CLI_SONARCLOUD_AU_API_URL = serverUrl;
   } else {
     target.SONARQUBE_CLI_SONARCLOUD_URL = serverUrl;
     target.SONARQUBE_CLI_SONARCLOUD_API_URL = serverUrl;
