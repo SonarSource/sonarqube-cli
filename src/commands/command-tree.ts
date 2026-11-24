@@ -1187,7 +1187,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     'Run SonarQube services',
   );
 
-  // Hidden command for running MCP server. Spawns MCP Docker container and proxies stdio for MCP transport.
+  // Hidden command for running MCP server. Connects to hosted MCP or spawns an MCP Docker container and proxies stdio for MCP transport.
   runCommand
     .command('mcp')
     .description('Run the SonarQube MCP server (stdio transport, for use in agent MCP configs)')
@@ -1200,7 +1200,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
     .addHelpText(
       `after`,
-      `${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
+      `${projectKeyExtraHelp}\nUses hosted MCP when available, otherwise a local container.\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
     )
     .anonymousAction(
       (
