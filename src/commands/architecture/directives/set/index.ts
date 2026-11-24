@@ -69,6 +69,10 @@ export async function setProjectDirectives(
     created: result.created.length,
     skipped: result.skipped,
   });
+  if (result.noneVisible)
+    ctx.console.warn(
+      'No existing directives are visible. If project permissions hide them, creation can duplicate them.',
+    );
   const prefix = options.dryRun ? 'Would' : 'Did';
   for (const item of result.toCreate) {
     const perspective = item.graphPerspective ? ` [${item.graphPerspective}]` : '';

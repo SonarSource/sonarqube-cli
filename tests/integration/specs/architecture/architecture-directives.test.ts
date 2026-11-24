@@ -1217,6 +1217,7 @@ describe('public project directives', () => {
     const preview = await h.run('arch directives set -p shop --file directives.json --dry-run');
     expect(preview.exitCode).toBe(0);
     expect(preview.stdout).toContain('Skipped 2');
+    expect(preview.stderr).not.toContain('No existing directives are visible');
     expect(
       s
         .getRecordedRequests()
@@ -1238,6 +1239,27 @@ describe('public project directives', () => {
         .filter(
           (r) => ['PATCH', 'DELETE'].includes(r.method) && r.path.includes('project-directives'),
         ),
+    ).toHaveLength(0);
+  });
+  it('warns that hidden directives can be duplicated when none are visible on Server', async () => {
+    const s = await h
+      .newFakeServer()
+      .withVersion('2026.6')
+      .withAuthToken('directive-token')
+      .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives([])))
+      .start();
+    h.withAuth(s.baseUrl(), 'directive-token');
+    h.cwd.writeFile('directives.json', JSON.stringify({ create: [directive] }));
+    const preview = await h.run('arch directives set -p shop --file directives.json --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain('Would create: REMOVE_EDGE');
+    expect(preview.stderr).toContain(
+      'No existing directives are visible. If project permissions hide them, creation can duplicate them.',
+    );
+    expect(
+      s
+        .getRecordedRequests()
+        .filter((r) => r.method === 'POST' && r.path === '/api/v2/architecture/project-directives'),
     ).toHaveLength(0);
   });
   it('relays a backend permission refusal without creating or replacing directives', async () => {
