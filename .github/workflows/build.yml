@@ -288,6 +288,8 @@ jobs:
         uses: SonarSource/gh-action_azure-artifact-signing@55a0fb66cb54ef9eca20102a9c617ece5d14c758 # 1.1.1
         with:
           files: dist/*-windows-x86-64.exe
+          # TEST ONLY: force the release profile to validate codesigning-release RBAC on a PR. Revert before merge.
+          signing-profile: release
 
       - name: Re-GPG-sign the Windows binary
         shell: bash
