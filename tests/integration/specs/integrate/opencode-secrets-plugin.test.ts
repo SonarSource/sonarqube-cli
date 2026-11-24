@@ -122,7 +122,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
       ]);
 
       expect(run.results[0].error).toStartWith(
-        `Sonar detected secrets in file: ${secretPath}. Do not attempt to access this file another way`,
+        `SonarQube detected secrets in file: ${secretPath}. Do not attempt to access this file another way`,
       );
     },
     { timeout: 60000 },
@@ -141,7 +141,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
         { processCwd: harness.userHome.path },
       );
 
-      expect(run.results[0].error).toContain('Sonar detected secrets in file');
+      expect(run.results[0].error).toContain('SonarQube detected secrets in file');
     },
     { timeout: 60000 },
   );
@@ -156,7 +156,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
         readEvent('read', { path: '~/token.js' }),
       ]);
 
-      expect(run.results[0].error).toContain('Sonar detected secrets in file');
+      expect(run.results[0].error).toContain('SonarQube detected secrets in file');
     },
     { timeout: 60000 },
   );
@@ -171,7 +171,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
         readEvent('read', { path: '~\\token.js' }),
       ]);
 
-      expect(run.results[0].error).toContain('Sonar detected secrets in file');
+      expect(run.results[0].error).toContain('SonarQube detected secrets in file');
     },
     { timeout: 60000 },
   );
@@ -187,7 +187,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
         readEvent('read', { path: 'config' }),
       ]);
 
-      expect(run.results[0].error).toContain('Sonar detected secrets in file');
+      expect(run.results[0].error).toContain('SonarQube detected secrets in file');
     },
     { timeout: 60000 },
   );

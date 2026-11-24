@@ -35,7 +35,7 @@ import type { HookDependencies } from './hook-dependencies.ts';
 // The beforeSubmitPrompt hook (cursor-prompt-submit.ts) blocks differently — `{ continue: false }`
 // at exit 0 — because that event has no `permission` field; the file-read events use this path.
 export const CURSOR_BLOCK_EXIT_CODE = 2;
-export const SECRETS_IN_FILE_MESSAGE = 'Sonar detected secrets in this file';
+export const SECRETS_IN_FILE_MESSAGE = 'SonarQube detected secrets in this file';
 
 export async function scanTextForSecrets(
   deps: HookDependencies,

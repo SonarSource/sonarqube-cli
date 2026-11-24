@@ -149,7 +149,7 @@ async function loadSessionStartContext(
 
   if (!discovered.projectKey && !discovered.ambiguousProject) {
     if (!hasSonarConfig && !discovered.gitRemoteBindingNotFound) {
-      logSkip('no project key or Sonar configuration resolved');
+      logSkip('no project key or SonarQube configuration resolved');
       return null;
     }
     return contextWarning(

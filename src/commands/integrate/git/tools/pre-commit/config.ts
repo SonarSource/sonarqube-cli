@@ -71,7 +71,7 @@ function buildSonarHook(stage: GitHookType, context: IntegrationContext): PreCom
     stage === 'pre-commit' ? resolveDepRisksArgs(context, { shellQuote: false }) : '';
   return {
     id: PRE_COMMIT_HOOK_IDS[stage],
-    name: `Sonar ${stage} scan`,
+    name: `SonarQube ${stage} scan`,
     entry: `sonar hook git-${stage}${depRisksArgs} --`,
     language: 'system',
     pass_filenames: true,
