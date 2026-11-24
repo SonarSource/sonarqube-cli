@@ -106,6 +106,24 @@ describe('sonar architecture install-skill', () => {
     { timeout: 15000 },
   );
 
+  it('installs the skill on SonarQube Server and describes Server support', async () => {
+    await harness.dispose();
+    harness = await TestHarness.create();
+    const server = await harness
+      .newFakeServer()
+      .withVersion('2026.6')
+      .withAuthToken('test-token')
+      .start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+    const help = await harness.run('architecture --help');
+    expect(help.stdout).not.toContain('Cloud only');
+    const result = await harness.run('arch install-skill');
+    expect(result.exitCode).toBe(0);
+    const content = readFileSync(join(harness.cwd.path, SKILL_PATHS[0]), 'utf8');
+    expect(content).toContain('SonarQube Cloud and SonarQube Server 2026.6 or later');
+    expect(content).not.toContain('require a SonarQube Cloud connection');
+  });
+
   it(
     'refuses to overwrite a SKILL.md it did not write, unless --force',
     async () => {
