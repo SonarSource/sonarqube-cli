@@ -22,6 +22,8 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { GitHubClient, GitHubRepo } from '@/core/github/client.ts';
 import type { ComponentsClient } from '@/core/server/components.ts';
 
+import { deleteBranchUnlessRequestOpen } from '../branch-guard.ts';
+import { hasSonarAnalysis } from '../ci-detection.ts';
 import type { WorkflowOptions } from './templates.ts';
 import {
   generatePrContent,
@@ -93,11 +95,7 @@ async function assessWorkflows(
         `Workflow '${entry.path}' disappeared during assessment; run onboarding again.`,
       );
     }
-    if (
-      /sonar-scanner|sonarscanner|sonar:sonar|(?:gradle|gradlew)\s+sonar\b|sonarqube-scan-action|sonarcloud-github-action|sonarqube-github-action|SONAR_HOST_URL|SONAR_TOKEN|sonar\.projectKey/.test(
-        content,
-      )
-    ) {
+    if (hasSonarAnalysis(content)) {
       return { outcome: 'skip', reason: 'ALREADY_CONFIGURED' };
     }
   }
@@ -110,7 +108,7 @@ export async function assessRepo(
   bindings: ReadonlyMap<string, string>,
 ): Promise<RepoAssessment> {
   try {
-    const projectKey = bindings.get(repo.full_name);
+    const projectKey = bindings.get(repo.full_name.toLowerCase());
     if (!projectKey) {
       return { outcome: 'skip', reason: 'NOT_IN_SONARQUBE' };
     }
@@ -168,17 +166,20 @@ async function prepareOnboardingBranch(
   baseSha: string,
 ): Promise<SkippedResult | undefined> {
   if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
-    // Recheck before deleting: preserve a PR opened since assessment.
-    const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
+    const prUrl = await deleteBranchUnlessRequestOpen({
+      getOpenRequestUrl: () => retrieveOpenPrUrl(ctx, repo.full_name),
+      deleteBranch: async () => {
+        try {
+          await ctx.github.deleteBranch(repo.full_name, CI_BRANCH);
+        } catch (error) {
+          if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
+            throw error;
+          }
+        }
+      },
+    });
     if (prUrl) {
       return { outcome: 'skip', reason: 'PR_ALREADY_OPEN', prUrl };
-    }
-    try {
-      await ctx.github.deleteBranch(repo.full_name, CI_BRANCH);
-    } catch (error) {
-      if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
-        throw error;
-      }
     }
   }
   try {
