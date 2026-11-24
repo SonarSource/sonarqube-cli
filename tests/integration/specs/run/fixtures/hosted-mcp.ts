@@ -78,6 +78,15 @@ export class HostedMcpFixture {
       idleTimeout: 0,
       fetch: async (request) => {
         const path = new URL(request.url).pathname;
+        if (path === '/api/authentication/validate')
+          return Response.json({
+            valid: request.headers.get('authorization') === `Bearer ${TOKEN}`,
+          });
+        if (path === '/api/organizations/search')
+          return Response.json({
+            organizations: [],
+            paging: { pageIndex: 1, pageSize: 100, total: 0 },
+          });
         if (path === '/mcp/health') {
           this.healthRequests++;
           if (this.healthWait) await this.healthWait;

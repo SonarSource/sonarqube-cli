@@ -66,7 +66,7 @@ export class HostedMcpClient {
     }
     return status === HTTP_STATUS_OK
       ? { available: true, reason: null }
-      : { available: false, reason: `returned HTTP ${status}` };
+      : { available: false, reason: `health check returned HTTP ${status}` };
   }
 
   request(init: RequestInit, options: McpRunOptions): Promise<Response> {
