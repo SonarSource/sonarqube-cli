@@ -309,7 +309,21 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(gitlabServer.createdMrs).toHaveLength(0);
     });
 
-    it('skips repo when .gitlab-ci.yml already references SONAR_HOST_URL (ALREADY_CONFIGURED)', async () => {
+    it.each([
+      {
+        name: 'SONAR_HOST_URL',
+        content:
+          'include:\n  - local: other.yml\nvariables:\n  SONAR_HOST_URL: https://sonar.example.com\n',
+      },
+      {
+        name: 'Gradle tasks before sonar',
+        content: 'scan:\n  script:\n    - ./gradlew build sonar -Dsonar.token=$ANALYSIS_TOKEN\n',
+      },
+      {
+        name: 'Gradle options before sonar',
+        content: 'scan:\n  script:\n    - gradle --info build sonar\n',
+      },
+    ])('skips existing analysis detected by $name', async ({ content }) => {
       const { gitlabServer } = await startServers(harness, {
         gitlabProjects: [
           {
@@ -320,8 +334,7 @@ describe('sonar admin onboard-ci gitlab', () => {
             rootFiles: [
               {
                 name: '.gitlab-ci.yml',
-                content:
-                  'include:\n  - local: other.yml\nvariables:\n  SONAR_HOST_URL: https://sonar.example.com\n',
+                content,
               },
             ],
           },
@@ -338,7 +351,7 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(gitlabServer.createdMrs).toHaveLength(0);
     });
 
-    it('skips a manually-configured sonarqube-analysis job that uses neither sonar-scanner nor SONAR_HOST_URL literally (ALREADY_CONFIGURED)', async () => {
+    it('skips an existing sonarqube-analysis job using a wrapper script', async () => {
       const { gitlabServer } = await startServers(harness, {
         gitlabProjects: [
           {
@@ -349,7 +362,7 @@ describe('sonar admin onboard-ci gitlab', () => {
             rootFiles: [
               {
                 name: '.gitlab-ci.yml',
-                content: 'sonarqube-analysis:\n  script:\n    - mvn verify sonar:sonar\n',
+                content: 'sonarqube-analysis:\n  script:\n    - ./run-analysis.sh\n',
               },
             ],
           },
@@ -433,6 +446,36 @@ describe('sonar admin onboard-ci gitlab', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('MR already open');
+      expect(gitlabServer.createdMrs).toHaveLength(0);
+    });
+
+    it('preserves the branch when an MR opens after assessment', async () => {
+      let mrLookups = 0;
+      const { gitlabServer } = await startServers(harness, {
+        gitlabProjects: [
+          {
+            id: 5,
+            name: 'open-mr-repo',
+            path_with_namespace: `${GROUP}/open-mr-repo`,
+            default_branch: 'main',
+            existingBranches: ['sonar/add-sonar-analysis-job'],
+            get hasOpenSonarMr() {
+              return ++mrLookups > 1;
+            },
+          },
+        ],
+        bindings: [
+          { projectKey: 'mycompany_open-mr-repo', repository: '5', dopSettingId: DOP_SETTING_ID },
+        ],
+      });
+
+      const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('MR already open');
+      expect(gitlabServer.deletedBranches).toHaveLength(0);
+      expect(gitlabServer.createdBranches).toHaveLength(0);
+      expect(gitlabServer.committedFiles).toHaveLength(0);
       expect(gitlabServer.createdMrs).toHaveLength(0);
     });
 

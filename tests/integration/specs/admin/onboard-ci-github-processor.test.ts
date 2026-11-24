@@ -80,15 +80,18 @@ describe('GitHub onboarding repository lifecycle', () => {
     analyzed = false,
     readOnly = false,
     projectKey = PROJECT,
+    fullName = REPO,
   }: {
     files?: Record<string, string>;
     analyzed?: boolean;
     readOnly?: boolean;
     projectKey?: string;
+    fullName?: string;
   } = {}) {
+    const [organization, name] = fullName.split('/');
     const builder = harness
       .newFakeGitHubServer()
-      .withOrganization('test-org', [{ name: 'sample', defaultBranch: 'develop', files }]);
+      .withOrganization(organization, [{ name, defaultBranch: 'develop', files }]);
     if (readOnly) {
       builder.withReadOnlyAccess();
     }
@@ -105,7 +108,7 @@ describe('GitHub onboarding repository lifecycle', () => {
       serverUrl: server.baseUrl(),
       options: {},
     };
-    const repo = await ctx.github.getRepository(REPO);
+    const repo = await ctx.github.getRepository(fullName);
     return { github, server, ctx, repo };
   }
 
@@ -127,6 +130,17 @@ describe('GitHub onboarding repository lifecycle', () => {
     expect(await ctx.github.getFileContent(REPO, WORKFLOW_PATH, CI_BRANCH)).toContain(
       `sonar.projectKey=${PROJECT}`,
     );
+  });
+
+  it('matches mixed-case GitHub names against lowercase bindings', async () => {
+    const projectKey = 'MixedCaseProject';
+    const { ctx, repo } = await setup({ projectKey, fullName: 'Test-Org/Sample' });
+    const bindings = new Map([['test-org/sample', projectKey]]);
+
+    expect(await assessRepo(ctx, repo, bindings)).toMatchObject({
+      outcome: 'proceed',
+      projectKey,
+    });
   });
 
   it('reports unbound, analyzed and unsupported repositories without writes', async () => {
@@ -168,6 +182,18 @@ describe('GitHub onboarding repository lifecycle', () => {
       reason: 'ALREADY_CONFIGURED',
     },
     {
+      name: 'Gradle workflow runs build before the Sonar task',
+      files: {
+        [BUILD_PATH]: 'run: ./gradlew build sonar -Dsonar.token=${{ secrets.ANALYSIS_TOKEN }}',
+      },
+      reason: 'ALREADY_CONFIGURED',
+    },
+    {
+      name: 'Gradle workflow passes options before the Sonar task',
+      files: { [BUILD_PATH]: 'run: gradle --info build sonar' },
+      reason: 'ALREADY_CONFIGURED',
+    },
+    {
       name: 'workflow entry is a directory',
       files: { '.github/workflows/external.yml/child': 'unsupported directory' },
       reason: 'UNSUPPORTED_WORKFLOW',
@@ -182,6 +208,28 @@ describe('GitHub onboarding repository lifecycle', () => {
     await executeRepo(ctx, repo, BINDINGS);
     const before = await ctx.github.getBranch(REPO, CI_BRANCH);
     const count = github.getRecordedRequests().length;
+    expect(await executeRepo(ctx, repo, BINDINGS)).toEqual({
+      outcome: 'skip',
+      reason: 'PR_ALREADY_OPEN',
+      prUrl: `https://github.com/${REPO}/pull/1`,
+    });
+    expect(await ctx.github.getBranch(REPO, CI_BRANCH)).toEqual(before);
+    expect(
+      github
+        .getRecordedRequests()
+        .slice(count)
+        .every((request) => request.method === 'GET'),
+    ).toBe(true);
+  });
+
+  it('preserves the branch when a PR opens after assessment', async () => {
+    const { ctx, repo, github } = await setup();
+    await executeRepo(ctx, repo, BINDINGS);
+    const before = await ctx.github.getBranch(REPO, CI_BRANCH);
+    const count = github.getRecordedRequests().length;
+    // The PR is absent during assessment and visible on the pre-delete recheck.
+    spyOn(ctx.github, 'listOpenPullRequests').mockResolvedValueOnce([]);
+
     expect(await executeRepo(ctx, repo, BINDINGS)).toEqual({
       outcome: 'skip',
       reason: 'PR_ALREADY_OPEN',
