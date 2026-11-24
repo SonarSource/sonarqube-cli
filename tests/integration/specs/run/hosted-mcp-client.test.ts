@@ -115,6 +115,7 @@ describe('hosted-mcp-client', () => {
       expect(sent?.headers.has('SONARQUBE_PROJECT_KEY')).toBe(false);
       expect(sent?.headers.get('MCP-Protocol-Version')).toBe('2025-03-26');
       expect(result.stderr).toContain(`MCP: hosted endpoint ${fixture.server.url.origin}/mcp`);
+      expect(result.stderr).not.toContain('No project key found');
       expectNoDocker();
     },
   );

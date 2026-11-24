@@ -31,6 +31,9 @@ import type { HostedMcpClient } from './hosted-mcp-client.ts';
 import type { McpRunOptions } from './mcp.ts';
 
 const REQUEST_TIMEOUT_MS = 60000;
+const HANGUP_EXIT_CODE = 129;
+const INTERRUPTED_EXIT_CODE = 130;
+const TERMINATED_EXIT_CODE = 143;
 
 type PendingRequest = {
   method: string;
@@ -107,9 +110,9 @@ class HostedMcpBridge {
     this.hostedTransport.onclose = this.stop;
     process.stdin.once('end', this.onInputEnd);
     for (const [signal, code] of [
-      ['SIGHUP', 129],
-      ['SIGINT', 130],
-      ['SIGTERM', 143],
+      ['SIGHUP', HANGUP_EXIT_CODE],
+      ['SIGINT', INTERRUPTED_EXIT_CODE],
+      ['SIGTERM', TERMINATED_EXIT_CODE],
     ] as const) {
       const handler = () => {
         process.exitCode = code;

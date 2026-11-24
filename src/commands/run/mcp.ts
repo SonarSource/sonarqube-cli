@@ -25,6 +25,7 @@ import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
@@ -80,160 +81,156 @@ export async function runMcp(
   network?: ResolvedNetworkConfig,
 ): Promise<void> {
   let resolvedNetwork: ResolvedNetworkConfig | undefined;
-  let cachedCaCertPath: string | undefined;
-  let child: ChildProcess | undefined;
-  let disposeJvmSecrets: (() => void) | undefined;
   try {
     resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
-    const authResult = await ctx.resolveAuth();
-    if (authResult.isErr()) {
-      await failStartup(authResult.error);
-      return;
-    }
-    if (!authResult.value) {
-      await failStartup(new CommandFailedError(AUTHENTICATION_ERROR_MESSAGE));
-      return;
-    }
-
-    const auth = authResult.value;
-    const { console } = ctx;
-    const connection = ctx.withAuth(auth).connection;
-    const hosted = new HostedMcpClient(connection);
-    const availability = await hosted.checkHealth();
-
-    const cwd = process.cwd();
-    const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
-    const discovered = cwdIsHomeDir
-      ? undefined
-      : await discoverProject(cwd, { auth, silent: true, console });
-    // Deliberately does NOT call `noteProject` (telemetry/project-uuid.ts), unlike the other
-    // commands that resolve a project key: this starts a long-running server, and
-    // CliCommandExecuted is only emitted from the postAction hook once it exits — or never, if
-    // the process is killed. Attaching project_uuid to an event that unreliable buys nothing.
-    const projectKey = options.project || discovered?.projectKey;
-    if (projectKey) {
-      assertSingleLineProjectKey(projectKey);
-    }
-    if (!projectKey) {
-      console.warn(
-        'No project key found - project-scoped tools will be unavailable. Run sonar run mcp --help for ways to define a project.',
-      );
-    }
-    const discoveredRootIsHomeDir =
-      discovered && canonicalizePath(discovered.projectRoot) === canonicalizePath(homedir());
-    const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.projectRoot;
-
-    if (availability.available) {
-      process.stderr.write(`[sonarqube-cli] MCP: hosted endpoint ${hosted.url}\n`);
-      await bridgeHostedMcp(hosted, { ...options, project: projectKey });
-      return;
-    }
-
-    process.stderr.write(
-      `[sonarqube-cli] MCP: local container fallback — ${hosted.url}/health ${availability.reason}.` +
-        (auth.connectionType === 'on-premise'
-          ? ' For Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
-          : '') +
-        '\n',
-    );
-    const detection = await detectContainerRuntime();
-    if (!detection.runtime) {
-      await failStartup(runtimeDetectionError(detection));
-      return;
-    }
-
-    const context: McpServerContext = projectRoot
-      ? { withFsMount: true, projectRoot, projectKey }
-      : { withFsMount: false, projectKey };
-
-    const settings = await readMcpContainerSettings();
-    const container = resolveMcpContainerNetworking(auth, detection, settings);
-    const config = resolveMcpContainerCommand(
-      auth,
-      detection,
-      context,
-      {
-        ...options,
-        containerNetwork: container.network,
-        containerAddHost: container.addHost,
-        containerServerUrl: container.serverUrl,
-      },
-      resolvedNetwork,
-    );
-    cachedCaCertPath = config.cachedCaCertPath;
-    if (config.jvmSecretsPath) {
-      disposeJvmSecrets = ownJvmSecrets(config.jvmSecretsPath, () => child);
-    }
-
-    if (options.debug) {
-      debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
-      debugLog(`projectRoot: ${projectRoot ?? '(none)'}`);
-      debugLog(`projectKey: ${projectKey ?? '(none)'}`);
-      debugLog(`launching: ${config.command} ${config.args.join(' ')}`);
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      child = spawn(config.command, config.args, {
-        stdio: 'inherit',
-        env: { ...process.env, ...config.env },
-      });
-
-      child.on('error', reject);
-      child.on('exit', (code) => {
-        process.exitCode = code ?? 1;
-        const networkHint = mcpLoopbackAdvice(auth, settings);
-        if (
-          code !== null &&
-          code !== 0 &&
-          !CONTAINER_SHUTDOWN_EXIT_CODES.has(code) &&
-          isLoopbackServerUrl(container.serverUrl) &&
-          networkHint
-        ) {
-          process.stderr.write(
-            `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint}\n`,
-          );
-        }
-        resolve();
-      });
-    });
-    disposeJvmSecrets?.();
+    const auth = await resolveMcpAuth(ctx);
+    if (await tryRunHostedMcp(ctx, auth, options)) return;
+    await runMcpContainer(ctx, auth, options, resolvedNetwork);
   } catch (error) {
-    disposeJvmSecrets?.();
-    await failStartup(error);
-  } finally {
-    disposeJvmSecrets?.();
-    if (resolvedNetwork) {
-      cleanup(resolvedNetwork);
-    }
-  }
-
-  async function failStartup(error: unknown): Promise<void> {
     const startupError = asStartupError(error);
-    if (process.stdin.isTTY) {
-      throw startupError;
-    }
+    if (process.stdin.isTTY) throw startupError;
     const message = startupError.remediationHint
       ? `${startupError.message} ${startupError.remediationHint}`
       : startupError.message;
     await respondToInitializeWithError(message, startupError.exitCode);
+  } finally {
+    if (resolvedNetwork?.clientCert?.format === 'pem') {
+      removeCachedCertificate(clientCertCachePath(resolvedNetwork.clientCert), 'client');
+    }
   }
+}
 
-  function cleanup(network: ResolvedNetworkConfig) {
-    if (cachedCaCertPath) {
-      try {
-        rmSync(cachedCaCertPath, { force: true });
-      } catch (err) {
-        logger.warn(`Could not remove cached CA certificate: ${String(err)}`);
-      }
+async function resolveMcpAuth(ctx: CommandInvocationContext): Promise<ResolvedAuth> {
+  const result = await ctx.resolveAuth();
+  if (result.isErr()) throw result.error;
+  if (!result.value) throw new CommandFailedError(AUTHENTICATION_ERROR_MESSAGE);
+  return result.value;
+}
+
+async function tryRunHostedMcp(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
+  options: McpRunOptions,
+): Promise<boolean> {
+  const hosted = new HostedMcpClient(ctx.withAuth(auth).connection);
+  const availability = await hosted.checkHealth();
+  if (availability.available) {
+    process.stderr.write(`[sonarqube-cli] MCP: hosted endpoint ${hosted.url}\n`);
+    await bridgeHostedMcp(hosted, options);
+    return true;
+  }
+  const hint =
+    auth.connectionType === 'on-premise'
+      ? ' For Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
+      : '';
+  process.stderr.write(
+    `[sonarqube-cli] MCP: local container fallback — ${hosted.url}/health ${availability.reason}.${hint}\n`,
+  );
+  return false;
+}
+
+async function resolveContainerContext(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
+  options: McpRunOptions,
+): Promise<McpServerContext> {
+  const cwd = process.cwd();
+  const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
+  const discovered = cwdIsHomeDir
+    ? undefined
+    : await discoverProject(cwd, { auth, silent: true, console: ctx.console });
+  // Do not noteProject: a long-running MCP process may never emit its command-executed event.
+  const projectKey = options.project || discovered?.projectKey;
+  if (projectKey) assertSingleLineProjectKey(projectKey);
+  if (!projectKey) {
+    ctx.console.warn(
+      'No project key found - project-scoped tools will be unavailable. Run sonar run mcp --help for ways to define a project.',
+    );
+  }
+  const discoveredRootIsHomeDir =
+    discovered && canonicalizePath(discovered.projectRoot) === canonicalizePath(homedir());
+  const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.projectRoot;
+  return projectRoot
+    ? { withFsMount: true, projectRoot, projectKey }
+    : { withFsMount: false, projectKey };
+}
+
+async function runMcpContainer(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
+  options: McpRunOptions,
+  network: ResolvedNetworkConfig,
+): Promise<void> {
+  const context = await resolveContainerContext(ctx, auth, options);
+  const detection = await detectContainerRuntime();
+  if (!detection.runtime) throw runtimeDetectionError(detection);
+  const settings = await readMcpContainerSettings();
+  const container = resolveMcpContainerNetworking(auth, detection, settings);
+  const config = resolveMcpContainerCommand(
+    auth,
+    detection,
+    context,
+    {
+      ...options,
+      containerNetwork: container.network,
+      containerAddHost: container.addHost,
+      containerServerUrl: container.serverUrl,
+    },
+    network,
+  );
+  let child: ChildProcess | undefined;
+  const disposeJvmSecrets = config.jvmSecretsPath
+    ? ownJvmSecrets(config.jvmSecretsPath, () => child)
+    : undefined;
+  try {
+    if (options.debug) {
+      debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
+      debugLog(`projectRoot: ${context.withFsMount ? context.projectRoot : '(none)'}`);
+      debugLog(`projectKey: ${context.projectKey ?? '(none)'}`);
+      debugLog(`launching: ${config.command} ${config.args.join(' ')}`);
     }
-    if (network.clientCert?.format === 'pem') {
-      try {
-        rmSync(clientCertCachePath(network.clientCert), { force: true });
-      } catch (err) {
-        // Windows: Docker Desktop may still hold the file; content-addressed so safe to leave behind
-        logger.warn(`Could not remove cached client certificate: ${String(err)}`);
+    child = spawn(config.command, config.args, {
+      stdio: 'inherit',
+      env: { ...process.env, ...config.env },
+    });
+    await waitForContainerExit(child, container.serverUrl, mcpLoopbackAdvice(auth, settings));
+  } finally {
+    disposeJvmSecrets?.();
+    if (config.cachedCaCertPath) removeCachedCertificate(config.cachedCaCertPath, 'CA');
+  }
+}
+
+function waitForContainerExit(
+  child: ChildProcess,
+  serverUrl: string,
+  networkHint: string | undefined,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      process.exitCode = code ?? 1;
+      if (
+        code !== null &&
+        code !== 0 &&
+        !CONTAINER_SHUTDOWN_EXIT_CODES.has(code) &&
+        isLoopbackServerUrl(serverUrl) &&
+        networkHint
+      ) {
+        process.stderr.write(
+          `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint}\n`,
+        );
       }
-    }
+      resolve();
+    });
+  });
+}
+
+function removeCachedCertificate(path: string, kind: string): void {
+  try {
+    rmSync(path, { force: true });
+  } catch (error) {
+    // Windows: Docker Desktop may still hold the file; content-addressed so safe to leave behind.
+    logger.warn(`Could not remove cached ${kind} certificate: ${String(error)}`);
   }
 }
 
