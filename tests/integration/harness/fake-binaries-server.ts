@@ -19,14 +19,15 @@
  */
 
 // Lightweight in-process fake binaries server (Bun.serve).
-// Simulates binaries.sonarsource.com so that sonar-secrets and sca-scanner-cli
-// auto-install can be exercised without real network calls. Serves versioned
+// Simulates binaries.sonarsource.com so scanner installation can be exercised
+// without real network calls. Serves versioned
 // artifacts from tests/integration/resources/dependency-artifacts/ — downloaded
 // by setup-integration-resources.ts — and returns 404 for unknown paths.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { CONTAINER_SCANNER_SPEC } from '@/core/host/install/container-scanner.ts';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
@@ -37,7 +38,7 @@ import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-arti
 import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(
-  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME})-.*\.(exe|bin)|` +
+  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME}|${CONTAINER_SCANNER_SPEC.name})-.*\.(exe|bin)|` +
     String.raw`${CONTEXT_AUGMENTATION_BINARY_NAME}-.*\.tar\.gz)(\.asc)?$`,
 );
 
