@@ -245,6 +245,7 @@ async function existingDirectives(api: DirectivesApi) {
 }
 
 function planCreates(directives: DirectiveInput[], known: Set<string>) {
+  const noneVisible = known.size === 0;
   const toCreate: DirectiveInput[] = [];
   let skipped = 0;
   for (const directive of directives) {
@@ -255,7 +256,7 @@ function planCreates(directives: DirectiveInput[], known: Set<string>) {
       toCreate.push(directive);
     }
   }
-  return { toCreate, skipped };
+  return { toCreate, skipped, noneVisible: noneVisible && toCreate.length > 0 };
 }
 
 export function directiveId(value: unknown): string {
@@ -444,7 +445,7 @@ export async function applyDirectiveChanges(
   if (onPlan)
     await onPlan(
       [...result.toCreate, ...moving.map((change) => change.after)],
-      creations.toCreate.length > 0 && existing.count === 0,
+      creations.noneVisible,
     );
   if (dryRun) return result;
   let attempted = 'creation';
