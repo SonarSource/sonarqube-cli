@@ -109,7 +109,6 @@ class StepLog<S extends InitStepId> {
 export class ProjectInitRecorder {
   private readonly log = new StepLog<ProjectStepId>();
   private projectKey: string | undefined;
-  private firstAnalysisDurationMs: number | null = null;
 
   constructor(
     readonly index: number,
@@ -127,10 +126,6 @@ export class ProjectInitRecorder {
 
   setProjectKey(projectKey: string): void {
     this.projectKey = projectKey;
-  }
-
-  setFirstAnalysisDuration(durationMs: number): void {
-    this.firstAnalysisDurationMs = Math.round(durationMs);
   }
 
   begin(step: ProjectStepId): void {
@@ -174,7 +169,6 @@ export class ProjectInitRecorder {
       failure_reason: stop ? toProjectFailureReason(stop.reason) : null,
       project_index: this.index,
       project_uuid: projectUuid,
-      first_analysis_duration_ms: this.firstAnalysisDurationMs,
     };
   }
 }

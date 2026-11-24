@@ -29,30 +29,28 @@ import { ProjectsClient } from '@/core/server/projects.ts';
 
 import { requireAnswer } from '../answer.ts';
 import { missingDecision } from '../decision.ts';
-import type { InitOutcome, LinkExistingPath, UnboundNewPath } from '../init-outcome.ts';
+import type { InitOutcome, LinkExistingPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import { chooseLinkFolder } from './folder-selection.ts';
 import { showAnalysisResults, writeMapping } from './mapping.ts';
 
 /**
  * Asks to link the directory to the project that already exists for the repository: the one the
- * server binds to it, or the one `unbound-new` found under its generated key. When the
- * user declines, they are asked whether to link another existing project, picked with the
- * `sonar link` picker. Declining that continues as `unbound-new` (without alpha, ends as declined),
- * and leaving the picker asks whether to abandon linking (default no, which reopens the picker)
- * before doing the same. The
- * chosen project is mapped in `.sonar-config.json` and its existing results are shown.
- * `--link` answers the first question, and `--link <key>` names the project instead. Only the
- * user's own decision continues as `unbound-new`: `--create` or `--bind`, or no answer to ask,
- * fail instead, so no second project is created for a repository that already has one.
+ * server binds to it, or the one `no-project` found under its generated key. When the user
+ * declines, they are asked whether to link another existing project, picked with the `sonar link`
+ * picker. Declining that ends the run with nothing linked, and leaving the picker asks whether to
+ * abandon linking (default no, which reopens the picker) before doing the same. The chosen project
+ * is mapped in `.sonar-config.json` and its existing results are shown. `--link` answers the first
+ * question, and `--link <key>` names the project instead. `--bind`, or no answer to ask, fail
+ * instead, so no second project is created for a repository that already has one.
  */
 export async function runLinkExisting(
-  { projectRoot, remote, projectKey: foundKey, requested }: LinkExistingPath,
+  { projectRoot, projectKey: foundKey, requested }: LinkExistingPath,
   deps: DetectDeps,
-): Promise<InitOutcome | UnboundNewPath> {
+): Promise<InitOutcome> {
   const { auth, http, console, interactive, intent } = deps;
   if (requested) {
-    await assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey, deps.allowUnbound);
+    await assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey);
     return linkProject(foundKey, projectRoot, deps);
   }
   const situation = `A Sonar project already exists for this repository: '${foundKey}'.`;
@@ -73,25 +71,22 @@ export async function runLinkExisting(
     throw missingDecision(situation, ['--link']);
   }
 
-  // Without alpha nothing follows a declined offer, and `unbound-new` would claim no project exists.
-  const unbound: InitOutcome | UnboundNewPath = deps.allowUnbound
-    ? { path: 'unbound-new', projectRoot, remote }
-    : { kind: 'declined' };
+  const declined: InitOutcome = { kind: 'declined' };
   const link = requireAnswer(
     await console.confirmPrompt(`${situation} Link this directory to it?`, true),
   );
   if (!link && !(await confirmAnotherProject(console))) {
-    return unbound;
+    return declined;
   }
 
   const projectKey = link
     ? foundKey
-    : await pickProject(new ProjectsClient(http), { auth, console }, deps.allowUnbound);
+    : await pickProject(new ProjectsClient(http), { auth, console });
   if (projectKey === null) {
-    return unbound;
+    return declined;
   }
   // Leaving the folder prompts takes back the agreement to link, like declining it.
-  return (await linkInChosenFolder(projectKey, projectRoot, deps)) ?? unbound;
+  return (await linkInChosenFolder(projectKey, projectRoot, deps)) ?? declined;
 }
 
 /** The user has agreed to link, so this is when they say which folder to link. */
@@ -109,15 +104,12 @@ async function assertProjectExists(
   projects: ProjectsClient,
   projectKey: string,
   organization: string | undefined,
-  allowUnbound: boolean,
 ): Promise<void> {
   if (!(await projects.findProject(projectKey, organization).orThrow())) {
     const where = organization ? ` in organization '${organization}'` : '';
     throw new InvalidOptionError(
       `--link names project '${projectKey}', which does not exist${where}.`,
-      allowUnbound
-        ? "Check the key, or run 'sonar init' again with --create to create a new project."
-        : 'Check the key.',
+      'Check the key.',
     );
   }
 }
@@ -149,7 +141,6 @@ async function confirmAnotherProject(console: DetectDeps['console']): Promise<bo
 async function pickProject(
   projects: ProjectsClient,
   ctx: Pick<DetectDeps, 'auth' | 'console'>,
-  allowUnbound: boolean,
 ): Promise<string | null> {
   for (;;) {
     try {
@@ -160,12 +151,7 @@ async function pickProject(
       }
     }
     const abandon = requireAnswer(
-      await ctx.console.confirmPrompt(
-        allowUnbound
-          ? 'Abandon linking a project and create a new project without repository binding instead?'
-          : 'Abandon linking a project?',
-        false,
-      ),
+      await ctx.console.confirmPrompt('Abandon linking a project?', false),
     );
     if (abandon) {
       return null;
