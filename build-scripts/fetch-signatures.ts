@@ -58,7 +58,7 @@ interface ExternalBinary {
   archive?: ArchiveFormat;
   /**
    * Optional platform naming override. When set to `'x64'`, `x86-64` is rewritten
-   * to `x64` in the URL (sonar-context-augmentation distribution convention).
+   * to `x64` in the URL and generated platform keys.
    */
   platformNaming?: PlatformNamingScheme;
 }
@@ -167,7 +167,7 @@ async function fetchAndVerifySignature(
 ): Promise<SignatureResult | null> {
   const displayPlatformKey = `${platform.os}-${platform.arch}`;
   // The map key must match the URL platform so runtime lookups in signatures.ts
-  // resolve correctly when a binary maps `x86-64 → x64` (CAG).
+  // resolve correctly when a binary maps `x86-64 → x64`.
   const mapPlatformKey = urlPlatformKey(platform, binary);
   const ascUrl = buildAscUrl(platform, binary);
 

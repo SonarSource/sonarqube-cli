@@ -52,17 +52,29 @@ export interface BinarySpec {
   signatures: Record<string, string>;
   publicKey: string;
   extensions: Record<string, DependencyExtension>;
+  platformNaming?: 'x64';
 }
 
-export function resolveDownloadExtension(
+export function resolveBinaryArtifact(
   spec: BinarySpec,
   platform: PlatformInfo,
-): DependencyExtension {
-  const platformKey = `${platform.os}-${platform.arch}`;
+): { platform: PlatformInfo; url: string } {
+  const artifactPlatform =
+    spec.platformNaming === 'x64' && platform.arch === 'x86-64'
+      ? { ...platform, arch: 'x64' }
+      : platform;
+  const platformKey = `${artifactPlatform.os}-${artifactPlatform.arch}`;
   if (!(platformKey in spec.extensions)) {
     throw new CommandFailedError(`${spec.name} is not available for platform '${platformKey}'.`);
   }
-  return spec.extensions[platformKey];
+  const url = buildDownloadUrl(
+    spec.name,
+    spec.version,
+    spec.distPrefix,
+    artifactPlatform,
+    spec.extensions[platformKey],
+  );
+  return { platform: artifactPlatform, url };
 }
 
 export interface InstallOptions {
@@ -134,26 +146,26 @@ async function downloadAndInstall(
 
   console.text(`     Installing ${spec.name} ${spec.version}`, undefined, channel);
 
-  const downloadExtension = resolveDownloadExtension(spec, platform);
-  const downloadUrl = buildDownloadUrl(
-    spec.name,
-    spec.version,
-    spec.distPrefix,
-    platform,
-    downloadExtension,
-  );
+  const artifact = resolveBinaryArtifact(spec, platform);
   const stagingDir = mkdtempSync(join(resolvedBinDir, '.install-'));
   const stagedPath = join(stagingDir, binaryName);
   let published: boolean;
   try {
     await console.withSpinner(
       `Downloading ${spec.name} ${spec.version}`,
-      () => downloadBinary(downloadUrl, stagedPath),
+      () => downloadBinary(artifact.url, stagedPath),
       channel,
     );
     await console.withSpinner(
       'Verifying signature',
-      () => verifyBinarySignature(spec.name, stagedPath, platform, spec.signatures, spec.publicKey),
+      () =>
+        verifyBinarySignature(
+          spec.name,
+          stagedPath,
+          artifact.platform,
+          spec.signatures,
+          spec.publicKey,
+        ),
       channel,
     );
     if (platform.os !== 'windows') {
