@@ -436,7 +436,6 @@ async function resolveAuthenticatedChecks(
   if (!connection) {
     return { tokenStatus: null, vortex: { status: 'not_applicable' } };
   }
-
   const { auth } = connection;
   const [tokenStatus, vortex] = await Promise.all([
     checkTokenStatus(auth.serverUrl, auth.token),
@@ -460,17 +459,27 @@ export async function systemStatus(
   );
 
   const connectionPromise = ctx.resolveConnection();
-  const [authenticated, updateResult] = await Promise.all([
+  const [authenticated, updateResult, endpointStatus] = await Promise.all([
     connectionPromise.then(async (connection) => ({
       connection,
       checks: await resolveAuthenticatedChecks(connection),
     })),
     getCliUpdateInfo(),
+    connectionPromise.then(checkMcpEndpoint),
   ]);
   const { connection, checks } = authenticated;
   const auth = connection?.auth ?? null;
   const { tokenStatus, vortex } = checks;
-  const mcp = await checkMcpEndpoint(connection, tokenStatus);
+  const mcp: McpEndpointStatus =
+    tokenStatus?.status === 'invalid'
+      ? {
+          connectionMode: null,
+          serverUrl: null,
+          fallbackReason: null,
+          startupError: "Invalid token. Run 'sonar auth login' to reauthenticate.",
+          containerRuntime: null,
+        }
+      : endpointStatus;
   const { containerRuntime, startupError } = mcp;
 
   const binaries = state.dependencies.installed
@@ -502,9 +511,13 @@ export async function systemStatus(
     present: existsSync(path) && statSync(path).isDirectory(),
   }));
 
+  const mcpConfigured = integrations.some(
+    (integration) => integration.mcp?.config === 'configured',
+  );
   const hasMcpIssues =
-    startupError !== null ||
-    (containerRuntime !== null && containerRuntime.status !== 'ready') ||
+    (mcpConfigured &&
+      (startupError !== null ||
+        (containerRuntime !== null && containerRuntime.status !== 'ready'))) ||
     integrations.some((integration) => integration.mcp?.config === 'invalid');
   const hasHooksIssues = integrations.some((i) => i.hooks?.config === 'invalid');
 
@@ -519,13 +532,13 @@ export async function systemStatus(
   const recommendations = buildRecommendations(
     tokenStatus,
     updateResult,
-    { integrations, containerRuntime, startupError },
+    { integrations, containerRuntime, startupError, mcpConfigured },
     network,
     vortex,
     vortexInstalled,
     auth,
   );
-  if (auth && mcp.connectionMode === 'container' && !mcp.startupError) {
+  if (mcpConfigured && auth && mcp.connectionMode === 'container' && !mcp.startupError) {
     const mcpAdvice = mcpLoopbackAdvice(auth, await readMcpContainerSettings());
     if (mcpAdvice) {
       recommendations.push(`MCP container networking: ${mcpAdvice}`);
@@ -593,6 +606,7 @@ function buildRecommendations(
     integrations: IntegrationInfo[];
     containerRuntime: ContainerRuntimeHealth | null;
     startupError: string | null;
+    mcpConfigured: boolean;
   },
   network: ResolvedNetworkConfig,
   vortexEntitlement: VortexEntitlementResult,
@@ -631,7 +645,9 @@ function buildRecommendations(
     recommendations.push(`Run '${integrateCmd}' to reinstall MCP configuration`);
   }
 
-  recommendations.push(...runtimeRecommendations(containerRuntime, startupError));
+  if (mcp.mcpConfigured && tokenStatus !== null && tokenStatus.status !== 'invalid') {
+    recommendations.push(...runtimeRecommendations(containerRuntime, startupError));
+  }
 
   const seenHooksIntegrations = new Set<string>();
   for (const integration of integrations) {
