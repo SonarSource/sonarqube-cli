@@ -25,7 +25,7 @@ export const CLI_INIT_EXECUTED = 'CliInitExecuted';
 export const CLI_PROJECT_INIT_CREATION_ATTEMPTED = 'CliProjectInitCreationAttempted';
 
 export type RunStepId = 'login' | 'create_org' | 'detect' | 'org_bind' | 'integrate';
-export type ProjectStepId = 'project_bind' | 'create_project' | 'link' | 'first_analysis';
+export type ProjectStepId = 'project_bind' | 'create_project' | 'link';
 export type InitStepId = RunStepId | ProjectStepId;
 
 export type InitStepOutcome = 'success' | 'already_done' | 'skipped' | 'declined' | 'failed';
@@ -62,7 +62,6 @@ export type ProjectInitPayload = {
   failure_reason: ProjectFailureReason | null;
   project_index: number;
   project_uuid: string | null;
-  first_analysis_duration_ms: number | null;
 };
 
 export function encodeStep<S extends InitStepId>(

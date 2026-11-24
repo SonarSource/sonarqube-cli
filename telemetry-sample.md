@@ -170,8 +170,7 @@ One per project root of an init run, including roots that were linked (`link_exi
     "stopped_at": null,
     "failure_reason": null,
     "project_index": 0,
-    "project_uuid": "AZwuC4xd-j8g-N-Vcf-Z",
-    "first_analysis_duration_ms": null
+    "project_uuid": "AZwuC4xd-j8g-N-Vcf-Z"
   }
 }
 ```
