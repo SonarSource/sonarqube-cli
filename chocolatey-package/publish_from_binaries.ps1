@@ -40,8 +40,10 @@ $tools = Join-Path $work 'tools'
 New-Item -ItemType Directory -Path $tools | Out-Null
 
 Copy-Item (Join-Path $PSScriptRoot 'sonarqube-cli.nuspec') $work
-Copy-Item (Join-Path $PSScriptRoot 'tools\LICENSE.txt') $tools
 Copy-Item (Join-Path $PSScriptRoot 'tools\VERIFICATION.txt') $tools
+# The nupkg must contain the license. The repo root file is the source of truth.
+$repoRoot = Split-Path $PSScriptRoot -Parent
+Copy-Item (Join-Path $repoRoot 'LICENSE') (Join-Path $tools 'LICENSE.txt')
 
 $exePath = Join-Path $env:TEMP $name
 Write-Host "Downloading $exeUrl"
