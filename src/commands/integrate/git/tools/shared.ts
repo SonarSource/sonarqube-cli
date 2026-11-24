@@ -29,7 +29,6 @@ import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_c
 import type { GitHookType } from '../options.ts';
 import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeatures.ts';
 
-// eslint-disable-next-line no-restricted-syntax -- hooks installed by old versions carry this exact text.
 export const LEGACY_HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
 
 export function resolveDepRisksArgs(
