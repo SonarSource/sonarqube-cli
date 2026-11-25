@@ -19,5 +19,10 @@
         "executionMode": "branch"
       }
     }
-  ]
+  ],
+  "github-actions": {
+    "managerFilePatterns": [
+      "src/commands/admin/onboard-ci/github/workflow.yml"
+    ]
+  }
 }
