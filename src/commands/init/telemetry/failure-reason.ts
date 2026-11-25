@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { OrganizationCreationDeclined } from '@/commands/auth/organization.ts';
 import { CancelledByUserError } from '@/core/commands/command-error.ts';
 import { ProjectOrganizationError } from '@/core/errors.ts';
 import {
@@ -29,7 +30,6 @@ import {
 import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 
 import { RepositoryInOtherOrganizationError } from '../steps/detect.ts';
-import { OrganizationCreationDeclined } from '../steps/organization.ts';
 import type { InitFailureReason } from './init-telemetry.ts';
 
 /** Classifies by error type along the `cause` chain, so no message text reaches telemetry. */

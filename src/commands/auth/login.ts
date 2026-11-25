@@ -20,7 +20,6 @@
 
 import {
   assertOrganizationMember,
-  type OnNoMemberships,
   organizationMembershipError,
   validateOrSelectOrganization,
 } from '@/commands/components/organization/select.ts';
@@ -55,6 +54,7 @@ import { loadState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import type { OrganizationSetupProgress } from './organization.ts';
 import {
   assertNoCleartextTokenDowngrade,
   isSameServer,
@@ -78,7 +78,7 @@ type LoginStep =
 export async function authLogin(
   options: AuthLoginOptions,
   ctx: CommandInvocationContext,
-  hooks?: AuthLoginHooks,
+  progress?: OrganizationSetupProgress,
 ): Promise<void> {
   const { console } = ctx;
   validateLoginOptions(options);
@@ -118,7 +118,7 @@ export async function authLogin(
       orgOption,
       console,
       invocationAuth?.orgKey,
-      hooks?.onNoMemberships,
+      progress,
     );
 
     if (step.tokenSaved && invocationAuth?.comesFromEnv()) {
@@ -202,28 +202,14 @@ async function executeLoginStep(
   orgOption: string | undefined,
   console: Console,
   invocationOrgKey: string | undefined,
-  onNoMemberships: OnNoMemberships | undefined,
+  progress: OrganizationSetupProgress | undefined,
 ): Promise<void> {
   switch (step.kind) {
     case 'new_login':
-      await loginWithNewToken(
-        server,
-        isCloud,
-        orgOption,
-        console,
-        invocationOrgKey,
-        onNoMemberships,
-      );
+      await loginWithNewToken(server, isCloud, orgOption, console, invocationOrgKey, progress);
       break;
     case 'stored_login':
-      await loginWithStoredToken(
-        server,
-        isCloud,
-        step.auth,
-        console,
-        invocationOrgKey,
-        onNoMemberships,
-      );
+      await loginWithStoredToken(server, isCloud, step.auth, console, invocationOrgKey, progress);
       break;
     case 'switch_organization':
       await switchStoredLoginOrganization(server, step.org, step.auth, console);
@@ -260,7 +246,7 @@ async function loginWithStoredToken(
   auth: BrowserAuthResult,
   console: Console,
   activeOrgKey: string | undefined,
-  onNoMemberships: OnNoMemberships | undefined,
+  progress: OrganizationSetupProgress | undefined,
 ): Promise<void> {
   const org = await resolveOrganization(
     server,
@@ -269,7 +255,7 @@ async function loginWithStoredToken(
     auth,
     console,
     activeOrgKey,
-    onNoMemberships,
+    progress,
   );
   await completeLogin(server, isCloud, org, auth, console);
 }
@@ -286,7 +272,7 @@ async function loginWithNewToken(
   orgOption: string | undefined,
   console: Console,
   activeOrgKey: string | undefined,
-  onNoMemberships: OnNoMemberships | undefined,
+  progress: OrganizationSetupProgress | undefined,
 ): Promise<void> {
   const auth = await generateToken(server, console);
 
@@ -299,7 +285,7 @@ async function loginWithNewToken(
       auth,
       console,
       activeOrgKey,
-      onNoMemberships,
+      progress,
     );
   } catch (error) {
     await discardGeneratedToken(server, auth.token, auth.tokenName, console);
@@ -428,7 +414,7 @@ async function resolveOrganization(
   auth: BrowserAuthResult,
   console: Console,
   activeOrgKey: string | undefined,
-  onNoMemberships: OnNoMemberships | undefined,
+  progress: OrganizationSetupProgress | undefined,
 ): Promise<string | undefined> {
   if (!isCloud) {
     return undefined;
@@ -439,7 +425,7 @@ async function resolveOrganization(
     orgOption,
     console,
     activeOrgKey,
-    onNoMemberships,
+    progress,
   );
 }
 
@@ -522,12 +508,6 @@ function validateLoginOptions(options: AuthLoginOptions): void {
       'Use --org <organization-key>.',
     );
   }
-}
-
-/** Callbacks a caller such as `sonar init` passes to `authLogin`; never a Commander option. */
-export interface AuthLoginHooks {
-  /** Supplies an organization key when the account has no membership; a throw aborts the login. */
-  onNoMemberships?: OnNoMemberships;
 }
 
 export interface AuthLoginOptions {
