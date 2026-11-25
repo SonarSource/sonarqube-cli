@@ -20,16 +20,21 @@
 
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
   buildSecretsFingerprint,
+  scanAndEmitSecrets,
   summarizeNewSecretsFindings,
 } from '@/commands/analyze/secrets-analysis-telemetry.ts';
-import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { ENV_SONAR_USER_HOME, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
+import type { AnalyzerStatsFactPayload } from '@/core/stats/facts.ts';
 
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
 
 let testSonarUserHome: string;
@@ -160,3 +165,44 @@ describe('summarizeNewSecretsFindings', () => {
     expect(result).toEqual({ findingsCount: 0 });
   });
 });
+
+for (const caller of [
+  SECRETS_CALLER_COMMANDS.cursorPreFileRead,
+  SECRETS_CALLER_COMMANDS.cursorPreToolUse,
+]) {
+  it(`${caller} scopes batch statistics to the absolute source without changing scanner output`, async () => {
+    const auth = new ResolvedAuth({
+      token: 'fake-token',
+      serverUrl: 'https://sonarcloud.io',
+      connectionType: 'cloud',
+      source: 'state',
+    });
+    const issue = {
+      ruleKey: 'secrets:S6290',
+      description: 'Synthetic finding',
+      file: 'src/config.ts',
+      location: { startLine: 1, startColumn: 1, endLine: 1, endColumn: 5 },
+    };
+    for (const project of ['project-a', 'project-b']) {
+      const source = resolve(project, 'src/config.ts');
+      const ctx = new CommandInvocationContext(new FakeConsole());
+      const result = await scanAndEmitSecrets(
+        caller,
+        auth,
+        () =>
+          Promise.resolve({
+            exitCode: 51,
+            stdout: JSON.stringify({ issues: [issue] }),
+            stderr: '',
+          }),
+        ctx,
+        source,
+      );
+      expect(result.parsed.issues[0].file).toBe('src/config.ts');
+      expect((ctx.statsFacts()[0].payload as AnalyzerStatsFactPayload).details.findingsCount).toBe(
+        1,
+      );
+      expect(summarizeNewSecretsFindings([{ ...issue, file: source }]).findingsCount).toBe(0);
+    }
+  });
+}

@@ -87,7 +87,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
     scan = await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.cursorPreToolUse,
       deps.auth,
-      () => scanTextForSecrets(deps, content),
+      () => scanTextForSecrets(deps, content, filePath, workspaceRoots),
       ctx,
       filePath,
     );

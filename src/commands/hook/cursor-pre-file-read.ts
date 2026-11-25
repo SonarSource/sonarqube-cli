@@ -85,7 +85,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
     scan = await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.cursorPreFileRead,
       deps.auth,
-      () => scanTextForSecrets(deps, content),
+      () => scanTextForSecrets(deps, content, filePath, workspaceRoots),
       ctx,
       filePath,
     );
