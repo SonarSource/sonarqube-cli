@@ -1,0 +1,15 @@
+VERIFICATION
+Verification is intended to assist the Chocolatey moderators and community
+in verifying that this package's contents are trustworthy.
+
+The embedded executable is the official SonarSource Windows build:
+
+  https://binaries.sonarsource.com/Distribution/sonarqube-cli/__VERSION__/windows/sonarqube-cli-__VERSION__-windows-x86-64.exe
+
+SHA-256: __SHA256__
+
+To verify the embedded file:
+
+  Get-FileHash -Algorithm SHA256 tools\sonar.exe
+
+The hash must match the SHA-256 above and the .sha256 file published next to the executable.
