@@ -360,6 +360,106 @@ describe('spawnProcess stdin, against a mocked child', () => {
     );
     expect(proc.killed).toBe(true);
   });
+
+  it('stops the process tree and rejects on non-EPIPE stdin error in spawnProcessCapturingBytes', async () => {
+    const proc = mockChild(sink().stream) as ReturnType<typeof mockChild> & { pid?: number };
+    proc.pid = 424_242;
+    const running = spawnProcessCapturingBytes(
+      'child',
+      [],
+      { stdin: 'pipe', killProcessTree: true },
+      TEST_TIMEOUT_MS,
+      TEST_TIMEOUT_MESSAGE,
+    ).catch((err: Error) => err);
+
+    const ioError = Object.assign(new Error('stdin broken'), { code: 'EIO' });
+    proc.stdin.emit('error', ioError);
+    proc.emit('close', null, 'SIGTERM');
+
+    expect((await running) as Error).toBe(ioError);
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'waits for tree termination before re-raising an unhandled parent signal and force-kills on a second signal',
+    async () => {
+      const calls: Array<[number, string | number | undefined]> = [];
+      let groupAlive = true;
+      const killSpy = spyOn(process, 'kill').mockImplementation((pid, sig) => {
+        calls.push([pid, sig]);
+        if (sig === 0 && !groupAlive) {
+          throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+        }
+        return true;
+      });
+      try {
+        const proc = mockChild(sink().stream) as ReturnType<typeof mockChild> & { pid?: number };
+        proc.pid = 424_242;
+        const running = spawnProcess('child', [], { killProcessTree: true });
+
+        process.emit('SIGINT');
+        expect(calls).toContainEqual([-424_242, 'SIGINT']);
+        expect(calls).not.toContainEqual([process.pid, 'SIGINT']);
+
+        groupAlive = false;
+        proc.emit('close', null, 'SIGINT');
+        await running;
+        expect(calls).toContainEqual([process.pid, 'SIGINT']);
+
+        // Second signal while waiting in the grace window escalates immediately.
+        calls.length = 0;
+        groupAlive = true;
+        const stuckProc = mockChild(sink().stream) as ReturnType<typeof mockChild> & {
+          pid?: number;
+        };
+        stuckProc.pid = 424_243;
+        const stuckRun = spawnProcess('child', [], { killProcessTree: true });
+
+        process.emit('SIGINT');
+        process.emit('SIGINT');
+        expect(calls).toContainEqual([-424_243, 'SIGKILL']);
+        expect(calls).toContainEqual([process.pid, 'SIGINT']);
+
+        groupAlive = false;
+        stuckProc.emit('close', null, 'SIGKILL');
+        await stuckRun;
+      } finally {
+        killSpy.mockRestore();
+      }
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'forwards parent signals without re-raising when the caller already has a signal listener',
+    async () => {
+      const calls: Array<[number, string | number | undefined]> = [];
+      const killSpy = spyOn(process, 'kill').mockImplementation((pid, sig) => {
+        calls.push([pid, sig]);
+        if (sig === 0) throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' });
+        return true;
+      });
+      let callerHandled = false;
+      const callerListener = (): void => {
+        callerHandled = true;
+      };
+      process.on('SIGTERM', callerListener);
+      try {
+        const proc = mockChild(sink().stream) as ReturnType<typeof mockChild> & { pid?: number };
+        proc.pid = 424_244;
+        const running = spawnProcess('child', [], { killProcessTree: true });
+
+        process.emit('SIGTERM');
+        expect(callerHandled).toBe(true);
+        expect(calls).toContainEqual([-424_244, 'SIGTERM']);
+        expect(calls).not.toContainEqual([process.pid, 'SIGTERM']);
+
+        proc.emit('close', null, 'SIGTERM');
+        await running;
+      } finally {
+        process.off('SIGTERM', callerListener);
+        killSpy.mockRestore();
+      }
+    },
+  );
 });
 
 function grandchildScript(ignoreTermination: boolean): string {
