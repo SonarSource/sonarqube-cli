@@ -56,7 +56,7 @@ function buildSecretsAnalysisTelemetryFact(
   auth: ResolvedAuth,
 ): {
   parsed: SecretsJsonOutput;
-  fact: TelemetryFact<AnalysisCompletedPayload>;
+  fact: TelemetryFact<AnalysisCompletedPayload<'sonar-secrets'>>;
 } {
   const parsed = result ? parseSecretsJson(result.stdout) : { issues: [] };
 
