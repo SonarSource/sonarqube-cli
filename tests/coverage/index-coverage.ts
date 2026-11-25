@@ -29,7 +29,12 @@
 
 import { serializeCoverageToFile } from './utils.js';
 
-const coverageOutputFile = process.env.COVERAGE_OUTPUT_FILE;
+const baseOutput = process.env.COVERAGE_OUTPUT_FILE;
+// A detached flush worker inherits the parent's env; avoid clobbering its file.
+const coverageOutputFile =
+  baseOutput && process.env.__SQ_CLI_TELEMETRY_FLUSH__
+    ? baseOutput.replace(/\.json$/, `-worker-${process.pid}.json`)
+    : baseOutput;
 if (coverageOutputFile) {
   process.on('exit', () => {
     serializeCoverageToFile(coverageOutputFile);
