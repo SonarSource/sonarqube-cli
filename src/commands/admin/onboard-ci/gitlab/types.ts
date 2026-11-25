@@ -36,6 +36,7 @@ export enum SkipReason {
   StageNotInCi = 'STAGE_NOT_IN_CI',
   CustomCiConfigPath = 'CUSTOM_CI_CONFIG_PATH',
   NotInSonarQube = 'NOT_IN_SONARQUBE',
+  MultipleProjectKeys = 'MULTIPLE_PROJECT_KEYS',
 }
 
 export interface OnboardCiGitlabInput extends OnboardCiOptions {

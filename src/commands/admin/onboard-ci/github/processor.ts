@@ -24,6 +24,7 @@ import type { ComponentsClient } from '@/core/server/components.ts';
 
 import { deleteBranchUnlessRequestOpen } from '../branch-guard.ts';
 import { hasSonarAnalysis } from '../ci-detection.ts';
+import { hasExistingProjectAnalysis } from '../shared.ts';
 import type { WorkflowOptions } from './templates.ts';
 import {
   generatePrContent,
@@ -100,21 +101,20 @@ async function assessWorkflows(
 export async function assessRepo(
   ctx: ProcessRepoContext,
   repo: GitHubRepo,
-  bindings: ReadonlyMap<string, string>,
+  bindings: ReadonlyMap<string, ReadonlySet<string>>,
 ): Promise<RepoAssessment> {
-  const projectKey = bindings.get(repo.full_name.toLowerCase());
-  if (!projectKey) {
+  const projectKeys = bindings.get(repo.full_name.toLowerCase());
+  if (!projectKeys?.size) {
     return { outcome: 'skip', reason: 'NOT_IN_SONARQUBE' };
   }
+  if (projectKeys.size > 1) {
+    return { outcome: 'skip', reason: 'MULTIPLE_PROJECT_KEYS' };
+  }
+  const [projectKey] = projectKeys;
   if (repo.archived || repo.disabled || !repo.default_branch) {
     return { outcome: 'skip', reason: 'UNSUPPORTED_REPOSITORY' };
   }
-  if (!(await ctx.components.componentExists(projectKey).orThrow())) {
-    throw new CommandFailedError(
-      `Bound SonarQube project '${projectKey}' is missing or inaccessible.`,
-    );
-  }
-  if (await ctx.components.hasProjectBeenAnalyzed(projectKey).orThrow()) {
+  if (await hasExistingProjectAnalysis(ctx.components, projectKey)) {
     return { outcome: 'skip', reason: 'ALREADY_ANALYZED' };
   }
   const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
@@ -187,7 +187,7 @@ async function prepareOnboardingBranch(
 export async function executeRepo(
   ctx: ProcessRepoContext,
   repo: GitHubRepo,
-  bindings: ReadonlyMap<string, string>,
+  bindings: ReadonlyMap<string, ReadonlySet<string>>,
 ): Promise<ExecuteResult> {
   // Refresh eligibility and render against the current default branch before replacing any branch.
   repo = await ctx.github.getRepository(repo.full_name);

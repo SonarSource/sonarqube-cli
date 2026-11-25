@@ -26,6 +26,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { DevOpsPlatform } from '@/core/devops/token.ts';
+import type { ComponentsClient } from '@/core/server/components.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { UsersClient } from '@/core/server/users.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
@@ -151,6 +152,28 @@ export async function runRepos<Repo>(
   return results;
 }
 
+export function finishOnboarding(
+  results: RepoRunResults,
+  report: object,
+  requestLabel: 'PR' | 'MR',
+  console: Console,
+  dryRun = false,
+): void {
+  const opened = (dryRun ? results.wouldOpen : results.opened).length.toLocaleString();
+  const skipped = results.skipped.length.toLocaleString();
+  const failed = results.failed.length;
+  const message = dryRun
+    ? `Would open ${opened} ${requestLabel}s · skip ${skipped} · fail ${failed.toLocaleString()}`
+    : `Opened ${opened} ${requestLabel}s · ${skipped} skipped · ${failed.toLocaleString()} failed`;
+  console.outro(message, failed ? 'error' : 'success', dryRun ? 'No changes were made' : undefined);
+  writeReportFile(report, dryRun ? DRY_RUN_REPORT_FILE : REPORT_FILE, console);
+  if (failed) {
+    throw new CommandFailedError(`${failed} repositories failed to process.`, {
+      remediationHint: 'See the per-repository errors above and the report file for details.',
+    });
+  }
+}
+
 export function writeReportFile(results: object, filename: string, console: Console): void {
   const dest = join(process.cwd(), filename);
   try {
@@ -159,4 +182,17 @@ export function writeReportFile(results: object, filename: string, console: Cons
     throw new CommandFailedError(`Failed to write report to ${dest}: ${String(err)}`);
   }
   console.print(`Full report: ${filename}  (written to current directory)`);
+}
+
+export async function hasExistingProjectAnalysis(
+  components: ComponentsClient,
+  projectKey: string,
+): Promise<boolean> {
+  // Analysis history alone cannot distinguish a missing project from an unanalyzed one.
+  if (!(await components.componentExists(projectKey).orThrow())) {
+    throw new CommandFailedError(
+      `Bound SonarQube project '${projectKey}' is missing or inaccessible.`,
+    );
+  }
+  return components.hasProjectBeenAnalyzed(projectKey).orThrow();
 }

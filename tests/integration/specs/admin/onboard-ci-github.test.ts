@@ -91,6 +91,7 @@ describe('GitHub bulk CI onboarding', () => {
   async function setup(
     repos: FakeGitHubRepository[] = [{ name: 'sample' }],
     readOnlyRepo?: string,
+    projectKeys?: string[],
   ) {
     const githubBuilder = harness.newFakeGitHubServer().withOrganization(ORG, repos);
     if (readOnlyRepo) {
@@ -103,11 +104,13 @@ describe('GitHub bulk CI onboarding', () => {
       .withDopSettings([SETTING])
       .withProvisionProjectsPermission(true)
       .withProjectBindings(
-        repos.map(({ name }) => ({
-          repository: `${ORG}/${name}`,
-          projectKey: `${name}-key`,
-          dopSettingId: SETTING.id,
-        })),
+        repos.flatMap(({ name }) =>
+          (projectKeys ?? [`${name}-key`]).map((projectKey) => ({
+            repository: `${ORG}/${name}`,
+            projectKey,
+            dopSettingId: SETTING.id,
+          })),
+        ),
       );
     for (const repo of repos) {
       builder.withProject(`${repo.name}-key`);
@@ -132,6 +135,42 @@ describe('GitHub bulk CI onboarding', () => {
         onboardCiGithub(connection, client, options, console, workflowTemplate),
     };
   }
+
+  it.each([false, true])(
+    'skips repositories with multiple project keys (dry run: %s)',
+    async (dryRun) => {
+      const { run, github, server } = await setup([{ name: 'sample' }], undefined, [
+        'first',
+        'second',
+      ]);
+      await run({ ...OPTIONS, dryRun });
+      const report = harness.cwd
+        .file(dryRun ? 'sonar-onboard-ci-report-dry.json' : 'sonar-onboard-ci-report.json')
+        .asJson();
+      expect(report[dryRun ? 'wouldSkip' : 'skipped']).toEqual([
+        { repo: `${ORG}/sample`, reason: 'MULTIPLE_PROJECT_KEYS' },
+      ]);
+      expect(report[dryRun ? 'wouldOpenPr' : 'opened']).toEqual([]);
+      expect(report.failed).toEqual([]);
+      expect(
+        [...github.getRecordedRequests(), ...server.getRecordedRequests()].every(
+          (request) => request.method === 'GET',
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it('opens a PR when repeated bindings contain only one distinct project key', async () => {
+    const { run } = await setup([{ name: 'sample' }], undefined, ['sample-key', 'sample-key']);
+    await run();
+    expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson().opened).toEqual([
+      {
+        repo: `${ORG}/sample`,
+        projectKey: 'sample-key',
+        prUrl: `https://github.com/${ORG}/sample/pull/1`,
+      },
+    ]);
+  });
 
   it('reports opened, skipped and failed repositories, finishing the batch before failing', async () => {
     const { run, server } = await setup(
@@ -191,7 +230,7 @@ describe('GitHub bulk CI onboarding', () => {
       ),
     ).toBe(true);
     expect(harness.cwd.exists('sonar-onboard-ci-report.json')).toBe(false);
-    expect(console.findCall('outro', 'Would open 1 PRs · 1 skipped · 0 failed')).toBeDefined();
+    expect(console.findCall('outro', 'Would open 1 PRs · skip 1 · fail 0')).toBeDefined();
   });
 
   it('selects repositories by short or full name, ignoring duplicates and comments', async () => {
