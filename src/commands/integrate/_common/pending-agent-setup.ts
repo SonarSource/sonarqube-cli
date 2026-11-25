@@ -27,6 +27,7 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { SUPPORTED_AGENT_IDS } from '@/core/host/environment/installed-agent-detector.ts';
 import { normalizeServerUrl } from '@/core/host/keychain.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import type { AgentOnboardingState, CliState } from '@/core/state/state.ts';
 
 import { AGENT_INTEGRATION_IDS } from '../integration-handlers.ts';
@@ -45,7 +46,18 @@ export function resolveSetupTarget(options: SetupTarget): SetupTarget {
   return { ...(server ? { server: normalizeServerUrl(server) } : {}), ...(org ? { org } : {}) };
 }
 
-export function setupMatches(auth: ResolvedAuth, target: SetupTarget): boolean {
+export function formatSetupLoginCommand(target: SetupTarget): string {
+  return [
+    'sonar auth login',
+    ...(target.server ? ['--server', shellQuote(target.server)] : []),
+    ...(target.org ? ['--org', shellQuote(target.org)] : []),
+  ].join(' ');
+}
+
+export function setupMatches(
+  auth: Pick<ResolvedAuth, 'serverUrl' | 'orgKey'>,
+  target: SetupTarget,
+): boolean {
   return (
     (target.server === undefined || normalizeServerUrl(auth.serverUrl) === target.server) &&
     (target.org === undefined || auth.orgKey === target.org)

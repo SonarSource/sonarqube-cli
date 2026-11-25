@@ -23,7 +23,10 @@ export interface VortexDisposition {
   unavailableReason?: string;
 }
 
+export type SetupSource = 'bulk' | 'deferred' | 'post_login';
+
 export interface IntegrateAgentOptions {
+  setupSource?: SetupSource;
   nonInteractive?: boolean;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;
