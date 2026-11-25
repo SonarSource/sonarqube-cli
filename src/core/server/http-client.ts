@@ -99,6 +99,16 @@ export class SonarHttpClient {
     return resolveFromEndpoint(this.serverURL, endpoint);
   }
 
+  /** Streaming protocols own response parsing and supply their session cancellation signal. */
+  requestRaw(endpoint: string, init: RequestInit): Promise<Response> {
+    const headers = new Headers(this.commonHeaders());
+    new Headers(init.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
+    headers.set('Authorization', `Bearer ${this.token}`);
+    return fetchAuthenticated(`${this.apiHostFor(endpoint)}${endpoint}`, { ...init, headers });
+  }
+
   private commonHeaders(contentType?: 'json' | 'form'): Record<string, string> {
     const headers: Record<string, string> = {
       'User-Agent': `sonarqube-cli/${VERSION}`,
