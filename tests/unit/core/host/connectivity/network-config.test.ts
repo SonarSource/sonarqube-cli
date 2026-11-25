@@ -31,7 +31,9 @@ import {
   buildFetchNetworkOptions,
   buildSubprocessNetworkEnv,
   clearNetworkConfigCache,
+  GENERIC_PROXY_ENV_NAMES,
   resolveNetworkConfig,
+  SUBPROCESS_NETWORK_ENV_NAMES,
 } from '@/core/host/connectivity/network-config.ts';
 
 import { restoreEnv } from '../../../../_common/isolated-cli-env.ts';
@@ -819,5 +821,54 @@ describe('buildSubprocessNetworkEnv', () => {
     expect(env.SONAR_TLS_CLIENT_CERT).toBe(P12_PATH);
     expect(env.SONAR_TLS_CLIENT_KEY_FILE).toBeUndefined();
     expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBe('testpassword');
+  });
+
+  it('omits client cert vars when includeClientCert is false while preserving proxy and CA cert', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
+        SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
+        SONAR_NO_PROXY: 'localhost',
+        SONAR_CA_CERT: '/etc/ssl/corp-ca.pem',
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
+      }),
+      { includeClientCert: false },
+    );
+
+    expect(env).toEqual({
+      SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
+      SONAR_NO_PROXY: 'localhost',
+      SONAR_CA_CERT: '/etc/ssl/corp-ca.pem',
+    });
+  });
+
+  it('lists every env key emitted by buildSubprocessNetworkEnv in SUBPROCESS_NETWORK_ENV_NAMES', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
+        SONAR_HTTPS_PROXY_URL: 'https://https-proxy:8080',
+        SONAR_HTTP_PROXY_URL: 'https://http-proxy:8080',
+        SONAR_NO_PROXY: 'localhost',
+        SONAR_CA_CERT: '/etc/ssl/corp-ca.pem',
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
+      }),
+    );
+
+    expect(new Set(Object.keys(env))).toEqual(new Set(SUBPROCESS_NETWORK_ENV_NAMES));
+  });
+
+  it('exports the generic proxy env names stripped from subprocess environments', () => {
+    expect([...GENERIC_PROXY_ENV_NAMES]).toEqual([
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'ALL_PROXY',
+      'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'all_proxy',
+      'no_proxy',
+    ]);
   });
 });
