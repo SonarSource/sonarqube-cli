@@ -35,6 +35,9 @@ const SONAR_CI_MARKERS = [
 export function hasSonarAnalysis(content: string): boolean {
   return (
     SONAR_CI_MARKERS.some((marker) => content.includes(marker)) ||
-    /\bgradlew?\b[^\r\n;&|]*[ \t]+sonar\b/.test(content)
+    content.split(/[\r\n;&|]/).some((command) => {
+      const gradle = /\bgradlew?\b/.exec(command);
+      return gradle !== null && /[ \t]sonar\b/.test(command.slice(gradle.index + gradle[0].length));
+    })
   );
 }
