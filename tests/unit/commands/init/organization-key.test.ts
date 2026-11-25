@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { deriveOrganizationKey } from '@/commands/init/steps/organization.ts';
+import { deriveOrganizationKey } from '@/commands/auth/organization.ts';
 
 describe('deriveOrganizationKey', () => {
   it.each([
