@@ -29,6 +29,7 @@ import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 
 import { IS_WINDOWS, TestHarness } from '../../harness';
 import { spawnCliProcess } from '../../harness/cli-runner.ts';
+import { HostedMcpFixture, TOKEN } from './fixtures/hosted-mcp.ts';
 
 const EXECUTABLE_MODE = 0o755;
 const PATH_SEP = IS_WINDOWS ? ';' : ':';
@@ -584,5 +585,47 @@ describe('run mcp', () => {
       expect(result.stdout).not.toContain('Found sonar-project.properties');
     },
     { timeout: 15000 },
+  );
+});
+
+describe('run mcp transport selection', () => {
+  let harness: TestHarness;
+  let fixture: HostedMcpFixture;
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    fixture = new HostedMcpFixture(harness);
+  });
+  afterEach(async () => {
+    await harness.dispose();
+    await fixture.server.stop(true);
+  });
+
+  it.each([404, 503])('falls back on health HTTP %s', async (status) => {
+    fixture.healthStatus = status;
+    const result = await harness.run('run mcp');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('fallback-container\n');
+    expect(result.stderr).toContain(`returned HTTP ${status}`);
+    expect(result.stderr).toContain('configure and enable hosted MCP');
+    expect(harness.cwd.file('docker.jsonl').asText()).toContain('run');
+  });
+
+  it.each(['eu', 'us'])(
+    'falls back on Cloud %s without the Server admin hint',
+    async (region) => {
+      harness.withAuth(fixture.server.url.origin, TOKEN, 'test-org');
+      if (region === 'us')
+        harness.withExtraEnv({
+          SONARQUBE_CLI_SONARCLOUD_US_URL: fixture.server.url.origin,
+          SONARQUBE_CLI_SONARCLOUD_US_API_URL: fixture.server.url.origin,
+        });
+      fixture.healthStatus = 404;
+      const result = await harness.run('run mcp');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('fallback-container\n');
+      expect(result.stderr).toContain('local container fallback');
+      expect(result.stderr).not.toContain('ask an administrator');
+    },
+    15000,
   );
 });
