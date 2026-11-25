@@ -271,6 +271,67 @@ describe('sonar stats', () => {
     { timeout: 30000 },
   );
 
+  it.each([
+    ['7d', 0],
+    ['14d', 1],
+    ['30d', 1],
+    ['all', 1],
+  ])(
+    '--since %s filters the view-model while preserving all-time history and entitlement',
+    async (since, expectedRuns) => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cwd.writeFile('clean.js', 'const value = 1;');
+      const scan = await harness.run('analyze secrets clean.js');
+      expect(scan.exitCode).toBe(0);
+      backdateStatsEvents(harness.sonarUserHome.path, Date.now() - 10 * DAY_MS);
+      harness.clearAuth();
+
+      const result = await harness.run(`stats --since ${since} --json`);
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as {
+        totalRuns: number;
+        allTime: { totalRuns: number };
+        entitlement: { vortex: string; sca: string };
+      };
+      expect(json.totalRuns).toBe(expectedRuns);
+      expect(json.allTime.totalRuns).toBe(1);
+      expect(json.entitlement).toEqual({ vortex: 'not_applicable', sca: 'not_applicable' });
+    },
+    { timeout: 30000 },
+  );
+
+  it('keeps every JSON field and null entitlement for empty history without auth', async () => {
+    const result = await harness.run('stats --json');
+
+    expect(result.exitCode).toBe(0);
+    const json = JSON.parse(result.stdout) as Record<string, unknown>;
+    expect(Object.keys(json).sort()).toEqual(
+      [
+        'sinceMs',
+        'totalRuns',
+        'totalFindings',
+        'allTime',
+        'analyzers',
+        'stopped',
+        'topSecretTypes',
+        'agentHitRate',
+        'agentBreakdown',
+        'callerCommandBreakdown',
+        'triggers',
+        'topRules',
+        'daily',
+        'dailySecretsBlocked',
+        'dailyDependencyRisks',
+        'firstSeenMs',
+        'entitlement',
+      ].sort(),
+    );
+    expect(json.entitlement).toBeNull();
+    expect(json.totalRuns).toBe(0);
+  });
+
   it(
     'rejects an invalid --since value',
     async () => {

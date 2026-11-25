@@ -24,6 +24,7 @@ import { isDoNotTrackRequested } from '@/core/telemetry/enabled.ts';
 
 import { resolveStatsEntitlement } from './entitlement.ts';
 import { renderTextSummary } from './text-report.ts';
+import { buildStatsViewModel } from './view-model.ts';
 
 export const STATS_SINCE_CHOICES = ['7d', '14d', '30d', 'all'] as const;
 export type StatsSinceChoice = (typeof STATS_SINCE_CHOICES)[number];
@@ -39,18 +40,19 @@ const DO_NOT_TRACK_DISCLAIMER =
 export async function stats(options: StatsOptions, ctx: CommandInvocationContext): Promise<void> {
   const since = options.since ?? '30d';
   const summary = queryStatsSummary(since);
+  const entitlement = summary.allTime.totalRuns > 0 ? await resolveStatsEntitlement(ctx) : null;
+  const viewModel = buildStatsViewModel(summary, entitlement);
 
   if (options.json) {
     if (isDoNotTrackRequested()) {
       ctx.console.info(DO_NOT_TRACK_DISCLAIMER, 'stderr');
     }
-    const entitlement = summary.allTime.totalRuns > 0 ? await resolveStatsEntitlement(ctx) : null;
-    ctx.console.print(JSON.stringify({ ...summary, entitlement }, null, 2));
+    ctx.console.print(JSON.stringify(viewModel, null, 2));
     return;
   }
 
   if (isDoNotTrackRequested()) {
     ctx.console.info(DO_NOT_TRACK_DISCLAIMER);
   }
-  await renderTextSummary(summary, since, ctx);
+  renderTextSummary(viewModel, since, ctx.console);
 }
