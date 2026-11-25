@@ -21,12 +21,15 @@
 /** Short telemetry event name for one analyzer run. */
 export const CLI_ANALYSIS_COMPLETED = 'CliAnalysisCompleted';
 
-export type AnalysisTelemetryAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
+export type AnalysisTelemetryAnalyzer =
+  'sonar-secrets' | 'sqaa' | 'sca-scanner-cli' | 'sonar-container-scanner';
 
 /** Domain payload for CliAnalysisCompleted (identity is filled at drain time). */
-export type AnalysisCompletedPayload = {
+export type AnalysisCompletedPayload<
+  Analyzer extends AnalysisTelemetryAnalyzer = AnalysisTelemetryAnalyzer,
+> = {
   caller_command: string;
-  analyzer: AnalysisTelemetryAnalyzer;
+  analyzer: Analyzer;
   analysis_id: string;
   findings_count: number;
   exit_code: number | null;
