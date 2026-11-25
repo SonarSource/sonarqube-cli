@@ -94,13 +94,32 @@ describe('parseIntendedFile', () => {
     expect(message).toContain('models[2].language must be one of');
   });
 
-  it('accepts a glob as a constraint end', () => {
+  it('rejects a wildcard constraint end, which the public API does not resolve', () => {
     const glob = { ...MODEL, constraints: [{ from: 'src/*', to: 'src/api' }] };
-    expect(parseIntendedFile([glob]).models[0].constraints).toEqual(glob.constraints);
-    expect(
-      parseIntendedFile([{ ...MODEL, constraints: [{ from: 'src/*', to: 'src/*' }] }]).models[0]
-        .constraints,
-    ).toHaveLength(1);
+    expect(problemsOf([glob])).toContain(
+      'constraint endpoint "src/*" does not name a unique group',
+    );
+  });
+
+  it('accepts constraints between sibling groups at any level', () => {
+    const model = {
+      ...MODEL,
+      groups: [...MODEL.groups, { label: 'lib', patterns: ['lib/**'] }],
+      constraints: [
+        { from: 'src/ui', to: 'src/api' },
+        { from: 'src', to: 'lib' },
+      ],
+    };
+    expect(parseIntendedFile([model]).models[0].constraints).toEqual(model.constraints);
+  });
+
+  it('rejects a constraint between groups that are not siblings', () => {
+    const model = {
+      ...MODEL,
+      groups: [...MODEL.groups, { label: 'lib', patterns: ['lib/**'] }],
+      constraints: [{ from: 'src/ui', to: 'lib' }],
+    };
+    expect(problemsOf([model])).toContain('constraint src/ui -> lib must link sibling groups');
   });
 
   it('accepts public-schema patterns without renderer semantics', () => {
@@ -112,7 +131,7 @@ describe('parseIntendedFile', () => {
         { label: 'A', patterns: ['src**'] },
         { label: 'B', patterns: ['src**'] },
       ],
-      constraints: [{ from: 'A', to: 'anything**' }],
+      constraints: [{ from: 'A', to: 'B' }],
     };
     expect(parseIntendedFile([model]).models[0].constraints).toEqual(model.constraints);
     expect(parseIntendedFile([model]).models[0].groups[1].patterns).toEqual([]);
@@ -132,16 +151,22 @@ describe('parseIntendedFile', () => {
     expect(problemsOf([ambiguous])).toContain('does not name a unique group');
   });
 
-  it('preserves constraints below a server-resolved pattern import', () => {
+  it('rejects constraint ends inside an imported pattern and points to the importing group', () => {
     const model = {
       ...MODEL,
       groups: [
-        { label: 'Shared', patternId: '11111111-1111-4111-8111-111111111111' },
+        {
+          label: 'Shared',
+          patternId: '11111111-1111-4111-8111-111111111111',
+          groups: [{ label: 'Hidden' }, { label: 'Other' }],
+        },
         ...MODEL.groups,
       ],
-      constraints: [{ from: 'Shared/Hidden', to: 'src/ui' }],
+      constraints: [{ from: 'Shared/Hidden', to: 'Shared/Other' }],
     };
-    expect(parseIntendedFile([model]).models[0].constraints).toEqual(model.constraints);
+    expect(problemsOf([model])).toContain(
+      'endpoint "Shared/Hidden" is inside the imported pattern of "Shared"; name "Shared" instead',
+    );
   });
 
   it('never drops an invalid supplied revision into an unchecked write', () => {
