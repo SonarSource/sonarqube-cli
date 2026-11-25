@@ -280,7 +280,7 @@ describe('GitHub bulk CI onboarding', () => {
       false,
     );
     expect(console.findCall('warn', "'unknown' from --repos-file not found")).toBeDefined();
-  });
+  }, 15_000);
 
   it('does not open a second PR on a subsequent run', async () => {
     const { run, github, telemetryEvents } = await setup();

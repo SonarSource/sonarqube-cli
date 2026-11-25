@@ -19,6 +19,7 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { RequestScheduler } from '@/core/devops/request-scheduler.ts';
 import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import {
   HTTP_STATUS_BAD_GATEWAY,
@@ -106,6 +107,8 @@ export class GitHubApiError extends CommandFailedError {
 }
 
 export class GitHubClient {
+  private scheduler = new RequestScheduler();
+
   constructor(
     private readonly token: string,
     private readonly options: {
@@ -115,7 +118,9 @@ export class GitHubClient {
   ) {}
 
   withRetryHandler(onRetry: (message: string) => void): GitHubClient {
-    return new GitHubClient(this.token, { ...this.options, onRetry });
+    const client = new GitHubClient(this.token, { ...this.options, onRetry });
+    client.scheduler = this.scheduler;
+    return client;
   }
 
   async listOrganizationRepos(organization: string): Promise<GitHubRepo[]> {
@@ -245,36 +250,46 @@ export class GitHubClient {
   ): Promise<Response> {
     let fallbackRateLimitDelayMs = INITIAL_RATE_LIMIT_DELAY_MS;
     for (let attempt = 0; ; attempt++) {
-      let response: Response;
-      try {
-        response = await fetchAuthenticated(
-          `${this.options.baseUrl ?? GITHUB_API_URL}${path}`,
-          buildRequest(
-            method,
-            {
-              Authorization: `Bearer ${this.token}`,
-              Accept: 'application/vnd.github+json',
-              'Content-Type': 'application/json',
-              'User-Agent': 'sonarqube-cli',
-              'X-GitHub-Api-Version': GITHUB_API_VERSION,
-            },
-            method === 'GET' ? GET_TIMEOUT_MS : WRITE_TIMEOUT_MS,
-            options.body === undefined ? undefined : JSON.stringify(options.body),
-          ),
+      const { response, error } = await this.scheduler.run(method !== 'GET', async () => {
+        let response: Response;
+        try {
+          response = await fetchAuthenticated(
+            `${this.options.baseUrl ?? GITHUB_API_URL}${path}`,
+            buildRequest(
+              method,
+              {
+                Authorization: `Bearer ${this.token}`,
+                Accept: 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'sonarqube-cli',
+                'X-GitHub-Api-Version': GITHUB_API_VERSION,
+              },
+              method === 'GET' ? GET_TIMEOUT_MS : WRITE_TIMEOUT_MS,
+              options.body === undefined ? undefined : JSON.stringify(options.body),
+            ),
+          );
+        } catch (cause) {
+          throw new CommandFailedError(
+            `GitHub request failed before a response was received (${operation}).`,
+            { cause },
+          );
+        }
+        if (response.ok || (options.allowNotFound && response.status === HTTP_STATUS_NOT_FOUND)) {
+          return { response, error: null };
+        }
+        const errorBody = (await response.text().catch(() => '')).replaceAll(
+          this.token,
+          '[REDACTED]',
         );
-      } catch (cause) {
-        throw new CommandFailedError(
-          `GitHub request failed before a response was received (${operation}).`,
-          { cause },
-        );
-      }
-      if (response.ok || (options.allowNotFound && response.status === HTTP_STATUS_NOT_FOUND))
+        const error = new GitHubApiError(response, operation, errorBody);
+        if (error.isRateLimited) {
+          this.scheduler.coolDown(retryDelay(error, response.headers, fallbackRateLimitDelayMs));
+        }
+        return { response, error };
+      });
+      if (!error) {
         return response;
-      const errorBody = (await response.text().catch(() => '')).replaceAll(
-        this.token,
-        '[REDACTED]',
-      );
-      const error = new GitHubApiError(response, operation, errorBody);
+      }
       const retryable =
         error.isRateLimited ||
         [
