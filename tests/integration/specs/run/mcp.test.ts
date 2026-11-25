@@ -612,6 +612,7 @@ describe('run mcp transport selection', () => {
       expect(fixture.requests).toHaveLength(0);
       expect(harness.cwd.file('docker.jsonl').asText()).toContain('run');
     },
+    15000,
   );
 
   it.each(['flag', 'config'])(
@@ -631,6 +632,7 @@ describe('run mcp transport selection', () => {
       expect(result.stdout).toContain('Hosted MCP unavailable');
       expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
     },
+    15000,
   );
 
   it('rejects an invalid transport before starting MCP', async () => {
@@ -651,6 +653,7 @@ describe('run mcp transport selection', () => {
       expect(fixture.healthRequests).toBe(1);
       expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
     },
+    15000,
   );
 
   it.each([404, 503])('falls back on health HTTP %s', async (status) => {

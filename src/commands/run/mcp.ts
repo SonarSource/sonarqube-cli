@@ -37,6 +37,7 @@ import {
 import { HostedMcpClient } from '@/core/host/mcp/hosted-mcp-client.ts';
 import {
   clientCertCachePath,
+  hostedMcpSetupHint,
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
@@ -123,10 +124,7 @@ async function tryRunHostedMcp(
     await bridgeHostedMcp(hosted, options);
     return true;
   }
-  const hint =
-    auth.connectionType === 'on-premise'
-      ? ' For SonarQube Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
-      : '';
+  const hint = hostedMcpSetupHint(auth);
   if (options.transport === 'http') {
     throw new CommandFailedError(
       `Hosted MCP unavailable — ${hosted.url}/health ${availability.reason}.${hint}`,

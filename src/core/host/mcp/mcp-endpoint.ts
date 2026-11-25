@@ -31,6 +31,7 @@ import {
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { HostedMcpClient } from './hosted-mcp-client.ts';
+import { hostedMcpSetupHint } from './mcp-helper.ts';
 import { type McpTransportSelection, resolveMcpTransport } from './mcp-transport.ts';
 
 export interface McpEndpointStatus {
@@ -71,7 +72,7 @@ export async function checkMcpEndpoint(
       }
       if (transport === 'http') {
         throw new CommandFailedError(
-          `Hosted MCP unavailable — ${hosted.url}/health ${availability.reason}.`,
+          `Hosted MCP unavailable — ${hosted.url}/health ${availability.reason}.${hostedMcpSetupHint(connection.auth)}`,
         );
       }
       status.fallbackReason = `hosted MCP ${availability.reason}`;

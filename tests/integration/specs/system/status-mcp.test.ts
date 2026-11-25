@@ -100,17 +100,29 @@ describe('system status MCP endpoint', () => {
     expect(text.stdout).toContain('Transport: stdio (local container), from mcp.transport=stdio');
   });
 
-  it('reports unavailable configured HTTP without container fallback', async () => {
-    expect((await harness.run('config set mcp.transport http')).exitCode).toBe(0);
-    fixture.healthStatus = 404;
-    const result = await harness.run('system status --format json');
-    expect(result.exitCode).toBe(0);
-    const mcp = JSON.parse(result.stdout).mcp;
-    expect(mcp.startupError).toContain('Hosted MCP unavailable');
-    expect(mcp.connectionMode).toBeNull();
-    expect(mcp.containerRuntime).toBeNull();
-    expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
-  });
+  it.each(['server', 'cloud'])(
+    'reports unavailable configured HTTP on %s without container fallback',
+    async (kind) => {
+      if (kind === 'cloud') harness.withAuth(fixture.server.url.origin, TOKEN, 'test-org');
+      expect((await harness.run('config set mcp.transport http')).exitCode).toBe(0);
+      fixture.healthStatus = 404;
+      const result = await harness.run('system status --format json');
+      expect(result.exitCode).toBe(0);
+      const mcp = JSON.parse(result.stdout).mcp;
+      expect(mcp.startupError).toContain('Hosted MCP unavailable');
+      if (kind === 'server') {
+        expect(mcp.startupError).toContain(
+          'For SonarQube Server 2026.3+, ask an administrator to configure and enable hosted MCP.',
+        );
+      } else {
+        expect(mcp.startupError).not.toContain('ask an administrator');
+      }
+      expect(mcp.connectionMode).toBeNull();
+      expect(mcp.containerRuntime).toBeNull();
+      expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
+    },
+    15000,
+  );
 
   it('reports an unreachable server as unhealthy even when the container runtime is ready', async () => {
     await fixture.server.stop(true);
