@@ -134,6 +134,10 @@ function mapScannerExitCode(exitCode: number | null): ContainerScanExitCode | un
   return EXIT_CODE_BY_SCANNER_STATUS.get(exitCode);
 }
 
+function getThresholdRank(failOn: ContainerScanSeverity): number | undefined {
+  return failOn === 'none' ? undefined : FINDING_SEVERITY_RANK[failOn];
+}
+
 export function parseContainerScanReport(result: SpawnResult): ContainerScanReport | undefined {
   const { exitCode } = result;
   const publicExitCode = mapScannerExitCode(exitCode);
@@ -158,7 +162,11 @@ export function parseContainerScanReport(result: SpawnResult): ContainerScanRepo
     return;
   }
 
-  if (exitCode === 1 && (report.issues.length === 0 || report.configuration.failOn === 'none')) {
+  const thresholdRank = getThresholdRank(report.configuration.failOn);
+  const reachesThreshold =
+    thresholdRank !== undefined &&
+    report.issues.some((issue) => FINDING_SEVERITY_RANK[issue.severity] >= thresholdRank);
+  if ((exitCode === 1 && !reachesThreshold) || (exitCode === 0 && reachesThreshold)) {
     return;
   }
 
@@ -209,7 +217,7 @@ export function formatContainerScanJson(report: ContainerScanReport): string {
   // JSON.stringify escapes C0 controls. Escape additional terminal and bidi controls as valid JSON.
   return JSON.stringify(report, null, 2).replaceAll(
     /[\u007F-\u009F\p{Bidi_Control}]/gu,
-    (character) => String.raw`\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+    (character) => String.raw`\u${(character.codePointAt(0) ?? 0).toString(16).padStart(4, '0')}`,
   );
 }
 
@@ -249,6 +257,16 @@ interface PackageGroup {
   findings: NormalizedFinding[];
 }
 
+function findingGroupKey(
+  packageUrl: string | undefined,
+  packageName: string | undefined,
+  version: string | undefined,
+): string {
+  if (packageUrl) return `purl:${packageUrl}`;
+  if (packageName) return `pkg:${JSON.stringify([packageName, version ?? null])}`;
+  return 'unknown';
+}
+
 function normalizeFinding(finding: ContainerScanFinding): NormalizedFinding {
   const packageUrl = cleanCell(finding.packageUrl);
   const packageName = cleanCell(finding.packageName);
@@ -257,11 +275,7 @@ function normalizeFinding(finding: ContainerScanFinding): NormalizedFinding {
   const label = hasNameAndVersion
     ? `${packageName}@${version}`
     : (packageUrl ?? packageName ?? 'Unknown package');
-  const groupKey = packageUrl
-    ? `purl:${packageUrl}`
-    : packageName
-      ? `pkg:${JSON.stringify([packageName, version ?? null])}`
-      : 'unknown';
+  const groupKey = findingGroupKey(packageUrl, packageName, version);
   const rawCvss = cleanCell(finding.cvssScore);
   const cvssScore = rawCvss === '10.0' ? '10' : rawCvss;
   const identifier =
@@ -322,13 +336,38 @@ function groupFindingsByPackage(findings: NormalizedFinding[]): PackageGroup[] {
   return groups;
 }
 
+function summarizeFindings(
+  findings: NormalizedFinding[],
+  failOn: ContainerScanSeverity,
+): { highest: ContainerFindingSeverity; reachedThreshold: number } {
+  const thresholdRank = getThresholdRank(failOn);
+  let highest = findings[0].severity;
+  let reachedThreshold = 0;
+  for (const finding of findings) {
+    if (finding.rank > FINDING_SEVERITY_RANK[highest]) highest = finding.severity;
+    if (thresholdRank !== undefined && finding.rank >= thresholdRank) reachedThreshold++;
+  }
+  return { highest, reachedThreshold };
+}
+
+function formatPackageGroup(group: PackageGroup, cvssScoreWidth: number): string[] {
+  return [
+    `── ${group.label} (${group.findings.length} ${pluralize(group.findings.length, 'finding')}) ──`,
+    ...group.findings.map((finding) => formatFindingRow(finding, cvssScoreWidth)),
+    '',
+  ];
+}
+
+function formatThresholdLine(failOn: ContainerScanSeverity, reachedThreshold: number): string {
+  if (failOn === 'none') return 'Fail threshold: disabled';
+  return `Fail threshold: ${failOn.toUpperCase()} · ${reachedThreshold} ${pluralize(reachedThreshold, 'finding')} reached the threshold`;
+}
+
 export function formatContainerScanTable(report: ContainerScanReport, stderr = ''): string {
   const lines = [`Image: ${scanTableCell(report.configuration.imageInput)}`, ''];
   if (report.exitCode !== 0 && report.exitCode !== EXIT_CODE_CONTAINER_THRESHOLD_REACHED) {
-    return [
-      ...lines,
-      report.exitCode === 1 ? 'Container scan failed.' : 'Container scan cancelled.',
-    ].join('\n');
+    const status = report.exitCode === 1 ? 'Container scan failed.' : 'Container scan cancelled.';
+    return [...lines, status].join('\n');
   }
   if (report.issues.length === 0) {
     const empty = isPartialScan(report, stderr)
@@ -344,34 +383,16 @@ export function formatContainerScanTable(report: ContainerScanReport, stderr = '
       cvssScore ? Math.max(width, MIN_CVSS_SCORE_WIDTH, cvssScore.length) : width,
     0,
   );
-  const thresholdRank =
-    report.configuration.failOn === 'none'
-      ? undefined
-      : FINDING_SEVERITY_RANK[report.configuration.failOn];
-
-  let highest: ContainerFindingSeverity = normalized[0].severity;
-  let reachedThreshold = 0;
-  for (const finding of normalized) {
-    if (finding.rank > FINDING_SEVERITY_RANK[highest]) highest = finding.severity;
-    if (thresholdRank !== undefined && finding.rank >= thresholdRank) reachedThreshold++;
-  }
+  const { highest, reachedThreshold } = summarizeFindings(normalized, report.configuration.failOn);
 
   for (const group of groups) {
-    lines.push(
-      `── ${group.label} (${group.findings.length} ${pluralize(group.findings.length, 'finding')}) ──`,
-    );
-    for (const finding of group.findings) {
-      lines.push(formatFindingRow(finding, cvssScoreWidth));
-    }
-    lines.push('');
+    lines.push(...formatPackageGroup(group, cvssScoreWidth));
   }
 
   lines.push(
     `Summary: ${report.issues.length} ${pluralize(report.issues.length, 'finding')} in ${groups.length} affected ${pluralize(groups.length, 'package')}`,
     `Highest severity: ${highest.toUpperCase()}`,
-    report.configuration.failOn === 'none'
-      ? 'Fail threshold: disabled'
-      : `Fail threshold: ${report.configuration.failOn.toUpperCase()} · ${reachedThreshold} ${pluralize(reachedThreshold, 'finding')} reached the threshold`,
+    formatThresholdLine(report.configuration.failOn, reachedThreshold),
   );
   return lines.join('\n');
 }
