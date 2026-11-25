@@ -1,0 +1,123 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`stats rendering helpers preserves the 7d summary card 1`] = `
+[
+  {
+    "args": [
+      [
+        "◆ sonar stats · since 2026-01-01",
+        "                last 7 days · one column per day            all time",
+        "",
+        "Analyses run      3  ▄▇                                        1,234",
+        "Issues caught     6  ▄▇                                        5,678",
+        "Secrets blocked   1  ▁▇                                            9",
+        "Dependency risks  2  ▁▇                                           10",
+      ],
+      undefined,
+    ],
+    "method": "note",
+  },
+]
+`;
+
+exports[`stats rendering helpers preserves the 14d summary card 1`] = `
+[
+  {
+    "args": [
+      [
+        "◆ sonar stats · since 2026-01-01",
+        "                last 14 days · one column per day            all time",
+        "",
+        "Analyses run      3  ▄▇                                         1,234",
+        "Issues caught     6  ▄▇                                         5,678",
+        "Secrets blocked   1  ▁▇                                             9",
+        "Dependency risks  2  ▁▇                                            10",
+      ],
+      undefined,
+    ],
+    "method": "note",
+  },
+]
+`;
+
+exports[`stats rendering helpers preserves the 30d summary card 1`] = `
+[
+  {
+    "args": [
+      [
+        "◆ sonar stats · since 2026-01-01",
+        "                last 30 days · one column per day            all time",
+        "",
+        "Analyses run      3  ▄▇                                         1,234",
+        "Issues caught     6  ▄▇                                         5,678",
+        "Secrets blocked   1  ▁▇                                             9",
+        "Dependency risks  2  ▁▇                                            10",
+      ],
+      undefined,
+    ],
+    "method": "note",
+  },
+]
+`;
+
+exports[`stats rendering helpers preserves the all summary card 1`] = `
+[
+  {
+    "args": [
+      [
+        "◆ sonar stats · since 2026-01-01",
+        "                one column per day",
+        "",
+        "Analyses run      3  ▄▇",
+        "Issues caught     6  ▄▇",
+        "Secrets blocked   9  ▁▇",
+        "Dependency risks  2  ▁▇",
+      ],
+      undefined,
+    ],
+    "method": "note",
+  },
+]
+`;
+
+exports[`stats rendering helpers keeps unavailable-service placeholders and the learn-more line 1`] = `
+[
+  {
+    "args": [
+      [
+        "◆ sonar stats · since 2026-01-01",
+        "                last 30 days · one column per day            all time",
+        "",
+        "Analyses run      3  ▄▇                                         1,234",
+        "Issues caught     6  ▄▇                                         5,678",
+        "Secrets blocked   1  ▁▇                                             9",
+        "vortex analysis   -  not available on this plan",
+        "  → Learn more: https://www.sonarsource.com/products/sonar-vortex",
+        "dependency risks  -  not enabled for this organization",
+      ],
+      undefined,
+    ],
+    "method": "note",
+  },
+]
+`;
+
+exports[`stats rendering helpers sums long daily series into at most thirty columns 1`] = `
+[
+  {
+    "args": [
+      [
+        "◆ sonar stats · since 2026-01-01",
+        "                one column per 2 days",
+        "",
+        "Analyses run      3  ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▄",
+        "Issues caught     6  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
+        "Secrets blocked   9  ▇",
+        "Dependency risks  2  ▇",
+      ],
+      undefined,
+    ],
+    "method": "note",
+  },
+]
+`;
