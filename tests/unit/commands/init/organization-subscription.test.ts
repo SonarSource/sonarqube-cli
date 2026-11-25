@@ -20,7 +20,7 @@
 
 import { describe, expect, it, mock } from 'bun:test';
 
-import { ensureFreeSubscription } from '@/commands/init/steps/organization.ts';
+import { ensureFreeSubscription } from '@/commands/auth/organization.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
 import {
   AccessDeniedError,
