@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { PopulatedStatsViewModel } from '@/commands/stats/view-model/index.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
 
@@ -61,19 +62,12 @@ describe('sonar stats', () => {
   );
 
   it(
-    '--json on an empty ledger reports zero totals and no entitlement lookup',
+    '--json reports no history without requiring entitlement lookup',
     async () => {
       const result = await harness.run('stats --json');
 
       expect(result.exitCode).toBe(0);
-      const json = JSON.parse(result.stdout) as {
-        totalRuns: number;
-        totalFindings: number;
-        entitlement: unknown;
-      };
-      expect(json.totalRuns).toBe(0);
-      expect(json.totalFindings).toBe(0);
-      expect(json.entitlement).toBeNull();
+      expect(JSON.parse(result.stdout)).toEqual({ hasHistory: false });
     },
     { timeout: 15000 },
   );
@@ -113,14 +107,30 @@ describe('sonar stats', () => {
       const result = await harness.run('stats --json');
 
       expect(result.exitCode).toBe(0);
-      const json = JSON.parse(result.stdout) as {
-        totalRuns: number;
-        allTime: { totalRuns: number; secretsBlockedTotal: number };
-        analyzers: Array<{ analyzer: string; runs: number; findings: number }>;
-      };
-      expect(json.totalRuns).toBe(1);
-      expect(json.allTime.totalRuns).toBe(1);
-      expect(json.analyzers).toEqual([{ analyzer: 'sonar-secrets', runs: 1, findings: 1 }]);
+      const json = JSON.parse(result.stdout) as PopulatedStatsViewModel;
+      expect(json.hasHistory).toBe(true);
+      expect(json.card.metrics.find((row) => row.metric === 'runs')).toMatchObject({
+        windowValue: 1,
+        allTimeValue: 1,
+      });
+      expect(json.analyzers).toEqual({ total: 1, rows: [{ analyzer: 'sonar-secrets', runs: 1 }] });
+      expect(Object.keys(json).sort()).toEqual(
+        [
+          'hasHistory',
+          'window',
+          'entitlement',
+          'card',
+          'analyzers',
+          'stopped',
+          'agents',
+          'callerCommands',
+          'topRules',
+          'triggers',
+        ].sort(),
+      );
+      expect(Object.keys(json.card).sort()).toEqual(
+        ['startedAtMs', 'bucketDays', 'columnCount', 'metrics', 'unavailable'].sort(),
+      );
     },
     { timeout: 30000 },
   );
@@ -138,12 +148,12 @@ describe('sonar stats', () => {
       const result = await harness.run('stats --since all --json');
 
       expect(result.exitCode).toBe(0);
-      const json = JSON.parse(result.stdout) as {
-        totalRuns: number;
-        allTime: { totalRuns: number };
-      };
-      expect(json.totalRuns).toBe(1);
-      expect(json.allTime.totalRuns).toBe(1);
+      const json = JSON.parse(result.stdout) as PopulatedStatsViewModel;
+      expect(json.window).toEqual({ since: 'all' });
+      expect(json.card.metrics.find((row) => row.metric === 'runs')).toMatchObject({
+        windowValue: 1,
+        allTimeValue: 1,
+      });
     },
     { timeout: 30000 },
   );
@@ -165,13 +175,12 @@ describe('sonar stats', () => {
 
       const jsonResult = await harness.run('stats --json');
       expect(jsonResult.exitCode).toBe(0);
-      const json = JSON.parse(jsonResult.stdout) as {
-        totalRuns: number;
-        allTime: { totalRuns: number };
-        entitlement: unknown;
-      };
-      expect(json.totalRuns).toBe(0);
-      expect(json.allTime.totalRuns).toBe(1);
+      const json = JSON.parse(jsonResult.stdout) as PopulatedStatsViewModel;
+      expect(json.hasHistory).toBe(true);
+      expect(json.card.metrics.find((row) => row.metric === 'runs')).toMatchObject({
+        windowValue: 0,
+        allTimeValue: 1,
+      });
       expect(json.entitlement).not.toBeNull();
     },
     { timeout: 30000 },
@@ -267,6 +276,37 @@ describe('sonar stats', () => {
       expect(result.stdout).toContain('at commit');
       expect(result.stdout).toContain('secrets in staged files');
       expect(result.stdout).toMatch(/\d+ .+ token/i);
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    ['7d', 0],
+    ['14d', 1],
+    ['30d', 1],
+    ['all', 1],
+  ] as const)(
+    '--since %s filters reported runs while preserving all-time totals',
+    async (since, expectedRuns) => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cwd.writeFile('clean.js', 'const value = 1;');
+      const scan = await harness.run('analyze secrets clean.js');
+      expect(scan.exitCode).toBe(0);
+      backdateStatsEvents(harness.sonarUserHome.path, Date.now() - 10 * DAY_MS);
+      harness.clearAuth();
+
+      const result = await harness.run(`stats --since ${since} --json`);
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as PopulatedStatsViewModel;
+      expect(json.window).toEqual(
+        since === 'all' ? { since } : { since, days: Number(since.slice(0, -1)) },
+      );
+      expect(json.card.metrics.find((row) => row.metric === 'runs')).toMatchObject({
+        windowValue: expectedRuns,
+        allTimeValue: 1,
+      });
     },
     { timeout: 30000 },
   );

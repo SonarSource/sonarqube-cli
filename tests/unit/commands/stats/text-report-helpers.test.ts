@@ -26,6 +26,7 @@ import {
   printSummaryCard,
   sparkline,
 } from '@/commands/stats/text-report-helpers.ts';
+import { buildStatsViewModel } from '@/commands/stats/view-model/index.ts';
 import type { StatsSummary } from '@/core/stats/stats-queries.ts';
 import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 
@@ -72,7 +73,9 @@ describe('stats rendering helpers', () => {
   });
   it.each([-1, 0, 0.5, 1, 2])('clamps and rounds bar fraction %s', (fraction) => {
     const expected = fraction <= 0 ? [0, 18] : fraction >= 1 ? [18, 0] : [9, 9];
-    expect(bar(fraction)).toBe(softBlue('▓'.repeat(expected[0])) + dim('░'.repeat(expected[1])));
+    expect(bar(fraction * 100)).toBe(
+      softBlue('▓'.repeat(expected[0])) + dim('░'.repeat(expected[1])),
+    );
   });
   it('aligns totals to natural rows or extends them for a long heading', () => {
     expect(computeAlignedTotalsLayout('Runs', 1234, 15)).toEqual({
@@ -86,19 +89,18 @@ describe('stats rendering helpers', () => {
   });
   it.each(['7d', '14d', '30d', 'all'] as const)('preserves the %s summary card', (since) => {
     const console = new FakeConsole();
-    printSummaryCard(summary, since, { vortex: 'enabled', sca: 'enabled' }, console);
+    printSummaryCard(
+      buildStatsViewModel(summary, since, { vortex: 'enabled', sca: 'enabled' }),
+      console,
+    );
     expect(console.calls).toMatchSnapshot();
-  });
-  it.each(['30d', 'all'] as const)('renders %s without entitlement information', (since) => {
-    const console = new FakeConsole();
-    const availableConsole = new FakeConsole();
-    printSummaryCard(summary, since, { vortex: 'enabled', sca: 'enabled' }, availableConsole);
-    printSummaryCard(summary, since, null, console);
-    expect(console.calls).toEqual(availableConsole.calls);
   });
   it('keeps unavailable-service placeholders and the learn-more line', () => {
     const console = new FakeConsole();
-    printSummaryCard(summary, '30d', { vortex: 'not_entitled', sca: 'not_enabled' }, console);
+    printSummaryCard(
+      buildStatsViewModel(summary, '30d', { vortex: 'not_entitled', sca: 'not_enabled' }),
+      console,
+    );
     expect(console.calls).toMatchSnapshot();
   });
   it('sums long daily series into at most thirty columns', () => {
@@ -108,7 +110,10 @@ describe('stats rendering helpers', () => {
       runs: 1,
       findings: 0,
     }));
-    printSummaryCard({ ...summary, daily }, 'all', { vortex: 'enabled', sca: 'enabled' }, console);
+    printSummaryCard(
+      buildStatsViewModel({ ...summary, daily }, 'all', { vortex: 'enabled', sca: 'enabled' }),
+      console,
+    );
     expect(console.calls).toMatchSnapshot();
   });
 });

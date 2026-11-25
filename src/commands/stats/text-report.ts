@@ -18,18 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import type {
-  StatsSinceChoice,
-  StatsStoppedBreakdown,
-  StatsStopPoint,
-  StatsSummary,
-} from '@/core/stats/stats-queries.ts';
+import type { StatsStopPoint } from '@/core/stats/stats-queries.ts';
 import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
-import { resolveStatsEntitlement } from './entitlement.ts';
 import {
   bar,
   BAR_WIDTH,
@@ -37,21 +30,19 @@ import {
   computeAlignedTotalsLayout,
   printSummaryCard,
 } from './text-report-helpers.ts';
+import {
+  type PopulatedStatsViewModel,
+  type StatsViewModel,
+  UNIDENTIFIED_AGENT_LABEL,
+} from './view-model/index.ts';
 
-export async function renderTextSummary(
-  summary: StatsSummary,
-  since: StatsSinceChoice,
-  ctx: CommandInvocationContext,
-): Promise<void> {
-  const { console } = ctx;
-  if (summary.allTime.totalRuns === 0) {
+export function renderTextSummary(summary: StatsViewModel, console: Console): void {
+  if (!summary.hasHistory) {
     printEmptyState(console);
     return;
   }
 
-  const entitlement = await resolveStatsEntitlement(ctx);
-
-  printSummaryCard(summary, since, entitlement, console);
+  printSummaryCard(summary, console);
   printAnalyzerBreakdownSection(summary, console);
   printStoppedSection(summary, console);
   printAgentBreakdownSection(summary, console);
@@ -69,12 +60,7 @@ function printEmptyState(console: Console): void {
   console.print(`  ${dim('→ Install them:')} ${softBlue('sonar integrate')}`);
 }
 
-const PERCENT_MULTIPLIER = 100;
 const SHARE_PERCENT_WIDTH = 3;
-
-function percentOf(count: number, total: number): number {
-  return total > 0 ? Math.round((count / total) * PERCENT_MULTIPLIER) : 0;
-}
 
 const ANALYZER_DISPLAY_LABELS: Partial<Record<string, string>> = {
   'sonar-secrets': 'secrets',
@@ -86,11 +72,9 @@ function analyzerDisplayLabel(analyzer: string): string {
   return ANALYZER_DISPLAY_LABELS[analyzer] ?? analyzer;
 }
 
-function printAnalyzerBreakdownSection(summary: StatsSummary, console: Console): void {
-  if (summary.analyzers.length === 0) return;
-
-  const totalRuns = summary.analyzers.reduce((sum, a) => sum + a.runs, 0);
-  const sorted = [...summary.analyzers].sort((a, b) => b.runs - a.runs);
+function printAnalyzerBreakdownSection(summary: PopulatedStatsViewModel, console: Console): void {
+  if (!summary.analyzers) return;
+  const { total: totalRuns, rows: sorted } = summary.analyzers;
 
   const [labelWidth] = columnFormatting([[...sorted.map((a) => analyzerDisplayLabel(a.analyzer))]]);
   const [runsWidth] = columnFormatting([[...sorted.map((a) => String(a.runs))]]);
@@ -110,8 +94,6 @@ function printAnalyzerBreakdownSection(summary: StatsSummary, console: Console):
   }
 }
 
-const STOP_POINT_ORDER: readonly StatsStopPoint[] = ['commit', 'prompt', 'file-read', 'push'];
-
 const STOP_POINT_COPY: Record<StatsStopPoint, { label: string; detail: string }> = {
   commit: { label: 'at commit', detail: 'secrets in staged files' },
   prompt: { label: 'at a prompt', detail: 'secrets in prompt text' },
@@ -119,17 +101,9 @@ const STOP_POINT_COPY: Record<StatsStopPoint, { label: string; detail: string }>
   push: { label: 'at push', detail: 'secrets in unpushed commits' },
 };
 
-function orderStoppedEntries(entries: readonly StatsStoppedBreakdown[]): StatsStoppedBreakdown[] {
-  const byPoint = new Map(entries.map((entry) => [entry.point, entry]));
-  return STOP_POINT_ORDER.map((point) => byPoint.get(point)).filter(
-    (entry): entry is StatsStoppedBreakdown => entry !== undefined,
-  );
-}
-
-function printStoppedSection(summary: StatsSummary, console: Console): void {
-  if (summary.stopped.length === 0) return;
-  const ordered = orderStoppedEntries(summary.stopped);
-  const total = ordered.reduce((sum, entry) => sum + entry.count, 0);
+function printStoppedSection(summary: PopulatedStatsViewModel, console: Console): void {
+  if (!summary.stopped) return;
+  const { total, entries: ordered, topSecretTypes } = summary.stopped;
 
   console.blank();
   console.print(bold(`Secrets blocked · ${total} total`));
@@ -146,14 +120,13 @@ function printStoppedSection(summary: StatsSummary, console: Console): void {
     );
   }
 
-  if (summary.topSecretTypes.length > 0) {
-    const line = summary.topSecretTypes.map((t) => `${t.count} ${t.label}`).join(' · ');
+  if (topSecretTypes.length > 0) {
+    const line = topSecretTypes.map((t) => `${t.count} ${t.label}`).join(' · ');
     console.print(`    ${line}`);
   }
 }
 
 const SHARE_BAR_GAP = '  ';
-const UNIDENTIFIED_AGENT_LABEL = 'unidentified';
 const NO_AGENT_DISPLAY_LABEL = 'no agent';
 const NO_AGENT_EXPLANATION = 'no agent: run manually, via a script, or by an unrecognized agent';
 
@@ -161,17 +134,12 @@ function agentDisplayLabel(agent: string): string {
   return agent === UNIDENTIFIED_AGENT_LABEL ? NO_AGENT_DISPLAY_LABEL : agent;
 }
 
-function printAgentBreakdownSection(summary: StatsSummary, console: Console): void {
-  if (summary.agentBreakdown.length === 0) return;
+function printAgentBreakdownSection(summary: PopulatedStatsViewModel, console: Console): void {
+  if (!summary.agents) return;
+  const { total: totalFindings, rows, hitPercent, hasUnidentified } = summary.agents;
 
-  const totalFindings = summary.agentBreakdown.reduce((sum, agent) => sum + agent.findings, 0);
-
-  const [agentWidth] = columnFormatting([
-    [...summary.agentBreakdown.map((agent) => agentDisplayLabel(agent.agent))],
-  ]);
-  const [issuesWidth] = columnFormatting([
-    [...summary.agentBreakdown.map((agent) => String(agent.findings))],
-  ]);
+  const [agentWidth] = columnFormatting([[...rows.map((agent) => agentDisplayLabel(agent.agent))]]);
+  const [issuesWidth] = columnFormatting([[...rows.map((agent) => String(agent.findings))]]);
   const percentWidth = SHARE_PERCENT_WIDTH + 1;
   const naturalRowEndColumn =
     4 +
@@ -191,38 +159,29 @@ function printAgentBreakdownSection(summary: StatsSummary, console: Console): vo
   console.blank();
   console.print(headingLine);
 
-  for (const agent of summary.agentBreakdown) {
-    const share = percentOf(agent.findings, totalFindings);
+  for (const agent of rows) {
+    const share = agent.sharePercent;
     const percentCell = `${share}%`.padStart(percentWidth);
     console.print(
-      `    ${agentDisplayLabel(agent.agent).padEnd(agentWidth)}   ${bar(share / PERCENT_MULTIPLIER)}${SHARE_BAR_GAP}${percentCell}${rowGap}${String(agent.findings).padStart(issuesWidth)}`,
+      `    ${agentDisplayLabel(agent.agent).padEnd(agentWidth)}   ${bar(share)}${SHARE_BAR_GAP}${percentCell}${rowGap}${String(agent.findings).padStart(issuesWidth)}`,
     );
   }
 
-  if (summary.agentHitRate) {
-    const hitPercent = percentOf(
-      summary.agentHitRate.runsWithFindings,
-      summary.agentHitRate.totalRuns,
-    );
+  if (hitPercent !== null) {
     console.print(`    ${hitPercent}% of all runs surfaced an issue`);
   }
 
-  if (summary.agentBreakdown.some((agent) => agent.agent === UNIDENTIFIED_AGENT_LABEL)) {
+  if (hasUnidentified) {
     console.print(dim(`    ${NO_AGENT_EXPLANATION}`));
   }
 }
 
-function printCallerCommandSection(summary: StatsSummary, console: Console): void {
-  if (summary.callerCommandBreakdown.length === 0) return;
+function printCallerCommandSection(summary: PopulatedStatsViewModel, console: Console): void {
+  if (!summary.callerCommands) return;
+  const { total: totalRuns, rows } = summary.callerCommands;
 
-  const totalRuns = summary.callerCommandBreakdown.reduce((sum, c) => sum + c.runs, 0);
-
-  const [commandWidth] = columnFormatting([
-    [...summary.callerCommandBreakdown.map((c) => c.command)],
-  ]);
-  const [runsWidth] = columnFormatting([
-    [...summary.callerCommandBreakdown.map((c) => String(c.runs))],
-  ]);
+  const [commandWidth] = columnFormatting([[...rows.map((c) => c.command)]]);
+  const [runsWidth] = columnFormatting([[...rows.map((c) => String(c.runs))]]);
   const naturalRowEndColumn = 4 + commandWidth + BASE_COLUMN_GAP_WIDTH + runsWidth;
   const { headingLine, rowGap } = computeAlignedTotalsLayout(
     'Runs by command',
@@ -232,7 +191,7 @@ function printCallerCommandSection(summary: StatsSummary, console: Console): voi
 
   console.blank();
   console.print(headingLine);
-  for (const c of summary.callerCommandBreakdown) {
+  for (const c of rows) {
     console.print(
       `    ${c.command.padEnd(commandWidth)}${rowGap}${String(c.runs).padStart(runsWidth)}`,
     );
@@ -249,8 +208,8 @@ function wrapMessage(message: string): [string, string | null] {
   return [message.slice(0, MAX_MESSAGE_LINE_LENGTH), message.slice(MAX_MESSAGE_LINE_LENGTH)];
 }
 
-function printTopRulesSection(summary: StatsSummary, console: Console): void {
-  if (summary.topRules.length === 0) return;
+function printTopRulesSection(summary: PopulatedStatsViewModel, console: Console): void {
+  if (!summary.topRules) return;
   console.blank();
   console.print(bold('You keep hitting these issues'));
 
@@ -269,14 +228,10 @@ function printTopRulesSection(summary: StatsSummary, console: Console): void {
   });
 }
 
-function printTriggerLine(summary: StatsSummary, console: Console): void {
-  const hooksRuns = summary.triggers.find((t) => t.trigger === 'hooks')?.runs ?? 0;
-  const manualRuns = summary.triggers.find((t) => t.trigger === 'manual')?.runs ?? 0;
-  const total = hooksRuns + manualRuns;
-  if (total === 0) return;
-
+function printTriggerLine(summary: PopulatedStatsViewModel, console: Console): void {
+  if (!summary.triggers) return;
   console.blank();
   console.print(
-    `    ${percentOf(hooksRuns, total)}% ran from hooks  ·  ${percentOf(manualRuns, total)}% ran directly`,
+    `    ${summary.triggers.hooksPercent}% ran from hooks  ·  ${summary.triggers.manualPercent}% ran directly`,
   );
 }
