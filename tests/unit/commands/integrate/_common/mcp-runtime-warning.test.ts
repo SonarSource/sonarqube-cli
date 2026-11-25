@@ -65,6 +65,7 @@ it('warns only when the shared MCP check reports a startup or runtime problem', 
   const stateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
   const console = new FakeConsole();
   const status: mcpEndpoint.McpEndpointStatus = {
+    transportSelection: { mode: 'auto', source: 'default' },
     connectionMode: 'hosted',
     serverUrl: 'http://localhost:9000/mcp',
     fallbackReason: null,

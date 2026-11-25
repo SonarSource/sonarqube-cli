@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CliError } from '@/core/commands/command-error.ts';
+import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import {
   checkContainerRuntimeHealth,
@@ -31,8 +31,10 @@ import {
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { HostedMcpClient } from './hosted-mcp-client.ts';
+import { type McpTransportSelection, resolveMcpTransport } from './mcp-transport.ts';
 
 export interface McpEndpointStatus {
+  transportSelection: McpTransportSelection | null;
   connectionMode: 'hosted' | 'container' | null;
   serverUrl: string | null;
   fallbackReason: string | null;
@@ -44,6 +46,7 @@ export async function checkMcpEndpoint(
   connection: SonarConnection | null,
 ): Promise<McpEndpointStatus> {
   const status: McpEndpointStatus = {
+    transportSelection: null,
     connectionMode: null,
     serverUrl: null,
     fallbackReason: null,
@@ -51,20 +54,29 @@ export async function checkMcpEndpoint(
     containerRuntime: null,
   };
   try {
+    status.transportSelection = await resolveMcpTransport();
     if (!connection) {
       status.startupError = "Not authenticated. Run 'sonar auth login' to authenticate.";
       return status;
     }
     await getNetworkConfigOrThrow();
-    const hosted = new HostedMcpClient(connection);
-    const availability = await hosted.checkHealth();
-    if (availability.available) {
-      status.connectionMode = 'hosted';
-      status.serverUrl = hosted.url;
-      return status;
+    const transport = status.transportSelection.mode;
+    if (transport !== 'stdio') {
+      const hosted = new HostedMcpClient(connection);
+      const availability = await hosted.checkHealth();
+      if (availability.available) {
+        status.connectionMode = 'hosted';
+        status.serverUrl = hosted.url;
+        return status;
+      }
+      if (transport === 'http') {
+        throw new CommandFailedError(
+          `Hosted MCP unavailable — ${hosted.url}/health ${availability.reason}.`,
+        );
+      }
+      status.fallbackReason = `hosted MCP ${availability.reason}`;
     }
     status.connectionMode = 'container';
-    status.fallbackReason = `hosted MCP ${availability.reason}`;
     status.containerRuntime = await checkContainerRuntimeHealth();
     const detection =
       status.containerRuntime.status === 'not_found'
