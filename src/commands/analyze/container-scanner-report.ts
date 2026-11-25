@@ -29,8 +29,10 @@ import {
 } from './container-scanner-runner.ts';
 import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 
-interface ContainerScanFinding {
-  severity: ContainerScanSeverity;
+export type ContainerFindingSeverity = Exclude<ContainerScanSeverity, 'none'>;
+
+export interface ContainerScanFinding {
+  severity: ContainerFindingSeverity;
   packageName?: string | null;
   packageUrl?: string | null;
   version?: string | null;
@@ -39,12 +41,12 @@ interface ContainerScanFinding {
   cvssScore?: string | null;
 }
 
-interface ContainerScanError {
+export interface ContainerScanError {
   kind: string;
   message: string;
 }
 
-interface ContainerScanConfiguration {
+export interface ContainerScanConfiguration {
   imageInput: string;
   failOn: ContainerScanSeverity;
   timeoutSecs: number;
@@ -53,10 +55,8 @@ interface ContainerScanConfiguration {
   tag?: string | null;
 }
 
-const EXIT_CODE_THRESHOLD_REACHED = 51;
-const EXIT_CODE_BY_SCANNER_STATUS = { 0: 0, 1: EXIT_CODE_THRESHOLD_REACHED, 2: 1 } as const;
-type ContainerScanExitCode =
-  (typeof EXIT_CODE_BY_SCANNER_STATUS)[keyof typeof EXIT_CODE_BY_SCANNER_STATUS];
+export const EXIT_CODE_CONTAINER_THRESHOLD_REACHED = 51;
+export type ContainerScanExitCode = 0 | 1 | typeof EXIT_CODE_CONTAINER_THRESHOLD_REACHED;
 
 export interface ContainerScanReport {
   issues: ContainerScanFinding[];
@@ -64,6 +64,26 @@ export interface ContainerScanReport {
   configuration: ContainerScanConfiguration;
   exitCode: ContainerScanExitCode;
 }
+
+const EXIT_CODE_BY_SCANNER_STATUS = new Map<number, ContainerScanExitCode>([
+  [0, 0],
+  [1, EXIT_CODE_CONTAINER_THRESHOLD_REACHED],
+  [2, 1],
+]);
+
+const FINDING_SEVERITY_RANK: Record<ContainerFindingSeverity, number> = {
+  info: 1,
+  low: 2,
+  medium: 3,
+  high: 4,
+  blocker: 5,
+};
+
+const SCAN_SEVERITIES: ReadonlySet<string> = new Set(CONTAINER_SCAN_SEVERITIES);
+const SKIPPED_PACKAGES_WARNING_PATTERN =
+  /^WARNING: the backend skipped [1-9]\d* package\(s\)(?::|\r?$)/m;
+const SEVERITY_WIDTH = 'BLOCKER'.length;
+const MIN_CVSS_SCORE_WIDTH = 'X.Y'.length;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -74,15 +94,17 @@ function isOptionalText(value: unknown): boolean {
 }
 
 function isSeverity(value: unknown): value is ContainerScanSeverity {
-  return (
-    typeof value === 'string' && (CONTAINER_SCAN_SEVERITIES as readonly string[]).includes(value)
-  );
+  return typeof value === 'string' && SCAN_SEVERITIES.has(value);
+}
+
+function isFindingSeverity(value: unknown): value is ContainerFindingSeverity {
+  return typeof value === 'string' && Object.hasOwn(FINDING_SEVERITY_RANK, value);
 }
 
 function isFinding(value: unknown): value is ContainerScanFinding {
   return (
     isObject(value) &&
-    isSeverity(value.severity) &&
+    isFindingSeverity(value.severity) &&
     ['packageName', 'packageUrl', 'version', 'vulnerabilityId', 'key', 'cvssScore'].every((field) =>
       isOptionalText(value[field]),
     )
@@ -105,9 +127,15 @@ function isConfiguration(value: unknown): value is ContainerScanConfiguration {
   );
 }
 
+function mapScannerExitCode(exitCode: number | null): ContainerScanExitCode | undefined {
+  if (exitCode === null) return undefined;
+  return EXIT_CODE_BY_SCANNER_STATUS.get(exitCode);
+}
+
 export function parseContainerScanReport(result: SpawnResult): ContainerScanReport | undefined {
   const { exitCode } = result;
-  if (exitCode !== 0 && exitCode !== 1 && exitCode !== 2) return;
+  const publicExitCode = mapScannerExitCode(exitCode);
+  if (publicExitCode === undefined) return;
 
   let report: unknown;
   try {
@@ -128,12 +156,16 @@ export function parseContainerScanReport(result: SpawnResult): ContainerScanRepo
     return;
   }
 
+  if (exitCode === 1 && (report.issues.length === 0 || report.configuration.failOn === 'none')) {
+    return;
+  }
+
   return {
     ...report,
     issues: report.issues,
     errors: report.errors,
     configuration: report.configuration,
-    exitCode: EXIT_CODE_BY_SCANNER_STATUS[exitCode],
+    exitCode: publicExitCode,
   };
 }
 
@@ -162,21 +194,19 @@ export function countContainerAnalysisErrors(report: ContainerScanReport): numbe
   return report.errors.filter(({ kind }) => kind === 'backendAnalysis').length;
 }
 
+export function hasSkippedPackagesWarning(stderr: string): boolean {
+  return SKIPPED_PACKAGES_WARNING_PATTERN.test(sanitizeScannerTerminalText(stderr));
+}
+
 function isPartialScan(report: ContainerScanReport, stderr: string): boolean {
-  return (
-    countContainerAnalysisErrors(report) > 0 ||
-    /^WARNING: the backend skipped [1-9]\d* package\(s\)(?::|\r?$)/m.test(stderr)
-  );
+  return countContainerAnalysisErrors(report) > 0 || hasSkippedPackagesWarning(stderr);
 }
 
 export function formatContainerScanJson(report: ContainerScanReport): string {
   // JSON.stringify escapes C0 controls. Escape additional terminal and bidi controls as valid JSON.
   return JSON.stringify(report, null, 2).replaceAll(
     /[\u007F-\u009F\p{Bidi_Control}]/gu,
-    (character) => {
-      const codePoint = character.codePointAt(0) ?? 0;
-      return String.raw`\u${codePoint.toString(16).padStart(4, '0')}`;
-    },
+    (character) => String.raw`\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
   );
 }
 
@@ -192,36 +222,104 @@ function scanTableCell(text: string): string {
   return sanitizeScannerTerminalText(text).replaceAll('\n', ' ');
 }
 
-function severityRank(severity: ContainerScanSeverity): number {
-  return CONTAINER_SCAN_SEVERITIES.indexOf(severity);
+function cleanCell(text: string | null | undefined): string | undefined {
+  if (!text) return undefined;
+  const cleaned = scanTableCell(text).trim();
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
-function packageLabel({ packageName, packageUrl, version }: ContainerScanFinding): string {
-  if (packageName && version) return `${scanTableCell(packageName)}@${scanTableCell(version)}`;
-  return scanTableCell(packageUrl || packageName || 'Unknown package');
+interface NormalizedFinding {
+  severity: ContainerFindingSeverity;
+  rank: number;
+  cvssScore?: string;
+  identifier: string;
+  groupKey: string;
+  label: string;
+  hasNameAndVersion: boolean;
 }
 
-function formatFinding(finding: ContainerScanFinding): string {
-  const severity = finding.severity.toUpperCase().padEnd(8);
-  const cvss = finding.cvssScore ? `CVSS ${scanTableCell(finding.cvssScore)}  ` : '';
-  const identifier = scanTableCell(finding.vulnerabilityId || finding.key || 'Unknown finding');
-  return `  ${severity}  ${cvss}${identifier}`;
+interface PackageGroup {
+  key: string;
+  label: string;
+  hasNameAndVersion: boolean;
+  highestRank: number;
+  findings: NormalizedFinding[];
 }
 
-function groupFindingsByPackage(
-  findings: ContainerScanFinding[],
-): Map<string, ContainerScanFinding[]> {
-  const affectedPackages = new Map<string, ContainerScanFinding[]>();
-  for (const finding of findings) {
-    const key = finding.packageUrl || JSON.stringify([finding.packageName, finding.version]);
-    const group = affectedPackages.get(key);
-    if (group) group.push(finding);
-    else affectedPackages.set(key, [finding]);
+function normalizeFinding(finding: ContainerScanFinding): NormalizedFinding {
+  const packageUrl = cleanCell(finding.packageUrl);
+  const packageName = cleanCell(finding.packageName);
+  const version = cleanCell(finding.version);
+  const hasNameAndVersion = Boolean(packageName && version);
+  const label = hasNameAndVersion
+    ? `${packageName}@${version}`
+    : (packageUrl ?? packageName ?? 'Unknown package');
+  const groupKey = packageUrl
+    ? `purl:${packageUrl}`
+    : packageName
+      ? `pkg:${JSON.stringify([packageName, version ?? null])}`
+      : 'unknown';
+  const rawCvss = cleanCell(finding.cvssScore);
+  const cvssScore = rawCvss === '10.0' ? '10' : rawCvss;
+  const identifier =
+    cleanCell(finding.vulnerabilityId) ?? cleanCell(finding.key) ?? 'Unknown finding';
+
+  return {
+    severity: finding.severity,
+    rank: FINDING_SEVERITY_RANK[finding.severity],
+    cvssScore,
+    identifier,
+    groupKey,
+    label,
+    hasNameAndVersion,
+  };
+}
+
+function formatFindingRow(finding: NormalizedFinding, cvssScoreWidth: number): string {
+  const severity = finding.severity.toUpperCase().padEnd(SEVERITY_WIDTH);
+  let cvss = '';
+  if (cvssScoreWidth > 0) {
+    cvss = finding.cvssScore
+      ? `CVSS ${finding.cvssScore.padStart(cvssScoreWidth)}  `
+      : `${' '.repeat('CVSS '.length + cvssScoreWidth)}  `;
   }
-  return affectedPackages;
+  return `  ${severity}  ${cvss}${finding.identifier}`;
 }
 
-export function formatContainerScanTable(report: ContainerScanReport, stderr: string): string {
+function groupFindingsByPackage(findings: NormalizedFinding[]): PackageGroup[] {
+  const groupsByKey = new Map<string, PackageGroup>();
+  for (const finding of findings) {
+    const existing = groupsByKey.get(finding.groupKey);
+    if (existing) {
+      existing.findings.push(finding);
+      if (finding.rank > existing.highestRank) existing.highestRank = finding.rank;
+      if (!existing.hasNameAndVersion && finding.hasNameAndVersion) {
+        existing.label = finding.label;
+        existing.hasNameAndVersion = true;
+      }
+    } else {
+      groupsByKey.set(finding.groupKey, {
+        key: finding.groupKey,
+        label: finding.label,
+        hasNameAndVersion: finding.hasNameAndVersion,
+        highestRank: finding.rank,
+        findings: [finding],
+      });
+    }
+  }
+
+  const groups = [...groupsByKey.values()];
+  for (const group of groups) {
+    group.findings.sort((a, b) => b.rank - a.rank || a.identifier.localeCompare(b.identifier));
+  }
+  groups.sort(
+    (a, b) =>
+      b.highestRank - a.highestRank || a.label.localeCompare(b.label) || a.key.localeCompare(b.key),
+  );
+  return groups;
+}
+
+export function formatContainerScanTable(report: ContainerScanReport, stderr = ''): string {
   const lines = [`Image: ${scanTableCell(report.configuration.imageInput)}`, ''];
   if (report.exitCode === 1) return [...lines, 'Container scan failed.'].join('\n');
   if (report.issues.length === 0) {
@@ -231,27 +329,39 @@ export function formatContainerScanTable(report: ContainerScanReport, stderr: st
     return [...lines, empty].join('\n');
   }
 
-  const affectedPackages = groupFindingsByPackage(report.issues);
-  let highest = 0;
+  const normalized = report.issues.map(normalizeFinding);
+  const groups = groupFindingsByPackage(normalized);
+  const cvssScoreWidth = normalized.reduce(
+    (width, { cvssScore }) =>
+      cvssScore ? Math.max(width, MIN_CVSS_SCORE_WIDTH, cvssScore.length) : width,
+    0,
+  );
+  const thresholdRank =
+    report.configuration.failOn === 'none'
+      ? undefined
+      : FINDING_SEVERITY_RANK[report.configuration.failOn];
+
+  let highest: ContainerFindingSeverity = normalized[0].severity;
   let reachedThreshold = 0;
-  const threshold = severityRank(report.configuration.failOn);
-  for (const findings of affectedPackages.values()) {
-    const title = packageLabel(findings[0]);
-    lines.push(`── ${title} (${findings.length} ${pluralize(findings.length, 'finding')}) ──`);
-    findings.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
-    for (const finding of findings) {
-      const rank = severityRank(finding.severity);
-      highest = Math.max(highest, rank);
-      if (threshold > 0 && rank >= threshold) reachedThreshold++;
-      lines.push(formatFinding(finding));
+  for (const finding of normalized) {
+    if (finding.rank > FINDING_SEVERITY_RANK[highest]) highest = finding.severity;
+    if (thresholdRank !== undefined && finding.rank >= thresholdRank) reachedThreshold++;
+  }
+
+  for (const group of groups) {
+    lines.push(
+      `── ${group.label} (${group.findings.length} ${pluralize(group.findings.length, 'finding')}) ──`,
+    );
+    for (const finding of group.findings) {
+      lines.push(formatFindingRow(finding, cvssScoreWidth));
     }
     lines.push('');
   }
-  const packages = affectedPackages.size;
+
   lines.push(
-    `Summary: ${report.issues.length} ${pluralize(report.issues.length, 'finding')} in ${packages} affected ${pluralize(packages, 'package')}`,
-    `Highest severity: ${CONTAINER_SCAN_SEVERITIES[highest].toUpperCase()}`,
-    threshold === 0
+    `Summary: ${report.issues.length} ${pluralize(report.issues.length, 'finding')} in ${groups.length} affected ${pluralize(groups.length, 'package')}`,
+    `Highest severity: ${highest.toUpperCase()}`,
+    report.configuration.failOn === 'none'
       ? 'Fail threshold: disabled'
       : `Fail threshold: ${report.configuration.failOn.toUpperCase()} · ${reachedThreshold} ${pluralize(reachedThreshold, 'finding')} reached the threshold`,
   );
