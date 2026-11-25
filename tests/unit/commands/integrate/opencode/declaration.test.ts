@@ -147,6 +147,6 @@ describe('openCodeIntegration', () => {
     expect(sqaaHook.resources).toHaveLength(1);
     expect(contextAugmentation.dependencies).toHaveLength(1);
     expect(contextAugmentation.resources).toHaveLength(2);
-    expect(contextAugmentation.operations).toHaveLength(1);
+    expect(contextAugmentation.operations).toBeUndefined();
   });
 });
