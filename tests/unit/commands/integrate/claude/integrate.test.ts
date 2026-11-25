@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
+import * as agentInstallLock from '@/commands/integrate/_common/agent-install-lock.ts';
 import type { VortexDisposition } from '@/commands/integrate/_common/types.ts';
 import { integrateClaude } from '@/commands/integrate/claude';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -55,6 +56,16 @@ const CLOUD_AUTH = new ResolvedAuth({
 let fake: FakeConsole;
 let SERVER_CTX: CommandAuthenticatedInvocationContext;
 let CLOUD_CTX: CommandAuthenticatedInvocationContext;
+
+let lockSpy: ReturnType<typeof spyOn>;
+beforeEach(() => {
+  lockSpy = spyOn(agentInstallLock, 'withAgentInstallLock').mockImplementation((install) =>
+    Promise.resolve(install()),
+  );
+});
+afterEach(() => {
+  lockSpy.mockRestore();
+});
 
 describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;

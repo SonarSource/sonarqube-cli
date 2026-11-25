@@ -22,6 +22,7 @@ import { homedir } from 'node:os';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
+import * as agentInstallLock from '@/commands/integrate/_common/agent-install-lock.ts';
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateOpenCode } from '@/commands/integrate/opencode';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -45,6 +46,16 @@ let fake: FakeConsole;
 beforeEach(() => {
   fake = new FakeConsole();
   SERVER_CTX = new CommandAuthenticatedInvocationContext(SERVER_AUTH, fake);
+});
+
+let lockSpy: ReturnType<typeof spyOn>;
+beforeEach(() => {
+  lockSpy = spyOn(agentInstallLock, 'withAgentInstallLock').mockImplementation((install) =>
+    Promise.resolve(install()),
+  );
+});
+afterEach(() => {
+  lockSpy.mockRestore();
 });
 
 describe('integrateOpenCode', () => {

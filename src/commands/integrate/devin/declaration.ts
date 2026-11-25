@@ -33,6 +33,7 @@ import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/featu
 import { isDevinAgentEnv } from '@/core/host/environment/agent-detector.ts';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import {
   createCompletionAnalysisHookSubfeature,
   STOP_SCRIPT_REL,
@@ -302,6 +303,7 @@ export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> =
   id: DEVIN_INTEGRATION_ID,
   displayName: DEVIN_DISPLAY_NAME,
   features: [
+    createAgentOnboardingFeature('devin'),
     createSecretsDetectionFeature<DevinIntegrationOptions>({
       resources: createDevinSecretsDetectionResources(),
       replacedIds: ['secrets-instructions'],

@@ -42,6 +42,7 @@ import {
   wholeFileRemover,
 } from '@/core/framework/features';
 
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import {
@@ -94,6 +95,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   id: ANTIGRAVITY_INTEGRATION_ID,
   displayName: ANTIGRAVITY_DISPLAY_NAME,
   features: [
+    createAgentOnboardingFeature('antigravity'),
     createSecretsDetectionFeature<AntigravityIntegrationOptions>({
       resources: createAntigravitySecretsDetectionResources(),
       previewDescription:

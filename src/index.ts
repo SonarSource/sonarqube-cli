@@ -53,7 +53,11 @@ if (argvRequestsFormattedOutput()) {
 
 const tree = createCommandTree({ console });
 
-await tree.runtime.flagsResolver.resolveFlags();
+// The onboarding hook reads local state and never needs feature flags or a connection.
+const [, , command, subcommand] = process.argv;
+if (command !== 'hook' || subcommand !== 'agent-onboarding') {
+  await tree.runtime.flagsResolver.resolveFlags();
+}
 tree.refreshStagedVisibility();
 
 await tree.parseAsync(process.argv);
