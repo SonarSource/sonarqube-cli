@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { renderHomePage } from './home-page.ts';
 
 const SCHEMA_VERSION = 2;
 const MAX_RECENT_RUNS = 10;
@@ -30,7 +31,14 @@ interface RunFile {
     attempts: number;
     isReference: boolean;
   };
-  trials: { id: string; status: string }[];
+  trials: {
+    id: string;
+    task: string;
+    status: string;
+    agentSeconds: number | null;
+    stepCount: number | null;
+    tokens: number | null;
+  }[];
 }
 
 interface Index {
@@ -101,38 +109,16 @@ function rotate(previous: Index, run: RunFile['run']): Index {
   };
 }
 
-function escapeHtml(value: string): string {
-  const entities: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  };
-  return value.replace(/[&<>"']/g, (character) => entities[character]);
-}
-
-function runItem(file: RunFile, href: string): string {
-  const { run, trials } = file;
-  const passed = trials.filter((trial) => trial.status === 'PASS').length;
-  return `<li><a href="${escapeHtml(href)}">${escapeHtml(run.date)} - CLI ${escapeHtml(run.cliVersion)} - run ${escapeHtml(run.runId)}</a>: ${passed} of ${trials.length} trials passed</li>`;
-}
-
-function runSection(title: string, items: string[]): string {
-  return items.length === 0 ? '' : `<h2>${title}</h2><ul>${items.join('')}</ul>`;
-}
-
 function renderPage(outDir: string, index: Index): string {
-  const full = (id: string) =>
-    runItem(loadRun(join(outDir, 'runs', id, 'run.json')), `runs/${id}/run.json`);
-  const former = (id: string) =>
-    runItem(loadRun(join(outDir, 'references', `${id}.json`)), `references/${id}.json`);
-  const sections = [
-    runSection('Reference run', index.reference ? [full(index.reference)] : []),
-    runSection('Latest runs', index.recent.map(full)),
-    runSection('Former references', index.formerReferences.map(former)),
-  ].join('');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Harbor benchmark</title></head><body><h1>Harbor benchmark</h1>${sections}</body></html>\n`;
+  const full = (id: string) => loadRun(join(outDir, 'runs', id, 'run.json'));
+  return renderHomePage({
+    reference: index.reference ? full(index.reference) : null,
+    recent: index.recent.map(full),
+    former: index.formerReferences.map((id) => ({
+      runId: id,
+      version: loadRun(join(outDir, 'references', `${id}.json`)).run.cliVersion,
+    })),
+  });
 }
 
 function redactTrials(trialsDir: string): void {
