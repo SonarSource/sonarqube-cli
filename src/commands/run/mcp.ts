@@ -93,6 +93,7 @@ export async function runMcp(
     const message = startupError.remediationHint
       ? `${startupError.message} ${startupError.remediationHint}`
       : startupError.message;
+    process.stderr.write(`[sonarqube-cli] MCP startup failed: ${message}\n`);
     await respondToInitializeWithError(message, startupError.exitCode);
   } finally {
     if (resolvedNetwork?.clientCert?.format === 'pem') {
@@ -172,6 +173,11 @@ async function runMcpContainer(
   if (!detection.runtime) throw runtimeDetectionError(detection);
   const settings = await readMcpContainerSettings();
   const container = resolveMcpContainerNetworking(auth, detection, settings);
+  if (options.transport === 'stdio') {
+    process.stderr.write(
+      `[sonarqube-cli] MCP: local container via ${detection.runtime} — ${container.serverUrl} (forced by --transport stdio)\n`,
+    );
+  }
   const config = resolveMcpContainerCommand(
     auth,
     detection,
