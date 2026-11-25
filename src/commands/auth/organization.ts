@@ -20,11 +20,7 @@
 
 import { randomBytes } from 'node:crypto';
 
-import type {
-  OnCreateOrganization,
-  OnNoMemberships,
-} from '@/commands/components/organization/select.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError, CommandFailedError } from '@/core/commands/command-error.ts';
 import { trimChars } from '@/core/io/strings.ts';
 import logger from '@/core/observability/logger.ts';
 import { errAsync, okAsync, type Result } from '@/core/result.ts';
@@ -45,9 +41,19 @@ import type {
 } from '@/core/server/organizations.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { requireAnswer } from '../answer.ts';
-import { validateProjectName } from '../options.ts';
-import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
+/** Optional progress reporting for callers that include login in a larger workflow. */
+export interface OrganizationSetupProgress {
+  has(step: 'login' | 'create_org'): boolean;
+  begin(step: 'login' | 'create_org'): void;
+  record(step: 'login' | 'create_org', outcome: 'success' | 'declined' | 'failed'): void;
+}
+
+function requireAnswer<T>(answer: T | null): T {
+  if (answer === null) {
+    throw new CancelledByUserError('Organization creation cancelled.');
+  }
+  return answer;
+}
 
 const MAX_KEY_LENGTH = 40;
 const MIN_KEY_LENGTH = 3;
@@ -64,11 +70,11 @@ const INTEGRATE_FALLBACK =
   "Or run 'sonar integrate' to set up your coding agents without an organization.";
 
 /**
- * Thrown from the no-membership hook when the user declines to create an organization. It is not
+ * Thrown when an account without memberships declines organization creation. It is not
  * a failure: `init` turns it into an outcome that ends the run and exits 0. Every
  * other way the creation can stop is a `CommandFailedError`, so scripts see a non-zero exit.
  */
-export class OrganizationCreationDeclined extends Error {
+export class OrganizationCreationDeclined extends CommandFailedError {
   constructor() {
     super('Organization creation declined');
     this.name = 'OrganizationCreationDeclined';
@@ -76,11 +82,11 @@ export class OrganizationCreationDeclined extends Error {
 }
 
 /** The account may not create organizations (403/404 from the create call). */
-class OrganizationCreationUnavailableError extends CommandFailedError {
+export class OrganizationCreationUnavailableError extends CommandFailedError {
   constructor(cause: Error) {
     super('Organization creation is not available for this account.', {
       cause,
-      remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
+      remediationHint: `Ask an administrator to add you to an organization, then sign in again. ${INTEGRATE_FALLBACK}`,
     });
     this.name = 'OrganizationCreationUnavailableError';
   }
@@ -117,7 +123,13 @@ async function askOrganizationName(console: Console): Promise<string> {
       await console.textPrompt('Organization name (for example your team or company)'),
     );
     try {
-      return validateProjectName(answer, 'Organization name');
+      const name = answer.trim();
+      if (!name || name.length > 255 || /[\u0000-\u001f\u007f]/.test(name)) {
+        throw new CommandFailedError(
+          'Organization name must be non-empty, at most 255 characters, and free of control characters.',
+        );
+      }
+      return name;
     } catch (error) {
       console.warn(error instanceof Error ? error.message : String(error));
     }
@@ -241,7 +253,7 @@ function subscriptionFailed(organizationKey: string, reason: string): CommandFai
   return new CommandFailedError(
     `Organization '${organizationKey}' was created, but its Free subscription could not be set up: ${reason}`,
     {
-      remediationHint: `Choose a plan for '${organizationKey}' in the SonarQube Cloud web UI, then run 'sonar init' again.`,
+      remediationHint: `Choose a plan for '${organizationKey}' in the SonarQube Cloud web UI, then sign in again.`,
     },
   );
 }
@@ -359,83 +371,47 @@ function billingUrl(baseUrl: string, organizationKey: string): string {
   return `${baseUrl}/organizations/${encodeURIComponent(organizationKey)}/billing`;
 }
 
-/**
- * The `authLogin` hook for an account with no organization: asks, creates the organization and
- * subscribes it to the Free plan, and returns its key so the login can save the connection.
- *
- * It never creates anything unasked, and only runs interactively (`resolveInitAuth` rejects a run
- * that cannot prompt before the login). A decline throws `OrganizationCreationDeclined`. Anything
- * it throws ends the login, which revokes the token the login just minted.
- */
-export function createOrganizationHook(
-  console: Console,
-  telemetry?: InitTelemetryRecorder,
-): OnNoMemberships {
-  return async (client) => {
-    // The sign-in itself succeeded: the account only lacks an organization.
-    if (telemetry && !telemetry.has('login')) {
-      telemetry.record('login', 'success');
-    }
-    telemetry?.begin('create_org');
-    console.info("You're not in a SonarQube Cloud organization yet.");
-    console.print(
-      "An organization holds your projects and the people you work with. Most teams have one, and it's free.",
-    );
-    const accepted = requireAnswer(
-      await console.confirmPrompt('Create an organization now?', true),
-    );
-    if (!accepted) {
-      telemetry?.record('create_org', 'declined');
-      throw new OrganizationCreationDeclined();
-    }
-    return createFreeOrganization(client, console, telemetry);
-  };
-}
-
-/**
- * The `authLogin` hook behind "Create a new organization" in the selection list, for an account
- * that already has organizations. Picking the option is the explicit choice, so it asks only for a
- * name. When the account may not create one, it warns and returns `undefined`, which brings the
- * list back; any other failure ends the login like the no-membership hook.
- */
-export function createAdditionalOrganizationHook(
-  console: Console,
-  telemetry?: InitTelemetryRecorder,
-): OnCreateOrganization {
-  return async (client) => {
-    if (telemetry && !telemetry.has('login')) {
-      telemetry.record('login', 'success');
-    }
-    telemetry?.begin('create_org');
-    try {
-      return await createFreeOrganization(client, console, telemetry);
-    } catch (error) {
-      if (!(error instanceof OrganizationCreationUnavailableError)) {
-        throw error;
-      }
-      telemetry?.record('create_org', 'failed');
-      logger.debug(`Falling back to the organization list: ${error.message}`);
-      console.warn(`${error.message} Choose one of your organizations instead.`);
-      return undefined;
-    }
-  };
-}
-
-/** Asks for a name, creates the organization, subscribes it to Free, and returns its key. */
-async function createFreeOrganization(
+/** Creates a Free organization using the token whose login is still in progress. */
+export async function createFreeOrganization(
   client: OrganizationsClient,
   console: Console,
-  telemetry?: InitTelemetryRecorder,
+  progress?: OrganizationSetupProgress,
 ): Promise<string> {
+  if (progress && !progress.has('login')) {
+    progress.record('login', 'success');
+  }
+  progress?.begin('create_org');
   const name = await askOrganizationName(console);
   const organization = await console.withSpinner('Creating the organization', () =>
     createWithAvailableKey(client, name),
   );
   await ensureFreeSubscription(client, organization, console);
-  telemetry?.record('create_org', 'success');
+  progress?.record('create_org', 'success');
   console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
   console.info(
     `It's on the Free plan: up to 50,000 lines of private code, main branch only.\n     → What's included: ${billingUrl(client.baseUrl, organization.key)}`,
   );
   return organization.key;
+}
+
+/** With no memberships, declining creation leaves no organization to sign in to. */
+export async function offerFirstOrganization(
+  client: OrganizationsClient,
+  console: Console,
+  progress?: OrganizationSetupProgress,
+): Promise<string> {
+  if (progress && !progress.has('login')) {
+    progress.record('login', 'success');
+  }
+  progress?.begin('create_org');
+  console.info("You're not in a SonarQube Cloud organization yet.");
+  console.print(
+    "An organization holds your projects and the people you work with. Most teams have one, and it's free.",
+  );
+  const accepted = requireAnswer(await console.confirmPrompt('Create an organization now?', true));
+  if (!accepted) {
+    progress?.record('create_org', 'declined');
+    throw new OrganizationCreationDeclined();
+  }
+  return createFreeOrganization(client, console, progress);
 }

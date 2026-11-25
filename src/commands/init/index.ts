@@ -20,6 +20,7 @@
 
 import { resolve } from 'node:path';
 
+import { OrganizationCreationDeclined } from '@/commands/auth/organization.ts';
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
 import {
@@ -55,7 +56,6 @@ import { runLinkExisting } from './steps/link-existing.ts';
 import { findLinkedProjectIssues, isUnavailable } from './steps/linked-projects.ts';
 import { runMonorepo } from './steps/monorepo.ts';
 import { runNoProject } from './steps/no-project.ts';
-import { OrganizationCreationDeclined } from './steps/organization.ts';
 import type { InitPathId } from './telemetry/init-telemetry.ts';
 import {
   type InitRunContext,

@@ -116,6 +116,7 @@ const PICKER_STATUS_CASES: Array<[string, string | undefined, PickerRow[], strin
 function runLoginPicker(harness: TestHarness, serverUrl: string) {
   return harness.runInteractive(`auth login --server ${serverUrl}`, {
     extraEnv: {
+      SONARQUBE_CLI_MOCK_TTY: '1',
       SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
       SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
     },
@@ -1365,6 +1366,7 @@ describe('auth login — organization selection', () => {
 
     const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
+        SONARQUBE_CLI_MOCK_TTY: '1',
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
@@ -1407,7 +1409,7 @@ describe('auth login — organization selection', () => {
     },
   );
 
-  it('keeps the manual-entry option last when the active organization moves first', async () => {
+  it('keeps manual entry after organization rows when the active organization moves first', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken('my-token')
@@ -1444,6 +1446,7 @@ describe('auth login — organization selection', () => {
 
     const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
+        SONARQUBE_CLI_MOCK_TTY: '1',
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
@@ -1474,6 +1477,7 @@ describe('auth login — organization selection', () => {
 
     const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
       extraEnv: {
+        SONARQUBE_CLI_MOCK_TTY: '1',
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },

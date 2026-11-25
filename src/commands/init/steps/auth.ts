@@ -24,13 +24,12 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
-import { createAdditionalOrganizationHook, createOrganizationHook } from './organization.ts';
 
 /**
  * Reuses the current login, or signs the user in through the browser. On SonarQube Cloud the
  * login also settles the organization. An account with none is offered the creation of one, and
- * `OrganizationCreationDeclined` ends the run when the user says no. An account with some can pick
- * "Create a new organization" from the list, which is shown even for a single membership.
+ * `OrganizationCreationDeclined` ends the run when the user says no. An account with several can pick
+ * "Create a new organization" from the list; a single membership is selected automatically.
  */
 export async function resolveInitAuth(
   ctx: CommandInvocationContext,
@@ -66,10 +65,7 @@ export async function resolveInitAuth(
     });
   }
 
-  await authLogin({}, ctx, {
-    onNoMemberships: createOrganizationHook(ctx.console, telemetry),
-    onCreateOrganization: createAdditionalOrganizationHook(ctx.console, telemetry),
-  });
+  await authLogin({}, ctx, telemetry);
   const fresh = await resolveFreshAuth();
   if (telemetry && !telemetry.has('login')) {
     telemetry.record('login', 'success');

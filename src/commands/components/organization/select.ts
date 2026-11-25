@@ -18,6 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import {
+  createFreeOrganization,
+  offerFirstOrganization,
+  OrganizationCreationUnavailableError,
+  type OrganizationSetupProgress,
+} from '@/commands/auth/organization.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { toOrganizationSummary } from '@/core/domain/organization.ts';
 import { discoverOrganizationFromConfig } from '@/core/project-discovery/project-info.ts';
@@ -65,27 +71,6 @@ export async function assertOrganizationMember(
 }
 
 /**
- * Supplies an organization key for an account that belongs to none, for example by creating one.
- * It receives the client bound to the token this login is using, since nothing else is saved yet.
- * It may throw to abort the login.
- */
-export type OnNoMemberships = (client: OrganizationsClient) => Promise<string>;
-
-/**
- * Creates an organization the user chose from the selection list and returns its key, or
- * `undefined` when none was created, which brings the list back without the creation option.
- * It receives the client bound to the token this login is using. It may throw to abort the login.
- */
-export type OnCreateOrganization = (client: OrganizationsClient) => Promise<string | undefined>;
-
-/** Callbacks a caller such as `sonar init` adds to the organization selection. */
-export interface OrganizationSelectionHooks {
-  onNoMemberships?: OnNoMemberships;
-  /** Offers "Create a new organization" in the list, and asks even when there is one membership. */
-  onCreateOrganization?: OnCreateOrganization;
-}
-
-/**
  * Validate organization or get from list
  */
 export async function validateOrSelectOrganization(
@@ -93,7 +78,7 @@ export async function validateOrSelectOrganization(
   org: string | undefined,
   console: Console,
   activeOrgKey: string | undefined,
-  hooks: OrganizationSelectionHooks = {},
+  progress?: OrganizationSetupProgress,
 ): Promise<string> {
   if (org) {
     await assertOrganizationMember(client, org);
@@ -120,7 +105,10 @@ export async function validateOrSelectOrganization(
     console.warn(`You are not a member of organization '${configOrg}' ${source}.`);
   }
 
-  return await getUserSelectedOrganization(client, console, activeOrgKey, hooks);
+  return await getUserSelectedOrganization(client, console, activeOrgKey, {
+    allowCreation: true,
+    progress,
+  });
 }
 
 function organizationRequiredError(): CommandFailedError {
@@ -205,24 +193,27 @@ export async function getUserSelectedOrganization(
   client: OrganizationsClient,
   console: Console,
   activeOrgKey: string | undefined,
-  { onNoMemberships, onCreateOrganization }: OrganizationSelectionHooks = {},
+  {
+    allowCreation = false,
+    progress,
+  }: { allowCreation?: boolean; progress?: OrganizationSetupProgress } = {},
 ): Promise<string> {
   const {
     organizations: memberOrgs,
     paging: { total: orgTotal },
   } = await listMemberOrganizations(client);
   // Creation is only ever an explicit choice, so it needs someone to ask.
-  const onCreate = console.canPrompt() ? onCreateOrganization : undefined;
+  const canCreate = allowCreation && console.canPrompt();
   // Deduce organization from API: if user is member of exactly one org, use it
-  if (memberOrgs.length === 1 && orgTotal === 1 && !onCreate) {
+  if (memberOrgs.length === 1 && orgTotal === 1) {
     const singleOrg = memberOrgs[0].key;
     console.print(`Using organization (only member): ${singleOrg}`);
     return singleOrg;
   }
 
   if (memberOrgs.length === 0) {
-    if (onNoMemberships) {
-      return onNoMemberships(client);
+    if (canCreate) {
+      return offerFirstOrganization(client, console, progress);
     }
     throw new CommandFailedError('You are not a member of any organization.', {
       remediationHint: 'Join a SonarQube Cloud organization, then try again.',
@@ -241,13 +232,21 @@ export async function getUserSelectedOrganization(
     { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
   ];
 
-  const choice = await selectOrganization(console, orgOptions, onCreate !== undefined);
-  if (choice === CREATE_NEW && onCreate) {
-    const created = await onCreate(client);
-    if (created) {
-      return created;
+  if (!console.canPrompt()) {
+    throw organizationRequiredError();
+  }
+  const choice = await selectOrganization(console, orgOptions, canCreate);
+  if (choice === CREATE_NEW && canCreate) {
+    try {
+      return await createFreeOrganization(client, console, progress);
+    } catch (error) {
+      if (!(error instanceof OrganizationCreationUnavailableError)) {
+        throw error;
+      }
+      progress?.record('create_org', 'failed');
+      console.warn(`${error.message} Choose one of your organizations instead.`);
+      return resolveChoice(client, console, await selectOrganization(console, orgOptions, false));
     }
-    return resolveChoice(client, console, await selectOrganization(console, orgOptions, false));
   }
   return resolveChoice(client, console, choice);
 }
