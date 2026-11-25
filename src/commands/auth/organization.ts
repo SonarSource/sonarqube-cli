@@ -59,6 +59,7 @@ const MAX_KEY_LENGTH = 40;
 const MIN_KEY_LENGTH = 3;
 const MAX_KEY_ATTEMPTS = 5;
 const MAX_NAME_ATTEMPTS = 5;
+const MAX_NAME_LENGTH = 255;
 const KEY_SUFFIX_BYTES = 3;
 const HTTP_CONFLICT = 409;
 const HTTP_NOT_FOUND = 404;
@@ -122,9 +123,9 @@ async function askOrganizationName(console: Console): Promise<string> {
     );
     try {
       const name = answer.trim();
-      if (!name || name.length > 255 || /[\u0000-\u001f\u007f]/.test(name)) {
+      if (!name || name.length > MAX_NAME_LENGTH || /[\u0000-\u001f\u007f]/.test(name)) {
         throw new CommandFailedError(
-          'Organization name must be non-empty, at most 255 characters, and free of control characters.',
+          `Organization name must be non-empty, at most ${MAX_NAME_LENGTH} characters, and free of control characters.`,
         );
       }
       return name;
