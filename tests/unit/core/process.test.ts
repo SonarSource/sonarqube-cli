@@ -472,7 +472,7 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
     controller.abort();
     const result = await running;
     if (process.platform !== 'win32') expect(result.signal).toBe('SIGTERM');
-    expect(await waitForProcessExit(pid)).toBe(true);
+    expect(isProcessAlive(pid)).toBe(false);
   });
 
   it('escalates on stdin failure and preserves the input error', async () => {
@@ -485,7 +485,7 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
     const pid = await grandchildPid;
 
     expect(await failure).toEqual(new Error('stdin source failed'));
-    expect(await waitForProcessExit(pid)).toBe(true);
+    expect(isProcessAlive(pid)).toBe(false);
   });
 
   it('escalates on timeout after the direct child exits and a descendant ignores SIGTERM', async () => {
@@ -505,7 +505,7 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
     const failure = await settled;
     expect(failure).toBeInstanceOf(ProcessTimedOutError);
     expect((failure as Error).message).toBe(TEST_TIMEOUT_MESSAGE);
-    expect(await waitForProcessExit(pid)).toBe(true);
+    expect(isProcessAlive(pid)).toBe(false);
   });
 
   it.skipIf(process.platform === 'win32')(
