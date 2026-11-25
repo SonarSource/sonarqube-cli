@@ -73,6 +73,14 @@ function getCaseVariantEnv(env: NodeJS.ProcessEnv, varName: string): string | un
   return env[varName.toLowerCase()] ?? env[varName];
 }
 
+/** Generic proxy env vars stripped from subprocesses once the CLI injects its resolved `SONAR_*` tier. */
+export const GENERIC_PROXY_ENV_NAMES = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+] as const;
+
 const PROXY_CONFIGS: Array<SourcedValue<ProxyEnvVars>> = [
   {
     value: {
@@ -269,14 +277,32 @@ const DEFAULT_PORT_HTTP = 80;
 
 // --- Subprocess env builder ---
 
+/** All `SONAR_*` network variables managed by {@link buildSubprocessNetworkEnv}. */
+export const SUBPROCESS_NETWORK_ENV_NAMES: ReadonlySet<string> = new Set([
+  'SONAR_HTTPS_PROXY_URL',
+  'SONAR_HTTP_PROXY_URL',
+  'SONAR_NO_PROXY',
+  'SONAR_CA_CERT',
+  'SONAR_TLS_CLIENT_CERT',
+  'SONAR_TLS_CLIENT_KEY_FILE',
+  'SONAR_TLS_CLIENT_PASSPHRASE',
+]);
+
+export interface BuildSubprocessNetworkEnvOptions {
+  /** Include `SONAR_TLS_CLIENT_*` mTLS variables (default: true). Disable for Cloud-only binaries. */
+  includeClientCert?: boolean;
+}
+
 /**
- * Builds env vars to inject into subprocess invocations (sonar-secrets, sca-scanner-cli, CAG).
+ * Builds env vars to inject into subprocess invocations (sonar-secrets, sca-scanner-cli, CAG, container scanner).
  * Translates the resolved network config into all known env var names each binary may read,
  * regardless of which source (sonar-env, stored-config, generic-env) the config came from.
  */
 export async function buildSubprocessNetworkEnv(
   resolvedConfig?: ResolvedNetworkConfig,
+  options: BuildSubprocessNetworkEnvOptions = {},
 ): Promise<Record<string, string>> {
+  const { includeClientCert = true } = options;
   const config = resolvedConfig ?? (await getNetworkConfig());
   const env: Record<string, string> = {};
 
@@ -294,7 +320,7 @@ export async function buildSubprocessNetworkEnv(
     env.SONAR_CA_CERT = config.caCert.path;
   }
 
-  if (config.clientCert) {
+  if (includeClientCert && config.clientCert) {
     env.SONAR_TLS_CLIENT_CERT = config.clientCert.certPath;
     if (config.clientCert.keyPath !== null) {
       env.SONAR_TLS_CLIENT_KEY_FILE = config.clientCert.keyPath;
