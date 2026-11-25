@@ -69,6 +69,7 @@ interface ChildControl {
 interface InternalSpawnOptions extends SpawnOptions {
   /** Internal hook used by {@link raceWithTimeout} to control the child on deadline or abort. */
   onSpawn?: (control: ChildControl) => void;
+  stopChild: () => void;
 }
 
 /** A child did not finish before its deadline. Distinct from "the program is not installed". */
@@ -241,59 +242,60 @@ async function finishTreeTermination(
 }
 
 async function raceWithTimeout<T>(
-  run: (registerControl: (control: ChildControl) => void) => Promise<T>,
+  run: (registerControl: (control: ChildControl) => void, stopChild: () => void) => Promise<T>,
   timeoutMs: number,
   timeoutMessage: string,
-  options: Pick<SpawnOptions, 'signal' | 'killProcessTree'> = {},
+  { signal, killProcessTree }: Pick<SpawnOptions, 'signal' | 'killProcessTree'>,
 ): Promise<T> {
-  const { signal, killProcessTree } = options;
   let control: ChildControl | undefined;
+  let stopping = false;
+  let termination: Promise<void> | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const state: { timedOut: boolean; termination?: Promise<void> } = { timedOut: false };
-  const onAbort = (): void => {
-    control?.kill('SIGTERM');
-  };
-  signal?.addEventListener('abort', onAbort, { once: true });
+  const aborted = Promise.withResolvers<never>();
 
+  function stopChild(): void {
+    if (!control || stopping) return;
+    stopping = true;
+    control.kill('SIGTERM');
+    if (killProcessTree) {
+      // A pre-aborted signal can stop the child during spawn, before childPromise is assigned.
+      termination = Promise.resolve().then(() => finishTreeTermination(childPromise, control));
+    }
+  }
+
+  function onAbort(): void {
+    stopChild();
+    // Preserve the child's result when its pipes close during cleanup.
+    if (termination) {
+      void termination.then(() => {
+        aborted.reject(signal?.reason);
+      }, aborted.reject);
+    }
+  }
+
+  signal?.addEventListener('abort', onAbort, { once: true });
   const childPromise = run((nextControl) => {
     control = nextControl;
-    if (signal?.aborted) nextControl.kill('SIGTERM');
-  });
-  void childPromise.catch(() => undefined);
+    if (signal?.aborted) onAbort();
+  }, stopChild);
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
-      state.timedOut = true;
-      control?.kill('SIGTERM');
-      if (!killProcessTree) {
-        reject(new ProcessTimedOutError(timeoutMessage));
-        return;
-      }
-      // Wait boundedly for the whole process group (not just the direct child) before callers clean up temp dirs.
-      state.termination = finishTreeTermination(childPromise, control);
-      void state.termination.then(() => {
-        reject(new ProcessTimedOutError(timeoutMessage));
-      });
+      reject(new ProcessTimedOutError(timeoutMessage));
+      stopChild();
     }, timeoutMs);
   });
 
   try {
-    const result = await Promise.race([childPromise, timeoutPromise]);
-    if (state.timedOut) {
-      await state.termination;
-      throw new ProcessTimedOutError(timeoutMessage);
-    }
-    return result;
-  } catch (error) {
-    if (state.timedOut) {
-      await state.termination;
-      throw new ProcessTimedOutError(timeoutMessage);
-    }
-    throw error;
+    return await Promise.race([childPromise, timeoutPromise, aborted.promise]);
   } finally {
     clearTimeout(timeoutId);
     signal?.removeEventListener('abort', onAbort);
-    control?.cleanup();
+    try {
+      await termination;
+    } finally {
+      control?.cleanup();
+    }
   }
 }
 
@@ -333,7 +335,7 @@ function feedStdin(
 async function spawnProcess(
   command: string,
   args: string[],
-  options: InternalSpawnOptions = {},
+  options: InternalSpawnOptions,
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -374,10 +376,11 @@ async function spawnProcess(
         if (error.code === 'EPIPE') {
           stdinBroken = true;
         } else {
+          if (options.killProcessTree) options.stopChild();
           reject(error);
         }
       });
-      feedStdin(proc.stdin, options, reject, control.kill);
+      feedStdin(proc.stdin, options, reject, options.stopChild);
     }
 
     proc.on('error', reject);
@@ -406,7 +409,7 @@ export async function spawnProcessWithTimeout(
   timeoutMessage: string,
 ): Promise<SpawnResult> {
   return raceWithTimeout(
-    (registerKill) => spawnProcess(command, args, { ...options, onSpawn: registerKill }),
+    (onSpawn, stopChild) => spawnProcess(command, args, { ...options, onSpawn, stopChild }),
     timeoutMs,
     timeoutMessage,
     options,
@@ -428,7 +431,7 @@ export async function spawnProcessCapturingBytes(
   timeoutMessage: string,
 ): Promise<BytesSpawnResult> {
   return raceWithTimeout(
-    (registerKill) => captureProcessBytes(command, args, { ...options, onSpawn: registerKill }),
+    (onSpawn, stopChild) => captureProcessBytes(command, args, { ...options, onSpawn, stopChild }),
     timeoutMs,
     timeoutMessage,
     options,
@@ -461,8 +464,13 @@ async function captureProcessBytes(
     });
 
     if (proc.stdin) {
-      proc.stdin.on('error', () => undefined);
-      feedStdin(proc.stdin, options, reject, control.kill);
+      proc.stdin.on('error', (error: NodeJS.ErrnoException) => {
+        if (options.killProcessTree && error.code !== 'EPIPE') {
+          options.stopChild();
+          reject(error);
+        }
+      });
+      feedStdin(proc.stdin, options, reject, options.stopChild);
     }
 
     proc.on('error', reject);
