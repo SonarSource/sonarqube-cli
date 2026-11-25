@@ -389,4 +389,19 @@ describe('container scanner report', () => {
     expect(formatContainerScanTable(report, '')).toContain('Container scan failed.');
     expect(countContainerAnalysisErrors(report)).toBe(0);
   });
+
+  it.each([129, 130, 143] as const)(
+    'preserves cancellation exit %s in JSON and the table',
+    (exitCode) => {
+      const report = containerScanErrorReport(
+        './my-image.tar',
+        { timeoutSecs: 300, failOn: 'high' },
+        { kind: 'scannerExecution', message: 'Container scan cancelled.' },
+        exitCode,
+      );
+
+      expect(JSON.parse(formatContainerScanJson(report))).toMatchObject({ exitCode, issues: [] });
+      expect(formatContainerScanTable(report, '')).toContain('Container scan cancelled.');
+    },
+  );
 });

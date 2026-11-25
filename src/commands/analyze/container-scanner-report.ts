@@ -24,6 +24,7 @@ import type { SpawnResult } from '@/core/process/process.ts';
 
 import {
   CONTAINER_SCAN_SEVERITIES,
+  type ContainerScanCancellationExitCode,
   type ContainerScanOptions,
   type ContainerScanSeverity,
 } from './container-scanner-runner.ts';
@@ -56,7 +57,8 @@ export interface ContainerScanConfiguration {
 }
 
 export const EXIT_CODE_CONTAINER_THRESHOLD_REACHED = 51;
-export type ContainerScanExitCode = 0 | 1 | typeof EXIT_CODE_CONTAINER_THRESHOLD_REACHED;
+export type ContainerScanExitCode =
+  0 | 1 | typeof EXIT_CODE_CONTAINER_THRESHOLD_REACHED | ContainerScanCancellationExitCode;
 
 export interface ContainerScanReport {
   issues: ContainerScanFinding[];
@@ -173,6 +175,7 @@ export function containerScanErrorReport(
   image: string,
   options: ContainerScanOptions,
   error: ContainerScanError,
+  exitCode: 1 | ContainerScanCancellationExitCode = 1,
 ): ContainerScanReport {
   const { failOn, timeoutSecs, registry, repository, tag } = options;
   return {
@@ -186,7 +189,7 @@ export function containerScanErrorReport(
       repository: repository ?? null,
       tag: tag ?? null,
     },
-    exitCode: 1,
+    exitCode,
   };
 }
 
@@ -321,7 +324,12 @@ function groupFindingsByPackage(findings: NormalizedFinding[]): PackageGroup[] {
 
 export function formatContainerScanTable(report: ContainerScanReport, stderr = ''): string {
   const lines = [`Image: ${scanTableCell(report.configuration.imageInput)}`, ''];
-  if (report.exitCode === 1) return [...lines, 'Container scan failed.'].join('\n');
+  if (report.exitCode !== 0 && report.exitCode !== EXIT_CODE_CONTAINER_THRESHOLD_REACHED) {
+    return [
+      ...lines,
+      report.exitCode === 1 ? 'Container scan failed.' : 'Container scan cancelled.',
+    ].join('\n');
+  }
   if (report.issues.length === 0) {
     const empty = isPartialScan(report, stderr)
       ? 'No findings in the packages analyzed.'
