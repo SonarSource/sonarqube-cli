@@ -38,6 +38,7 @@ import {
   sanitizeScannerTerminalText,
 } from './container-scanner-report.ts';
 import {
+  ContainerScanCancelledError,
   type ContainerScanOptions,
   prepareContainerScannerEnv,
   runContainerScanner,
@@ -61,10 +62,13 @@ export async function analyzeContainer(
     exitCode: null,
     stdout: '',
     stderr: '',
-    launchFailure:
-      error instanceof ProcessTimedOutError || error instanceof CommandFailedError
-        ? error.message
-        : 'Could not start the container scanner.',
+    launchFailure: {
+      message:
+        error instanceof ProcessTimedOutError || error instanceof CommandFailedError
+          ? error.message
+          : 'Could not start the container scanner.',
+      exitCode: error instanceof ContainerScanCancelledError ? error.exitCode : (1 as const),
+    },
   }));
 
   const scanDurationMs = Math.round(performance.now() - startedAt);
@@ -72,10 +76,15 @@ export async function analyzeContainer(
   const launchFailure = 'launchFailure' in result ? result.launchFailure : undefined;
   const report =
     scannerReport ??
-    containerScanErrorReport(image, options, {
-      kind: launchFailure ? 'scannerExecution' : 'invalidScannerReport',
-      message: launchFailure ?? 'The container scanner did not return a valid report.',
-    });
+    containerScanErrorReport(
+      image,
+      options,
+      {
+        kind: launchFailure ? 'scannerExecution' : 'invalidScannerReport',
+        message: launchFailure?.message ?? 'The container scanner did not return a valid report.',
+      },
+      launchFailure?.exitCode,
+    );
   ctx.recordTelemetry(
     new TelemetryFact(
       CLI_ANALYSIS_COMPLETED,
@@ -99,7 +108,7 @@ export async function analyzeContainer(
   const stderr = terminalText(result.stderr).trimEnd();
   if (stderr) ctx.console.print(stderr, 'stderr');
 
-  if (report.exitCode === 1 && (!stderr || !scannerReport)) {
+  if (!scannerReport || (report.exitCode === 1 && !stderr)) {
     const message = terminalText(report.errors[0]?.message ?? '').trim();
     ctx.console.error(message || 'Container scan failed.');
   }

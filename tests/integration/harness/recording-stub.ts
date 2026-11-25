@@ -31,6 +31,7 @@ export const CONTAINER_SCANNER_INVOCATIONS_FILE = 'container-scanner-invocations
 export interface StubResponse {
   stdout?: string;
   stderr?: string;
+  delayMs?: number;
   exitCode?: number;
 }
 
@@ -46,7 +47,7 @@ export interface RecordingStubConfig {
 
 export interface RecordedInvocation {
   argv: string[];
-  env?: Record<string, string>;
+  env?: Partial<Record<string, string>>;
 }
 
 const STUB_SOURCE_DIR = join(import.meta.dir, '..', 'resources');

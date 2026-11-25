@@ -26,6 +26,7 @@ import { CONTAINER_SCANNER_SPEC } from '@/core/host/install/container-scanner.ts
 
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { TestHarness } from '../../harness';
+import { IS_WINDOWS } from '../../harness/platform.ts';
 import {
   CONTAINER_SCANNER_INVOCATIONS_FILE,
   installRecordingStub,
@@ -94,6 +95,32 @@ describe('analyze container', () => {
       new URL(artifact.url).pathname,
     ]);
   }, 30_000);
+
+  it.skipIf(IS_WINDOWS)(
+    'reports SIGTERM cancellation with exit 143 in JSON and the process status',
+    async () => {
+      installStub(harness, { delayMs: 15_000 });
+      const invocations = harness.cliHome.file(CONTAINER_SCANNER_INVOCATIONS_FILE);
+      const session = harness.runInteractive('analyze container ./my-image.tar');
+
+      try {
+        const deadline = Date.now() + 6000;
+        while (!invocations.exists() && Date.now() < deadline) await Bun.sleep(20);
+        expect(invocations.exists()).toBe(true);
+        session.kill();
+
+        const result = await session.waitForExit();
+        expect(result.exitCode).toBe(143);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          exitCode: 143,
+          errors: [{ kind: 'scannerExecution', message: 'Container scan cancelled.' }],
+        });
+      } finally {
+        session.kill();
+      }
+    },
+    20_000,
+  );
 
   it('uses CI authentication and default JSON outside Git, including when the threshold is disabled', async () => {
     const report = {

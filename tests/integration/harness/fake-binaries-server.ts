@@ -27,8 +27,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CONTAINER_SCANNER_SPEC } from '@/core/host/install/container-scanner.ts';
 import {
+  CONTAINER_SCANNER_BINARY_NAME,
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
   SECRETS_BINARY_NAME,
@@ -38,7 +38,7 @@ import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-arti
 import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(
-  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME}|${CONTAINER_SCANNER_SPEC.name})-.*\.(exe|bin)|` +
+  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME}|${CONTAINER_SCANNER_BINARY_NAME})-.*\.(exe|bin)|` +
     String.raw`${CONTEXT_AUGMENTATION_BINARY_NAME}-.*\.tar\.gz)(\.asc)?$`,
 );
 
