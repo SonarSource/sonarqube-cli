@@ -1208,7 +1208,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('-p, --project <project>', 'Container project key (overrides auto-discovery)')
     .addHelpText(
       `after`,
-      `auto prefers hosted MCP with container fallback. stdio forces a container. http requires hosted MCP.\n--project applies only to the container; hosted tools accept project keys per call.\n${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
+      `auto prefers hosted MCP with container fallback. stdio forces a container. http requires hosted MCP.\n--project applies only to container mode and is ignored in hosted mode. For hosted tools, supply the project key in tool call arguments.\n${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
     )
     .anonymousAction((ctx, options: McpRunOptions) => runMcp(ctx, options));
 
