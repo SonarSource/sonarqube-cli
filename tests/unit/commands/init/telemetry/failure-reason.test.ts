@@ -20,9 +20,9 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { OrganizationCreationDeclined } from '@/commands/auth/organization.ts';
 import { OnboardingCancelledError } from '@/commands/init/answer.ts';
 import { RepositoryInOtherOrganizationError } from '@/commands/init/steps/detect.ts';
-import { OrganizationCreationDeclined } from '@/commands/init/steps/organization.ts';
 import { classifyInitFailure } from '@/commands/init/telemetry/failure-reason.ts';
 import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
 import { ProjectSelectionCancelledError } from '@/commands/link/choose-project.ts';
