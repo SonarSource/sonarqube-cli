@@ -269,8 +269,10 @@ describe('runContainerScanner', () => {
 
       const error = await runScanner().catch((err: unknown) => err);
       expect(error).toBeInstanceOf(ContainerScanCancelledError);
-      expect((error as ContainerScanCancelledError).message).toBe('Container scan cancelled.');
-      expect((error as ContainerScanCancelledError).exitCode).toBe(expectedExitCode);
+      expect(error).toMatchObject({
+        message: 'Container scan cancelled.',
+        exitCode: expectedExitCode,
+      });
       expect(listenerCounts()).toEqual(before);
     },
   );
@@ -283,7 +285,7 @@ describe('runContainerScanner', () => {
     });
     const cancelled = await runScanner().catch((err: unknown) => err);
     expect(cancelled).toBeInstanceOf(ContainerScanCancelledError);
-    expect((cancelled as ContainerScanCancelledError).exitCode).toBe(130);
+    expect(cancelled).toMatchObject({ exitCode: 130 });
     expect(listenerCounts()).toEqual(before);
 
     const timeoutError = new subprocess.ProcessTimedOutError('hung');
