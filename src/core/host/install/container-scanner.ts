@@ -19,24 +19,26 @@
  */
 
 import { SONAR_CONTAINER_SCANNER_DIST_PREFIX } from '@/core/config-constants.ts';
+import { CONTAINER_SCANNER_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { type BinarySpec, installBinary } from './binary.ts';
 import {
   SONAR_CONTAINER_SCANNER_EXTENSIONS,
+  SONAR_CONTAINER_SCANNER_PLATFORM_NAMING,
   SONAR_CONTAINER_SCANNER_SIGNATURES,
   SONAR_CONTAINER_SCANNER_VERSION,
   SONARSOURCE_PUBLIC_KEY,
 } from './signatures.ts';
 
 export const CONTAINER_SCANNER_SPEC: BinarySpec = {
-  name: 'sonar-container-scanner',
+  name: CONTAINER_SCANNER_BINARY_NAME,
   version: SONAR_CONTAINER_SCANNER_VERSION,
   distPrefix: SONAR_CONTAINER_SCANNER_DIST_PREFIX,
   signatures: SONAR_CONTAINER_SCANNER_SIGNATURES,
   publicKey: SONARSOURCE_PUBLIC_KEY,
   extensions: SONAR_CONTAINER_SCANNER_EXTENSIONS,
-  platformNaming: 'x64',
+  platformNaming: SONAR_CONTAINER_SCANNER_PLATFORM_NAMING,
 };
 
 export async function installContainerScanner(console: Console): Promise<string> {

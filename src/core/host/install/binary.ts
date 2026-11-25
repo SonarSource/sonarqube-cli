@@ -27,9 +27,15 @@ import { join } from 'node:path';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
-import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install/install-types.ts';
 import {
-  buildDownloadUrl,
+  buildPlatformSuffix,
+  formatArtifactPlatformKey,
+  type PlatformInfo,
+  type PlatformNamingScheme,
+} from '@/core/host/install/install-types.ts';
+import {
+  buildArtifactDownloadUrl,
+  buildDownloadFilename,
   type DependencyExtension,
   downloadBinary,
   verifyBinarySignature,
@@ -52,29 +58,31 @@ export interface BinarySpec {
   signatures: Record<string, string>;
   publicKey: string;
   extensions: Record<string, DependencyExtension>;
-  platformNaming?: 'x64';
+  platformNaming?: PlatformNamingScheme;
 }
 
-export function resolveBinaryArtifact(
-  spec: BinarySpec,
-  platform: PlatformInfo,
-): { platform: PlatformInfo; url: string } {
-  const artifactPlatform =
-    spec.platformNaming === 'x64' && platform.arch === 'x86-64'
-      ? { ...platform, arch: 'x64' }
-      : platform;
-  const platformKey = `${artifactPlatform.os}-${artifactPlatform.arch}`;
+export interface BinaryArtifact {
+  readonly platformKey: string;
+  readonly filename: string;
+  readonly url: string;
+}
+
+export function resolveBinaryArtifact(spec: BinarySpec, platform: PlatformInfo): BinaryArtifact {
+  const platformKey = formatArtifactPlatformKey(platform, spec.platformNaming);
   if (!(platformKey in spec.extensions)) {
     throw new CommandFailedError(`${spec.name} is not available for platform '${platformKey}'.`);
   }
-  const url = buildDownloadUrl(
+  const filename = buildDownloadFilename(
     spec.name,
     spec.version,
-    spec.distPrefix,
-    artifactPlatform,
+    platformKey,
     spec.extensions[platformKey],
   );
-  return { platform: artifactPlatform, url };
+  return {
+    platformKey,
+    filename,
+    url: buildArtifactDownloadUrl(spec.distPrefix, filename),
+  };
 }
 
 export interface InstallOptions {
@@ -162,7 +170,7 @@ async function downloadAndInstall(
         verifyBinarySignature(
           spec.name,
           stagedPath,
-          artifact.platform,
+          artifact.platformKey,
           spec.signatures,
           spec.publicKey,
         ),
