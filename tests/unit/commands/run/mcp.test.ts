@@ -37,7 +37,6 @@ import * as readline from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { HostedMcpClient } from '@/commands/run/hosted-mcp-client.ts';
 import { runMcp } from '@/commands/run/mcp.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
@@ -49,6 +48,7 @@ import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity
 import type { ClientCertConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
 import * as toolDetector from '@/core/host/environment/tool-detector.ts';
+import { HostedMcpClient } from '@/core/host/mcp/hosted-mcp-client.ts';
 import {
   clientCertCachePath,
   getMcpContainerCommand,
