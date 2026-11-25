@@ -63,7 +63,6 @@ type KillFn = (signal?: NodeJS.Signals) => void;
 interface ChildControl {
   kill: KillFn;
   isTreeAlive: () => boolean;
-  cleanup: () => void;
 }
 
 interface InternalSpawnOptions extends SpawnOptions {
@@ -142,29 +141,62 @@ function isProcessGroupAlive(pid: number | undefined, killProcessTree: boolean):
   }
 }
 
-function attachProcessSignalForwarding(kill: KillFn, killProcessTree: boolean): () => void {
+let activeSignalForwarders = 0;
+
+function reRaiseSignal(signal: NodeJS.Signals, cleanup: () => void): void {
+  cleanup();
+  if (process.listenerCount(signal) === 0) {
+    process.kill(process.pid, signal);
+  }
+}
+
+function attachProcessSignalForwarding(
+  stopChild: (signal: NodeJS.Signals) => void,
+  getTermination: () => Promise<void> | undefined,
+  forceKill: () => void,
+  killProcessTree: boolean,
+): () => void {
   if (!killProcessTree || process.platform === 'win32') return () => undefined;
 
-  const onExit = (): void => {
-    kill('SIGTERM');
-  };
   let cleanedUp = false;
+  let terminating = false;
+  let reRaised = false;
+  const onExit = (): void => {
+    stopChild('SIGTERM');
+  };
+  const finishSignal = (signal: NodeJS.Signals): void => {
+    if (reRaised) return;
+    reRaised = true;
+    reRaiseSignal(signal, cleanup);
+  };
   const listeners = FORWARDED_SIGNALS.map((signal) => {
     const listener = (): void => {
-      kill(signal);
-      cleanup();
-      if (process.listenerCount(signal) === 0) {
-        process.kill(process.pid, signal);
+      if (terminating) {
+        forceKill();
+        finishSignal(signal);
+        return;
       }
+      const hasCallerHandler = process.listenerCount(signal) > activeSignalForwarders;
+      stopChild(signal);
+      if (hasCallerHandler) {
+        cleanup();
+        return;
+      }
+      terminating = true;
+      void Promise.resolve(getTermination()).finally(() => {
+        finishSignal(signal);
+      });
     };
     process.on(signal, listener);
     return [signal, listener] as const;
   });
+  activeSignalForwarders++;
   process.on('exit', onExit);
 
   function cleanup(): void {
     if (cleanedUp) return;
     cleanedUp = true;
+    activeSignalForwarders--;
     process.off('exit', onExit);
     for (const [signal, listener] of listeners) {
       process.off(signal, listener);
@@ -175,16 +207,11 @@ function attachProcessSignalForwarding(kill: KillFn, killProcessTree: boolean): 
 
 function createChildControl(proc: ChildProcess, options: SpawnOptions): ChildControl {
   const killProcessTree = Boolean(options.killProcessTree);
-  const kill: KillFn = (sig) => {
-    terminateChild(proc, killProcessTree, sig);
-  };
-  const cleanup = attachProcessSignalForwarding(kill, killProcessTree);
-  proc.once('close', cleanup);
-  proc.once('error', cleanup);
   return {
-    kill,
+    kill: (sig) => {
+      terminateChild(proc, killProcessTree, sig);
+    },
     isTreeAlive: () => isProcessGroupAlive(proc.pid, killProcessTree),
-    cleanup,
   };
 }
 
@@ -253,10 +280,10 @@ async function raceWithTimeout<T>(
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const aborted = Promise.withResolvers<never>();
 
-  function stopChild(): void {
+  function stopChild(termSignal: NodeJS.Signals = 'SIGTERM'): void {
     if (!control || stopping) return;
     stopping = true;
-    control.kill('SIGTERM');
+    control.kill(termSignal);
     if (killProcessTree) {
       // A pre-aborted signal can stop the child during spawn, before childPromise is assigned.
       termination = Promise.resolve().then(() => finishTreeTermination(childPromise, control));
@@ -273,6 +300,12 @@ async function raceWithTimeout<T>(
     }
   }
 
+  const cleanupForwarding = attachProcessSignalForwarding(
+    stopChild,
+    () => termination,
+    () => control?.kill('SIGKILL'),
+    Boolean(killProcessTree),
+  );
   signal?.addEventListener('abort', onAbort, { once: true });
   const childPromise = run((nextControl) => {
     control = nextControl;
@@ -294,7 +327,7 @@ async function raceWithTimeout<T>(
     try {
       await termination;
     } finally {
-      control?.cleanup();
+      cleanupForwarding();
     }
   }
 }

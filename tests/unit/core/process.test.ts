@@ -362,9 +362,9 @@ describe('spawnProcess stdin, against a mocked child', () => {
   });
 });
 
-function grandchildScript(ignoreSigterm: boolean): string {
+function grandchildScript(ignoreTermination: boolean): string {
   const child = [
-    ignoreSigterm ? "process.on('SIGTERM', () => {});" : '',
+    ignoreTermination ? "process.on('SIGTERM', () => {}); process.on('SIGINT', () => {});" : '',
     "require('node:fs').writeFileSync(process.argv[1], String(process.pid));",
     'setInterval(() => {}, 60_000);',
   ].join(' ');
@@ -509,7 +509,7 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
   });
 
   it.skipIf(process.platform === 'win32')(
-    'forwards parent SIGINT to a detached killProcessTree child without leaving orphans',
+    'waits for and force-kills a detached killProcessTree grandchild on parent SIGINT before exiting',
     async () => {
       const processModule = join(import.meta.dir, '../../../src/core/process/process.ts');
       const { pidFile, grandchildPid } = createTreeFixture();
@@ -517,7 +517,7 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
         import { spawnProcessWithTimeout } from ${JSON.stringify(processModule)};
         await spawnProcessWithTimeout(
           process.execPath,
-          ['-e', ${JSON.stringify(grandchildScript(false))}, process.argv[1]],
+          ['-e', ${JSON.stringify(grandchildScript(true))}, process.argv[1]],
           { killProcessTree: true },
           5000,
           'timeout',
@@ -540,7 +540,7 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
 
       parent.kill('SIGINT');
       expect(await exited).toBe('SIGINT');
-      expect(await waitForProcessExit(pid)).toBe(true);
+      expect(isProcessAlive(pid)).toBe(false);
     },
   );
 });
