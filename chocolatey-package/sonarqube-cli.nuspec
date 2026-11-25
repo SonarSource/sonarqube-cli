@@ -7,7 +7,7 @@
     <authors>SonarSource</authors>
     <owners>SonarSource</owners>
     <projectUrl>https://docs.sonarsource.com/sonarqube-cli</projectUrl>
-    <iconUrl>https://cdn.jsdelivr.net/gh/SonarSource/sonarqube-cli@f5f1b31a6dea80537964140a0cbfe4e39567bb18/chocolatey-package/icon.png</iconUrl>
+    <iconUrl>https://cdn.jsdelivr.net/gh/SonarSource/sonarqube-cli@master/chocolatey-package/icon.png</iconUrl>
     <licenseUrl>https://github.com/SonarSource/sonarqube-cli/blob/master/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <projectSourceUrl>https://github.com/SonarSource/sonarqube-cli</projectSourceUrl>
