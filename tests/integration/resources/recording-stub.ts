@@ -23,13 +23,11 @@ import { appendFileSync, readFileSync } from 'node:fs';
 
 interface StubResponse {
   stdout?: string;
-  stderr?: string;
   exitCode?: number;
 }
 
 interface StubConfig {
   invocationsFile: string;
-  captureEnv?: string[];
   delegate?: string;
   responses?: Record<string, StubResponse>;
   fallback?: StubResponse;
@@ -37,9 +35,7 @@ interface StubConfig {
 
 const config = JSON.parse(readFileSync(`${process.execPath}.stub.json`, 'utf-8')) as StubConfig;
 const args = process.argv.slice(2);
-const env =
-  config.captureEnv && Object.fromEntries(config.captureEnv.map((key) => [key, process.env[key]]));
-appendFileSync(config.invocationsFile, JSON.stringify({ argv: args, env }) + '\n');
+appendFileSync(config.invocationsFile, JSON.stringify({ argv: args }) + '\n');
 
 if (config.delegate) {
   const result = spawnSync(config.delegate, args, { stdio: 'inherit' });
@@ -48,5 +44,4 @@ if (config.delegate) {
 
 const response = config.responses?.[args[0] ?? ''] ?? config.fallback ?? {};
 if (response.stdout) process.stdout.write(response.stdout);
-if (response.stderr) process.stderr.write(response.stderr);
 process.exit(response.exitCode ?? 0);

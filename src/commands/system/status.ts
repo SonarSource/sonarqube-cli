@@ -51,12 +51,14 @@ import {
   type ContainerRuntimeHealth,
 } from '@/core/host/environment/tool-detector.ts';
 import {
+  CONTAINER_SCANNER_BINARY_NAME,
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
 } from '@/core/host/install/install-types.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import {
   SCA_SCANNER_CLI_VERSION,
+  SONAR_CONTAINER_SCANNER_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
 import { mcpLoopbackAdvice, readMcpContainerSettings } from '@/core/host/mcp/mcp-network.ts';
@@ -121,12 +123,14 @@ const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SECRETS_SPEC.name]: SECRETS_SPEC.version,
   [CONTEXT_AUGMENTATION_BINARY_NAME]: SONAR_CONTEXT_AUGMENTATION_VERSION,
   [SCA_SCANNER_BINARY_NAME]: SCA_SCANNER_CLI_VERSION,
+  [CONTAINER_SCANNER_BINARY_NAME]: SONAR_CONTAINER_SCANNER_VERSION,
 };
 
 const BINARY_DISPLAY_NAMES: Record<string, string> = {
-  'sonar-secrets': 'Secrets Detection',
-  'sonar-context-augmentation': 'Vortex Context',
-  'sca-scanner-cli': 'Dependency Risks Scanner',
+  [SECRETS_SPEC.name]: 'Secrets Detection',
+  [CONTEXT_AUGMENTATION_BINARY_NAME]: 'Vortex Context',
+  [SCA_SCANNER_BINARY_NAME]: 'Dependency Risks Scanner',
+  [CONTAINER_SCANNER_BINARY_NAME]: 'Container Scanner',
 };
 
 export const VALID_FORMATS = ['text', 'json'] as const;

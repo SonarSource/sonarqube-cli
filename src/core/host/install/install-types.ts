@@ -29,9 +29,24 @@ export interface PlatformInfo {
 export const SECRETS_BINARY_NAME = 'sonar-secrets';
 export const SCA_SCANNER_BINARY_NAME = 'sca-scanner-cli';
 export const CONTEXT_AUGMENTATION_BINARY_NAME = 'sonar-context-augmentation';
+export const CONTAINER_SCANNER_BINARY_NAME = 'sonar-container-scanner';
+
+export type PlatformNamingScheme = 'x64';
 
 export function buildPlatformSuffix(p: PlatformInfo): string {
   return `-${p.os}-${p.arch}${p.extension}`;
+}
+
+/**
+ * Format the `<os>-<arch>` platform key used by CDN download URLs and signature maps.
+ * When `naming` is `'x64'`, maps the CLI's canonical `x86-64` arch to `x64`.
+ */
+export function formatArtifactPlatformKey(
+  platform: Pick<PlatformInfo, 'os' | 'arch'>,
+  naming?: PlatformNamingScheme,
+): string {
+  const arch = naming === 'x64' && platform.arch === 'x86-64' ? 'x64' : platform.arch;
+  return `${platform.os}-${arch}`;
 }
 
 /**
@@ -41,6 +56,5 @@ export function buildPlatformSuffix(p: PlatformInfo): string {
  * matching local cached filename — `buildPlatformSuffix` is unchanged.
  */
 export function buildCagPlatformSuffix(p: PlatformInfo): string {
-  const arch = p.arch === 'x86-64' ? 'x64' : p.arch;
-  return `${p.os}-${arch}`;
+  return formatArtifactPlatformKey(p, 'x64');
 }
