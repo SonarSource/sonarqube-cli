@@ -25,7 +25,7 @@ The release report turns a run into data. The `report` job builds it with `repor
 
 ```
 index.json            reference, latest runs, former references (run ids)
-index.html            lists the runs, each linking to its run.json
+index.html            home page (report/home-page.ts and home-page-template.html): the reference, the latest runs, one run compared with the reference
 runs/<run id>/run.json, runs/<run id>/trials/<trial id>.json
 references/<run id>.json
 ```
