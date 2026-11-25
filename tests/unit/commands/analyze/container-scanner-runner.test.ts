@@ -27,12 +27,12 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import {
+  ContainerScanCancelledError,
   type ContainerScanOptions,
   prepareContainerScannerEnv,
   runContainerScanner,
 } from '@/commands/analyze/container-scanner-runner.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
 import * as configRepository from '@/core/config/config-repository.ts';
 import * as network from '@/core/host/connectivity/network-config.ts';
 import * as subprocess from '@/core/process/process.ts';
@@ -268,9 +268,9 @@ describe('runContainerScanner', () => {
       });
 
       const error = await runScanner().catch((err: unknown) => err);
-      expect(error).toBeInstanceOf(CommandFailedError);
-      expect((error as CommandFailedError).message).toBe('Container scan cancelled.');
-      expect((error as CommandFailedError).exitCode).toBe(expectedExitCode);
+      expect(error).toBeInstanceOf(ContainerScanCancelledError);
+      expect((error as ContainerScanCancelledError).message).toBe('Container scan cancelled.');
+      expect((error as ContainerScanCancelledError).exitCode).toBe(expectedExitCode);
       expect(listenerCounts()).toEqual(before);
     },
   );
@@ -282,8 +282,8 @@ describe('runContainerScanner', () => {
       return Promise.reject(new subprocess.ProcessTimedOutError('timed out'));
     });
     const cancelled = await runScanner().catch((err: unknown) => err);
-    expect(cancelled).toBeInstanceOf(CommandFailedError);
-    expect((cancelled as CommandFailedError).exitCode).toBe(130);
+    expect(cancelled).toBeInstanceOf(ContainerScanCancelledError);
+    expect((cancelled as ContainerScanCancelledError).exitCode).toBe(130);
     expect(listenerCounts()).toEqual(before);
 
     const timeoutError = new subprocess.ProcessTimedOutError('hung');

@@ -82,31 +82,19 @@ const SCRATCH_RM_RETRY_DELAY_MS = 100;
 const MAX_TIMER_MS = 2_147_483_647;
 const TIMED_SCANNER_PHASES = 3;
 const WATCHDOG_GRACE_SECS = 30;
-const HANGUP_EXIT_CODE = 129;
-const INTERRUPTED_EXIT_CODE = 130;
-const TERMINATED_EXIT_CODE = 143;
+const CANCELLATION_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 } as const;
 
-type CancellationSignal = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
+type CancellationSignal = keyof typeof CANCELLATION_EXIT_CODES;
+export type ContainerScanCancellationExitCode =
+  (typeof CANCELLATION_EXIT_CODES)[CancellationSignal];
 
-function signalExitCode(signal: CancellationSignal): number {
-  switch (signal) {
-    case 'SIGHUP':
-      return HANGUP_EXIT_CODE;
-    case 'SIGINT':
-      return INTERRUPTED_EXIT_CODE;
-    case 'SIGTERM':
-      return TERMINATED_EXIT_CODE;
-    default: {
-      const exhaustive: never = signal;
-      throw new Error(`Unexpected signal: ${String(exhaustive)}`);
-    }
+export class ContainerScanCancelledError extends CommandFailedError {
+  declare readonly exitCode: ContainerScanCancellationExitCode;
+
+  constructor(signal: CancellationSignal) {
+    super('Container scan cancelled.', { exitCode: CANCELLATION_EXIT_CODES[signal] });
+    this.name = 'ContainerScanCancelledError';
   }
-}
-
-function cancelledScanError(signal: CancellationSignal): CommandFailedError {
-  return new CommandFailedError('Container scan cancelled.', {
-    exitCode: signalExitCode(signal),
-  });
 }
 
 export async function prepareContainerScannerEnv(
@@ -237,10 +225,10 @@ export async function runContainerScanner(
         'The container scanner did not exit after its scan timeout.',
       );
     } catch (error) {
-      if (cancelledBy) throw cancelledScanError(cancelledBy);
+      if (cancelledBy) throw new ContainerScanCancelledError(cancelledBy);
       throw error;
     }
-    if (cancelledBy) throw cancelledScanError(cancelledBy);
+    if (cancelledBy) throw new ContainerScanCancelledError(cancelledBy);
     return result;
   } finally {
     for (const [signal, listener] of listeners) {
