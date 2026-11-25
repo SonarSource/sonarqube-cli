@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { RequestScheduler } from '@/core/devops/request-scheduler.ts';
 import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import {
   HTTP_STATUS_BAD_GATEWAY,
@@ -67,11 +68,9 @@ async function callWithRetry(
       response.status === HTTP_STATUS_SERVICE_UNAVAILABLE ||
       response.status === HTTP_STATUS_GATEWAY_TIMEOUT;
     if (!retryable || attempt >= MAX_RETRIES) return response;
-    const parsed = Number.parseInt(response.headers.get('Retry-After') ?? '', 10);
-    const retryAfterS = Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_RETRY_AFTER_S;
     const delayMs =
       response.status === HTTP_STATUS_TOO_MANY_REQUESTS
-        ? (retryAfterS + 1) * 1000
+        ? rateLimitDelay(response)
         : RETRY_5XX_DELAY_MS;
     const reason =
       response.status === HTTP_STATUS_TOO_MANY_REQUESTS
@@ -103,6 +102,7 @@ async function assertOk(response: Response, context: string): Promise<void> {
 }
 
 export class GitLabClient {
+  private scheduler = new RequestScheduler();
   private readonly baseUrl: string;
   private readonly token: string;
 
@@ -116,7 +116,9 @@ export class GitLabClient {
   }
 
   withRetryHandler(onRetry: (message: string) => void): GitLabClient {
-    return new GitLabClient(this.baseUrl, this.token, { ...this.options, onRetry });
+    const client = new GitLabClient(this.baseUrl, this.token, { ...this.options, onRetry });
+    client.scheduler = this.scheduler;
+    return client;
   }
 
   private headers(): Record<string, string> {
@@ -132,14 +134,29 @@ export class GitLabClient {
   }
 
   private fetchGet(url: string): Promise<Response> {
-    return callWithRetry(
-      () => fetchAuthenticated(url, buildRequest('GET', this.headers(), GET_TIMEOUT_MS, undefined)),
-      this.options.onRetry,
-    );
+    return callWithRetry(() => this.request(url, 'GET'), this.options.onRetry);
   }
 
   private fetchWrite(url: string, method: string, body?: string): Promise<Response> {
-    return fetchAuthenticated(url, buildRequest(method, this.headers(), WRITE_TIMEOUT_MS, body));
+    return this.request(url, method, body);
+  }
+
+  private request(url: string, method: string, body?: string): Promise<Response> {
+    return this.scheduler.run(method !== 'GET', async () => {
+      const response = await fetchAuthenticated(
+        url,
+        buildRequest(
+          method,
+          this.headers(),
+          method === 'GET' ? GET_TIMEOUT_MS : WRITE_TIMEOUT_MS,
+          body,
+        ),
+      );
+      if (response.status === HTTP_STATUS_TOO_MANY_REQUESTS) {
+        this.scheduler.coolDown(rateLimitDelay(response));
+      }
+      return response;
+    });
   }
 
   private async fetchAllPages<T>(
@@ -285,4 +302,10 @@ export class GitLabClient {
     const response = await this.fetchWrite(url, 'DELETE');
     await assertOk(response, `deleteBranch projectId=${projectId} branch=${branchName}`);
   }
+}
+
+function rateLimitDelay(response: Response): number {
+  const parsed = Number.parseInt(response.headers.get('Retry-After') ?? '', 10);
+  const seconds = Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_RETRY_AFTER_S;
+  return (seconds + 1) * 1000;
 }
