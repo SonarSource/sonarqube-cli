@@ -73,6 +73,14 @@ function getCaseVariantEnv(env: NodeJS.ProcessEnv, varName: string): string | un
   return env[varName.toLowerCase()] ?? env[varName];
 }
 
+/** Generic proxy env vars stripped from subprocesses once the CLI injects its resolved `SONAR_*` tier. */
+export const GENERIC_PROXY_ENV_NAMES = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+] as const;
+
 const PROXY_CONFIGS: Array<SourcedValue<ProxyEnvVars>> = [
   {
     value: {

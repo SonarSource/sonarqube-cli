@@ -19,6 +19,10 @@
  */
 
 import { rejects } from 'node:assert/strict';
+import * as fs from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
@@ -28,6 +32,7 @@ import {
 } from '@/commands/analyze/container-scanner-runner.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import * as configRepository from '@/core/config/config-repository.ts';
 import * as network from '@/core/host/connectivity/network-config.ts';
 import * as subprocess from '@/core/process/process.ts';
 
@@ -109,7 +114,7 @@ describe('prepareContainerScannerEnv', () => {
       clientCert: {
         certPath: '/etc/ssl/client.pem',
         keyPath: '/etc/ssl/client-key.pem',
-        passphrase: 'secret-passphrase',
+        passphrase: 'test-passphrase-placeholder',
         source: 'sonar-env',
         explicit: true,
         format: 'pem',
@@ -121,8 +126,8 @@ describe('prepareContainerScannerEnv', () => {
     const baseEnv: NodeJS.ProcessEnv = {
       SONAR_TLS_CLIENT_CERT: '/etc/ssl/client.pem',
       SONAR_TLS_CLIENT_KEY_FILE: '/etc/ssl/client-key.pem',
-      SONAR_TLS_CLIENT_PASSPHRASE: 'secret-passphrase',
-      sonar_tls_client_passphrase: 'lowercase-secret',
+      SONAR_TLS_CLIENT_PASSPHRASE: 'test-passphrase-placeholder',
+      sonar_tls_client_passphrase: 'lowercase-passphrase-placeholder',
       KEEP_ME: 'yes',
     };
 
@@ -134,6 +139,79 @@ describe('prepareContainerScannerEnv', () => {
     expect(upperKeys).not.toContain('SONAR_TLS_CLIENT_CERT');
     expect(upperKeys).not.toContain('SONAR_TLS_CLIENT_KEY_FILE');
     expect(upperKeys).not.toContain('SONAR_TLS_CLIENT_PASSPHRASE');
+    expect(env.KEEP_ME).toBe('yes');
+  });
+
+  it('strips inherited HTTPS_PROXY/https_proxy when SONAR_HTTP_PROXY_URL wins the proxy tier', async () => {
+    const baseEnv: NodeJS.ProcessEnv = {
+      SONAR_HTTP_PROXY_URL: 'http://sonar-http-proxy.example:8080',
+      HTTPS_PROXY: 'http://inherited-https-proxy.example:3128',
+      https_proxy: 'http://inherited-lower-https-proxy.example:3128',
+      HTTP_PROXY: 'http://inherited-http-proxy.example:3128',
+      NO_PROXY: 'inherited.corp.example',
+      no_proxy: 'inherited-lower.corp.example',
+      KEEP_ME: 'yes',
+    };
+    spyOn(configRepository, 'getConfigValue').mockResolvedValue(undefined);
+    spyOn(network, 'getNetworkConfig').mockImplementation(() =>
+      network.resolveNetworkConfig(baseEnv),
+    );
+
+    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
+    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
+
+    expect(env.SONAR_HTTP_PROXY_URL).toBe('http://sonar-http-proxy.example:8080');
+    expect(env.SONAR_HTTPS_PROXY_URL).toBeUndefined();
+    expect(env.SONAR_NO_PROXY).toBeUndefined();
+    expect(upperKeys).not.toContain('HTTPS_PROXY');
+    expect(upperKeys).not.toContain('HTTP_PROXY');
+    expect(upperKeys).not.toContain('NO_PROXY');
+    expect(env.KEEP_ME).toBe('yes');
+  });
+
+  it('strips ALL_PROXY and all_proxy from the scanner environment', async () => {
+    const baseEnv: NodeJS.ProcessEnv = {
+      ALL_PROXY: 'socks5://proxy.example:1080',
+      all_proxy: 'socks5://lower-proxy.example:1080',
+      KEEP_ME: 'yes',
+    };
+    spyOn(configRepository, 'getConfigValue').mockResolvedValue(undefined);
+    spyOn(network, 'getNetworkConfig').mockImplementation(() =>
+      network.resolveNetworkConfig(baseEnv),
+    );
+
+    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
+    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
+
+    expect(upperKeys).not.toContain('ALL_PROXY');
+    expect(env.SONAR_HTTPS_PROXY_URL).toBeUndefined();
+    expect(env.SONAR_HTTP_PROXY_URL).toBeUndefined();
+    expect(env.KEEP_ME).toBe('yes');
+  });
+
+  it('translates generic-only HTTPS_PROXY, HTTP_PROXY, and NO_PROXY to SONAR_* while stripping generic vars', async () => {
+    const baseEnv: NodeJS.ProcessEnv = {
+      HTTPS_PROXY: 'http://generic-https.example:3128',
+      HTTP_PROXY: 'http://generic-http.example:3128',
+      NO_PROXY: 'localhost,internal.example',
+      all_proxy: 'socks5://ignored.example:1080',
+      KEEP_ME: 'yes',
+    };
+    spyOn(configRepository, 'getConfigValue').mockResolvedValue(undefined);
+    spyOn(network, 'getNetworkConfig').mockImplementation(() =>
+      network.resolveNetworkConfig(baseEnv),
+    );
+
+    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
+    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
+
+    expect(env.SONAR_HTTPS_PROXY_URL).toBe('http://generic-https.example:3128');
+    expect(env.SONAR_HTTP_PROXY_URL).toBe('http://generic-http.example:3128');
+    expect(env.SONAR_NO_PROXY).toBe('localhost,internal.example');
+    expect(upperKeys).not.toContain('HTTPS_PROXY');
+    expect(upperKeys).not.toContain('HTTP_PROXY');
+    expect(upperKeys).not.toContain('NO_PROXY');
+    expect(upperKeys).not.toContain('ALL_PROXY');
     expect(env.KEEP_ME).toBe('yes');
   });
 
@@ -191,7 +269,14 @@ describe('runContainerScanner', () => {
         '--',
         '--licenses',
       ],
-      expect.objectContaining({ env, isolateEnv: true }),
+      expect.objectContaining({
+        env: expect.objectContaining({
+          SONAR_CONTAINER_SCANNER_TOKEN: 'resolved-token',
+          TMPDIR: expect.any(String),
+        }),
+        isolateEnv: true,
+        killProcessTree: true,
+      }),
       45_000,
       'The container scanner did not exit after its scan timeout.',
     );
@@ -218,7 +303,11 @@ describe('runContainerScanner', () => {
         '--',
         'alpine:3.20',
       ],
-      expect.objectContaining({ env: {}, isolateEnv: true }),
+      expect.objectContaining({
+        env: expect.objectContaining({ TMPDIR: expect.any(String) }),
+        isolateEnv: true,
+        killProcessTree: true,
+      }),
       930_000,
       'The container scanner did not exit after its scan timeout.',
     );
@@ -317,5 +406,121 @@ describe('runContainerScanner', () => {
     expect(error).toBe(timeoutError);
     expect(process.listenerCount('SIGINT')).toBe(existingSigint);
     expect(process.listenerCount('SIGTERM')).toBe(existingSigterm);
+  });
+
+  it('creates a per-run scratch temp dir under the inherited temp root, strips case variants, and removes it on success', async () => {
+    const inheritedRoot = mkdtempSync(join(tmpdir(), 'container-runner-root-'));
+    let capturedScratchDir: string | undefined;
+    let capturedEnv: NodeJS.ProcessEnv | undefined;
+    try {
+      spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
+        capturedEnv = options.env;
+        capturedScratchDir = options.env?.TMPDIR;
+        expect(capturedScratchDir).toBeDefined();
+        expect(dirname(capturedScratchDir!)).toBe(inheritedRoot);
+        expect(existsSync(capturedScratchDir!)).toBe(true);
+        writeFileSync(join(capturedScratchDir!, 'exported-layer.tar'), 'scratch-data');
+        return Promise.resolve(SCAN_RESULT);
+      });
+
+      const result = await runContainerScanner(
+        'sonar-container-scanner',
+        'alpine:3.20',
+        { timeoutSecs: 5, failOn: 'high' },
+        { TMPDIR: inheritedRoot, tmpdir: '/lowercase/old', KEEP_ME: 'yes' },
+      );
+
+      expect(result).toEqual(SCAN_RESULT);
+      expect(capturedEnv?.KEEP_ME).toBe('yes');
+      expect(
+        Object.keys(capturedEnv ?? {}).filter((key) => key.toUpperCase() === 'TMPDIR'),
+      ).toEqual(['TMPDIR']);
+      if (process.platform === 'win32') {
+        expect(capturedEnv?.TMP).toBe(capturedScratchDir);
+        expect(capturedEnv?.TEMP).toBe(capturedScratchDir);
+      }
+      expect(existsSync(capturedScratchDir!)).toBe(false);
+    } finally {
+      rmSync(inheritedRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('removes the per-run scratch temp dir on spawn failure', async () => {
+    let capturedScratchDir: string | undefined;
+    const timeoutError = new subprocess.ProcessTimedOutError('hung');
+    spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
+      capturedScratchDir = options.env?.TMPDIR;
+      expect(capturedScratchDir).toBeDefined();
+      expect(existsSync(capturedScratchDir!)).toBe(true);
+      writeFileSync(join(capturedScratchDir!, 'partial-export.tar'), 'partial');
+      return Promise.reject(timeoutError);
+    });
+
+    const error = await runContainerScanner(
+      'sonar-container-scanner',
+      'alpine:3.20',
+      { timeoutSecs: 5, failOn: 'high' },
+      {},
+    ).catch((err: unknown) => err);
+
+    expect(error).toBe(timeoutError);
+    expect(existsSync(capturedScratchDir!)).toBe(false);
+  });
+
+  it('removes the per-run scratch temp dir on signal abort', async () => {
+    let capturedScratchDir: string | undefined;
+    spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
+      capturedScratchDir = options.env?.TMPDIR;
+      expect(capturedScratchDir).toBeDefined();
+      expect(existsSync(capturedScratchDir!)).toBe(true);
+      writeFileSync(join(capturedScratchDir!, 'aborted-export.tar'), 'aborted');
+      const cancel = process.listeners('SIGINT').at(-1);
+      cancel?.('SIGINT');
+      return Promise.resolve(SCAN_RESULT);
+    });
+
+    const error = await runContainerScanner(
+      'sonar-container-scanner',
+      'alpine:3.20',
+      { timeoutSecs: 5, failOn: 'high' },
+      {},
+    ).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    expect((error as CommandFailedError).exitCode).toBe(130);
+    expect(existsSync(capturedScratchDir!)).toBe(false);
+  });
+
+  it('does not mask scan outcomes if scratch temp dir cleanup fails', async () => {
+    let capturedScratchDir: string | undefined;
+    spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
+      capturedScratchDir = options.env?.TMPDIR;
+      return Promise.resolve(SCAN_RESULT);
+    });
+    const rmSpy = spyOn(fs, 'rmSync').mockImplementation(() => {
+      throw new Error('EBUSY: file locked');
+    });
+
+    try {
+      const result = await runContainerScanner(
+        'sonar-container-scanner',
+        'alpine:3.20',
+        { timeoutSecs: 5, failOn: 'high' },
+        {},
+      );
+
+      expect(result).toEqual(SCAN_RESULT);
+      expect(rmSpy).toHaveBeenCalledWith(capturedScratchDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 3,
+        retryDelay: 100,
+      });
+    } finally {
+      rmSpy.mockRestore();
+      if (capturedScratchDir) {
+        rmSync(capturedScratchDir, { recursive: true, force: true });
+      }
+    }
   });
 });
