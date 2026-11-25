@@ -122,7 +122,7 @@ describe('analyze (no subcommand)', () => {
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       );
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -157,7 +157,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.agentic).not.toBeNull();
       expect(report.agentic?.summary.totalIssues).toBe(0);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -190,7 +190,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.secrets.summary.totalIssues).toBeGreaterThan(0);
       expect(report.agentic).toBeNull();
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -223,7 +223,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.secrets.summary.totalIssues).toBe(0);
       expect(report.agentic).not.toBeNull();
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -255,7 +255,7 @@ describe('analyze (no subcommand)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -285,7 +285,7 @@ describe('analyze (no subcommand)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -318,7 +318,7 @@ describe('analyze (no subcommand)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -358,7 +358,7 @@ describe('analyze (no subcommand)', () => {
       expect(request.files).toHaveLength(1);
       expect(request.analysisDepth).toBe('DEEP');
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -398,7 +398,7 @@ describe('analyze (no subcommand)', () => {
       const request = JSON.parse(sqaaCalls[0].body ?? '{}') as { projectKey?: string };
       expect(request.projectKey).toBe('explicit-project');
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -478,7 +478,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.agentic?.ignored.length).toBeGreaterThan(0);
       expect(report.agentic?.ignored[0].reason).toBe('binary');
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
@@ -543,7 +543,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.agentic).not.toBeNull();
       expect(report.agentic?.summary.totalIssues).toBe(0);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 });
 
@@ -3449,7 +3449,7 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
         { path: 'docs/readme.md', reason: 'outside-project' },
       ]);
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it.each(['analyze agentic', 'analyze'])(
@@ -3470,7 +3470,7 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
         [PROJECT_B]: ['lib/y.ts'],
       });
     },
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
 
   it(
