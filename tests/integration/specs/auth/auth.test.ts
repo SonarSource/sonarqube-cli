@@ -1920,6 +1920,7 @@ describe('auth login — server selection', () => {
 
       const session = harness.runInteractive('auth login', {
         extraEnv: {
+          SONARQUBE_CLI_MOCK_TTY: '1',
           SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
           SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },

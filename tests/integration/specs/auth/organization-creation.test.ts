@@ -129,6 +129,9 @@ describe('auth login organization creation', () => {
       await session.decline('Create an organization now?');
       const result = await session.waitFinish();
       expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        "Join a SonarQube Cloud organization, then run 'sonar auth login' again.",
+      );
       expect(server.getRecordedRequests().some((r) => r.path === '/api/organizations/create')).toBe(
         false,
       );
