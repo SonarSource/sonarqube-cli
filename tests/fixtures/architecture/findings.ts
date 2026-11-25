@@ -82,4 +82,16 @@ export const findings: ProjectFinding[] = [
     details: { nodeKey: 'util', fragmentCount: 3 },
     files: [],
   },
+  {
+    type: 'assertionDeviation',
+    category: 'deviation',
+    language: 'java',
+    details: {
+      assertionName: 'web-not-db',
+      fromNodeKey: 'app:web',
+      toNodeKey: 'app:db',
+      dependencyCount: 2,
+    },
+    files: ['Web.java'],
+  },
 ];

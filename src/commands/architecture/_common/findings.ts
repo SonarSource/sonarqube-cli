@@ -34,6 +34,7 @@ export const FINDING_CATEGORIES = ['deviation', 'flaw', 'smell'] as const;
 export const FINDING_TYPES = [
   'structuralDeviation',
   'relationshipDeviation',
+  'assertionDeviation',
   'tangle',
   'oversizedComponent',
   'weakTangle',
@@ -45,6 +46,7 @@ export type FindingType = (typeof FINDING_TYPES)[number];
 export interface FindingDetails {
   reason?:
     'misplacedComponent' | 'unimplementedComponent' | 'disallowedDependency' | 'interfaceViolation';
+  assertionName?: string;
   nodeKey?: string;
   fromNodeKey?: string;
   toNodeKey?: string;
@@ -84,6 +86,7 @@ export interface FindingsApi {
 export const CATEGORIES_BY_TYPE: Record<FindingType, FindingCategory> = {
   structuralDeviation: 'deviation',
   relationshipDeviation: 'deviation',
+  assertionDeviation: 'deviation',
   tangle: 'flaw',
   oversizedComponent: 'flaw',
   weakTangle: 'smell',
@@ -245,6 +248,13 @@ function parseDetails(type: FindingType, details: Record<string, unknown>): Find
         toNodeKey: stringOf(details.toNodeKey),
         ...optionalCount(details, 'dependencyCount'),
       };
+    case 'assertionDeviation':
+      return {
+        assertionName: stringOf(details.assertionName),
+        fromNodeKey: stringOf(details.fromNodeKey),
+        toNodeKey: stringOf(details.toNodeKey),
+        dependencyCount: positiveCountOf(details.dependencyCount),
+      };
     case 'tangle':
     case 'weakTangle':
       return { nodeKeys: stringsOf(details.nodeKeys), nodeCount: countOf(details.nodeCount) };
@@ -276,6 +286,11 @@ function countOf(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
     throw invalidFinding('expected nonnegative integer count');
   return value;
+}
+function positiveCountOf(value: unknown): number {
+  const count = countOf(value);
+  if (count < 1) throw invalidFinding('expected positive integer count');
+  return count;
 }
 function optionalCount(details: Record<string, unknown>, name: string): Record<string, number> {
   return details[name] == null ? {} : { [name]: countOf(details[name]) };
