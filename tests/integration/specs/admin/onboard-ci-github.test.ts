@@ -134,6 +134,7 @@ describe('GitHub bulk CI onboarding', () => {
       github,
       server,
       client,
+      connection,
       telemetryEvents,
       run: (options = OPTIONS, workflowTemplate = validateOnboardCiGithubOptions(options)) => {
         let telemetry: OnboardingTelemetry | null = null;
@@ -145,6 +146,15 @@ describe('GitHub bulk CI onboarding', () => {
       },
     };
   }
+
+  it('opens a PR when no telemetry collector is provided', async () => {
+    const { connection, client } = await setup();
+
+    await onboardCiGithub(connection, client, OPTIONS, console);
+
+    expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson().opened).toHaveLength(1);
+    expect(console.findCall('outro', 'Opened 1 PRs')).toBeDefined();
+  });
 
   it.each([false, true])(
     'skips repositories with multiple project keys (dry run: %s)',
