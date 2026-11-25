@@ -47,6 +47,7 @@ import {
   readMcpContainerSettings,
   resolveMcpContainerNetworking,
 } from '@/core/host/mcp/mcp-network.ts';
+import { type McpTransport, resolveMcpTransport } from '@/core/host/mcp/mcp-transport.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
@@ -57,7 +58,7 @@ import {
 import { bridgeHostedMcp } from './hosted-mcp-bridge.ts';
 
 export interface McpRunOptions {
-  transport?: 'stdio' | 'http' | 'auto';
+  transport?: McpTransport;
   debug?: boolean;
   readOnly?: boolean;
   toolsets?: string;
@@ -83,6 +84,7 @@ export async function runMcp(
 ): Promise<void> {
   let resolvedNetwork: ResolvedNetworkConfig | undefined;
   try {
+    options = { ...options, transport: (await resolveMcpTransport(options.transport)).mode };
     resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
     const auth = await resolveMcpAuth(ctx);
     if (options.transport !== 'stdio' && (await tryRunHostedMcp(ctx, auth, options))) return;
@@ -175,7 +177,7 @@ async function runMcpContainer(
   const container = resolveMcpContainerNetworking(auth, detection, settings);
   if (options.transport === 'stdio') {
     process.stderr.write(
-      `[sonarqube-cli] MCP: local container via ${detection.runtime} — ${container.serverUrl} (forced by --transport stdio)\n`,
+      `[sonarqube-cli] MCP: local container via ${detection.runtime} — ${container.serverUrl}\n`,
     );
   }
   const config = resolveMcpContainerCommand(
