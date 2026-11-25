@@ -27,6 +27,7 @@ import type { Console, PhaseItem } from '@/core/ui/console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
+import { withAgentInstallLock } from '../integrate/_common/agent-install-lock.ts';
 import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';
 import { clearConfig } from './reset-config.ts';
@@ -84,6 +85,13 @@ export async function systemReset(
     }
   }
 
+  await withAgentInstallLock(
+    () => resetEnvironment(console, options),
+    'Could not start reset. Retry sonar system reset shortly.',
+  );
+}
+
+async function resetEnvironment(console: Console, options: SystemResetOptions): Promise<void> {
   console.info('Cleaning up SonarQube CLI environment...');
 
   const state = loadState();
@@ -135,6 +143,7 @@ export async function systemReset(
       updateState((latest) => {
         applyCleanedState(latest, mergeCleanedFields(results.map((r) => r.cleaned)));
         clearLegacyState(latest);
+        delete latest.integrations.onboarding;
         // Not tied to any step above — would otherwise survive reset indefinitely.
         latest.knownServerProjectMappings = [];
       });

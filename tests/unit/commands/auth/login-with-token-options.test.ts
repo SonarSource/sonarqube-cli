@@ -49,7 +49,7 @@ afterEach(() => {
   }
 });
 
-function login(options: Parameters<typeof authLogin>[0]): Promise<void> {
+function login(options: Parameters<typeof authLogin>[0]): ReturnType<typeof authLogin> {
   return authLogin(options, new CommandInvocationContext(new FakeConsole()));
 }
 

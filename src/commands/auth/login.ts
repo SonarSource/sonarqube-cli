@@ -66,6 +66,11 @@ import {
 } from './revoke-server-token.ts';
 import { confirmServerTrust, resolveServer } from './select-server.ts';
 
+export interface LoginTarget {
+  server: string;
+  org?: string;
+}
+
 type LoginStep =
   | { kind: 'new_login'; tokenSaved: true }
   | { kind: 'stored_login'; auth: BrowserAuthResult; tokenSaved: true }
@@ -79,12 +84,11 @@ export async function authLogin(
   options: AuthLoginOptions,
   ctx: CommandInvocationContext,
   hooks?: AuthLoginHooks,
-): Promise<void> {
+): Promise<LoginTarget> {
   const { console } = ctx;
   validateLoginOptions(options);
   if (options.withToken) {
-    await authLoginWithToken(options, console);
-    return;
+    return authLoginWithToken(options, console);
   }
   const authResult = await ctx.resolveAuth({ silent: true });
   if (authResult.isErr()) {
@@ -111,7 +115,7 @@ export async function authLogin(
     }
 
     const step = await resolveLoginStep(server, storedLogin, orgOption, console);
-    await executeLoginStep(
+    const org = await executeLoginStep(
       step,
       server,
       isCloud,
@@ -126,6 +130,7 @@ export async function authLogin(
         ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,
       );
     }
+    return { server, org };
   } finally {
     // The token step leaves stdin resumed for Windows keypresses, and a resumed TTY keeps the
     // process alive. Release it on every exit path, not only on success. That step resumes stdin
@@ -203,10 +208,10 @@ async function executeLoginStep(
   console: Console,
   invocationOrgKey: string | undefined,
   onNoMemberships: OnNoMemberships | undefined,
-): Promise<void> {
+): Promise<string | undefined> {
   switch (step.kind) {
     case 'new_login':
-      await loginWithNewToken(
+      return loginWithNewToken(
         server,
         isCloud,
         orgOption,
@@ -214,9 +219,8 @@ async function executeLoginStep(
         invocationOrgKey,
         onNoMemberships,
       );
-      break;
     case 'stored_login':
-      await loginWithStoredToken(
+      return loginWithStoredToken(
         server,
         isCloud,
         step.auth,
@@ -224,13 +228,12 @@ async function executeLoginStep(
         invocationOrgKey,
         onNoMemberships,
       );
-      break;
     case 'switch_organization':
       await switchStoredLoginOrganization(server, step.org, step.auth, console);
-      break;
+      return step.org;
     case 'keep_organization':
       console.print(`Already using organization: ${step.org}`);
-      break;
+      return step.org;
   }
 }
 
@@ -261,7 +264,7 @@ async function loginWithStoredToken(
   console: Console,
   activeOrgKey: string | undefined,
   onNoMemberships: OnNoMemberships | undefined,
-): Promise<void> {
+): Promise<string | undefined> {
   const org = await resolveOrganization(
     server,
     isCloud,
@@ -272,6 +275,7 @@ async function loginWithStoredToken(
     onNoMemberships,
   );
   await completeLogin(server, isCloud, org, auth, console);
+  return org;
 }
 
 /**
@@ -287,7 +291,7 @@ async function loginWithNewToken(
   console: Console,
   activeOrgKey: string | undefined,
   onNoMemberships: OnNoMemberships | undefined,
-): Promise<void> {
+): Promise<string | undefined> {
   const auth = await generateToken(server, console);
 
   let org: string | undefined;
@@ -307,6 +311,7 @@ async function loginWithNewToken(
   }
 
   await completeLogin(server, isCloud, org, auth, console);
+  return org;
 }
 
 async function completeLogin(
@@ -325,7 +330,10 @@ async function completeLogin(
   console.success(`Authentication successful for: ${displayServer}`);
 }
 
-async function authLoginWithToken(options: AuthLoginOptions, console: Console): Promise<void> {
+async function authLoginWithToken(
+  options: AuthLoginOptions,
+  console: Console,
+): Promise<LoginTarget> {
   assertNoEnvironmentAuthentication();
   if (options.server !== undefined) {
     assertNoCleartextTokenDowngrade(options.server);
@@ -374,6 +382,7 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
 
   const displayServer = isCloud ? `${server} (${org})` : server;
   console.success(`Authentication successful for: ${displayServer}`);
+  return { server, org };
 }
 
 function assertNoEnvironmentAuthentication(): void {
