@@ -312,6 +312,48 @@ describe('spawnProcess stdin, against a mocked child', () => {
     expect(Buffer.concat(written).toString()).toBe('hello');
     expect(stream.writableEnded).toBe(true);
   });
+
+  it('kills the child when options.signal aborts after spawn', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+    const controller = new AbortController();
+
+    const running = spawnProcess('child', [], { signal: controller.signal });
+    expect(proc.killed).toBe(false);
+
+    controller.abort();
+    expect(proc.killed).toBe(true);
+
+    proc.emit('close', null, 'SIGTERM');
+    const result = await running;
+    expect(result.signal).toBe('SIGTERM');
+  });
+
+  it('kills the child immediately when options.signal is already aborted', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+    const controller = new AbortController();
+    controller.abort();
+
+    const running = spawnProcess('child', [], { signal: controller.signal });
+    expect(proc.killed).toBe(true);
+
+    proc.emit('close', null, 'SIGTERM');
+    await running;
+  });
+
+  it('removes the abort listener when the child closes normally', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+    const controller = new AbortController();
+    const removeListener = spyOn(controller.signal, 'removeEventListener');
+
+    const running = spawnProcess('child', [], { signal: controller.signal });
+    proc.emit('close', 0);
+    await running;
+
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
 });
 
 describe('spawnProcessCapturingBytes', () => {
