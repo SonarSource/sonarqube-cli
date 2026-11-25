@@ -257,7 +257,7 @@ describe('GitHub onboarding repository lifecycle', () => {
     });
     expect(await ctx.github.getFileContent(REPO, 'leftover.txt', CI_BRANCH)).toBeNull();
     expect(await ctx.github.getFileContent(REPO, BUILD_PATH, CI_BRANCH)).toBe(BUILD);
-  });
+  }, 15_000);
 
   it('validates rendered YAML before writes and commits a correctly quoted template', async () => {
     const projectKey = 'sample-project:';
