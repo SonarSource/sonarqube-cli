@@ -40,7 +40,7 @@ import { TestHarness } from '../../harness/index.js';
 
 const REPO = 'test-org/sample';
 const PROJECT = 'sample-project';
-const BINDINGS = new Map([[REPO, PROJECT]]);
+const BINDINGS = new Map([[REPO, new Set([PROJECT])]]);
 const BUILD_PATH = '.github/workflows/build.yml';
 const BUILD =
   'name: Build\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./gradlew build\n';
@@ -135,7 +135,7 @@ describe('GitHub onboarding repository lifecycle', () => {
   it('matches mixed-case GitHub names against lowercase bindings', async () => {
     const projectKey = 'MixedCaseProject';
     const { ctx, repo } = await setup({ projectKey, fullName: 'Test-Org/Sample' });
-    const bindings = new Map([['test-org/sample', projectKey]]);
+    const bindings = new Map([['test-org/sample', new Set([projectKey])]]);
 
     expect(await assessRepo(ctx, repo, bindings)).toMatchObject({
       outcome: 'proceed',
@@ -260,16 +260,16 @@ describe('GitHub onboarding repository lifecycle', () => {
 
   it('validates rendered YAML before writes and commits a correctly quoted template', async () => {
     const projectKey = 'sample-project:';
-    const bindings = new Map([[REPO, projectKey]]);
+    const bindings = new Map([[REPO, new Set([projectKey])]]);
     const { ctx, repo, github } = await setup({ projectKey });
     ctx.workflowTemplate =
       'on: push\njobs:\n  scan:\n    runs-on: self-hosted\n    steps:\n      - run: echo {{SONAR_PROJECT_KEY}}\n';
-    const expectedFailure = {
-      outcome: 'failed' as const,
-      error: 'The workflow must contain valid, single-document YAML.',
-    };
-    expect(await assessRepo(ctx, repo, bindings)).toEqual(expectedFailure);
-    expect(await executeRepo(ctx, repo, bindings)).toEqual(expectedFailure);
+    expect(await assessRepo(ctx, repo, bindings).catch((error: unknown) => error)).toMatchObject({
+      message: expect.stringContaining('The workflow must contain valid, single-document YAML.'),
+    });
+    expect(await executeRepo(ctx, repo, bindings).catch((error: unknown) => error)).toMatchObject({
+      message: expect.stringContaining('The workflow must contain valid, single-document YAML.'),
+    });
     expect(github.getRecordedRequests().every((request) => request.method === 'GET')).toBe(true);
 
     ctx.workflowTemplate = ctx.workflowTemplate.replace(
@@ -282,23 +282,28 @@ describe('GitHub onboarding repository lifecycle', () => {
     );
   });
 
-  it('propagates Server and GitHub lookup failures as failures without writes', async () => {
+  it('propagates Server and GitHub lookup failures without writes', async () => {
     const { ctx, repo, github, server } = await setup();
-    expect(await assessRepo(ctx, repo, new Map([[REPO, 'missing-project']]))).toMatchObject({
-      outcome: 'failed',
-    });
+    expect(
+      await assessRepo(ctx, repo, new Map([[REPO, new Set(['missing-project'])]])).catch(
+        (error: unknown) => error,
+      ),
+    ).toMatchObject({ message: expect.stringContaining('missing or inaccessible') });
     ctx.components = new ComponentsClient(new SonarHttpClient(server.baseUrl(), 'wrong-token'));
-    expect(await assessRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'failed' });
+    expect(await assessRepo(ctx, repo, BINDINGS).catch((error: unknown) => error)).toBeInstanceOf(
+      Error,
+    );
     ctx.github = new GitHubClient('wrong-token', { baseUrl: github.baseUrl() });
-    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'failed' });
+    expect(await executeRepo(ctx, repo, BINDINGS).catch((error: unknown) => error)).toBeInstanceOf(
+      Error,
+    );
     expect(github.getRecordedRequests().every((request) => request.method === 'GET')).toBe(true);
   });
 
-  it('reports rejected writes and does not claim success', async () => {
+  it('rejects failed writes without creating a branch', async () => {
     const { ctx, repo } = await setup({ readOnly: true });
-    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({
-      outcome: 'failed',
-      error: expect.stringContaining('403'),
+    expect(await executeRepo(ctx, repo, BINDINGS).catch((error: unknown) => error)).toMatchObject({
+      message: expect.stringContaining('403'),
     });
     expect(await ctx.github.getBranch(REPO, CI_BRANCH)).toBeNull();
   });
@@ -317,15 +322,13 @@ describe('GitHub onboarding repository lifecycle', () => {
     });
     expect(await ctx.github.listOpenPullRequests(REPO, CI_BRANCH)).toHaveLength(1);
   });
-
-  it('reports a failed workflow write and succeeds on rerun', async () => {
+  it('rejects a failed workflow write and succeeds on rerun', async () => {
     const { ctx, repo } = await setup();
     spyOn(ctx.github, 'createFile').mockRejectedValueOnce(
       new Error('Connection lost before write'),
     );
-    expect(await executeRepo(ctx, repo, BINDINGS)).toEqual({
-      outcome: 'failed',
-      error: 'Connection lost before write',
+    expect(await executeRepo(ctx, repo, BINDINGS).catch((error: unknown) => error)).toMatchObject({
+      message: expect.stringContaining('Connection lost before write'),
     });
     expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'opened' });
   });
