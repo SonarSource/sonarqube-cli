@@ -1133,7 +1133,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     'Run SonarQube services',
   );
 
-  // Hidden command for running MCP server. Spawns MCP Docker container and proxies stdio for MCP transport.
+  // Hidden command for running MCP server. Connects to hosted MCP or spawns an MCP Docker container and proxies stdio for MCP transport.
   runCommand
     .command('mcp')
     .description('Run the SonarQube MCP server (stdio transport, for use in agent MCP configs)')
@@ -1143,10 +1143,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--toolsets <toolsets>',
       'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,vortex,portfolios)',
     )
-    .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
+    .option('-p, --project <project>', 'Container fallback project key (overrides auto-discovery)')
     .addHelpText(
       `after`,
-      `${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
+      `Uses hosted MCP when available, otherwise a local container.\n--project applies only to the container fallback; hosted tools accept project keys per call.\n${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
     )
     .anonymousAction(
       (
