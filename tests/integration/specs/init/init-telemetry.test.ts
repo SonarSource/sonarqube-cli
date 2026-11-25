@@ -413,6 +413,31 @@ describe('sonar init telemetry', () => {
   );
 
   it(
+    'reports a declined authorization that leaves no project on the unbound path',
+    async () => {
+      interactive();
+      await signInToCloud((s) =>
+        s.withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }]),
+      );
+      withRemote(GITHUB_REMOTE);
+
+      const session = harness.runInteractive('init');
+      await session.accept('Bind this repository to a new SonarQube project?');
+      await session.decline('Authorize it in the browser');
+      await session.decline(INTEGRATE_PROMPT);
+      await session.waitFinish();
+
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'unbound_new',
+          steps: ['project_bind:success', 'create_project:skipped'],
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
     'does not count a run as cancelled when there was nothing to decline',
     async () => {
       interactive();

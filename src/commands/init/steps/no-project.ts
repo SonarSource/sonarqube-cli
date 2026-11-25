@@ -39,6 +39,8 @@ const NO_PROJECT = 'No SonarQube project exists for this directory yet.';
  */
 export class NoProjectStep implements InitStep<InitOutcome> {
   readonly ref: StepRef;
+  // The telemetry id predates the removal of unbound creation, and names the same path.
+  readonly initPath = 'unbound_new';
 
   constructor(
     private readonly path: NoProjectPath,
