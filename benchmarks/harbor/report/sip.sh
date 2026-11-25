@@ -90,7 +90,11 @@ upload() {
 wait_for_checks() {
   local pull_request="$1" attempt
   for attempt in $(seq 1 40); do
-    api --fail-with-body -o "${work}/checks.json" "${base}/api/bundle/${app}/checks"
+    if ! api --fail-with-body -o "${work}/checks.json" "${base}/api/bundle/${app}/checks"; then
+      echo "SIP could not give the checks of ${pull_request} (attempt ${attempt}), trying again" >&2
+      sleep "${interval}"
+      continue
+    fi
     if [[ "$(jq -r .pullRequestUrl "${work}/checks.json")" == "${pull_request}" ]]; then
       if [[ "$(jq '.failedChecks | length' "${work}/checks.json")" != 0 ]]; then
         echo "Checks failed on ${pull_request}" >&2

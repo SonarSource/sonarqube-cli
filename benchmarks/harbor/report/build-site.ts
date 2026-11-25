@@ -1,10 +1,25 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 const SCHEMA_VERSION = 2;
 const MAX_RECENT_RUNS = 10;
 const SAFE_ID = /^[\w.-]+$/;
+const REDACTED = '[redacted]';
+const SECRET_PATTERNS = [
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g,
+  /\bsq[apu]_[0-9a-f]{40}\b/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bsk-ant-[A-Za-z0-9_-]{10,}/g,
+];
 
 interface RunFile {
   schemaVersion: number;
@@ -120,6 +135,17 @@ function renderPage(outDir: string, index: Index): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Harbor benchmark</title></head><body><h1>Harbor benchmark</h1>${sections}</body></html>\n`;
 }
 
+function redactTrials(trialsDir: string): void {
+  for (const name of readdirSync(trialsDir)) {
+    const path = join(trialsDir, name);
+    const text = readFileSync(path, 'utf8');
+    writeFileSync(
+      path,
+      SECRET_PATTERNS.reduce((result, pattern) => result.replace(pattern, REDACTED), text),
+    );
+  }
+}
+
 function checkTrials(outDir: string, id: string): void {
   const runDir = join(outDir, 'runs', id);
   for (const { id: trialId } of loadRun(join(runDir, 'run.json')).trials) {
@@ -146,6 +172,7 @@ function build(publishedDir: string, newRunDir: string, outDir: string): void {
       mkdirSync(target);
       cpSync(join(newRunDir, 'run.json'), join(target, 'run.json'));
       cpSync(join(newRunDir, 'trials'), join(target, 'trials'), { recursive: true });
+      redactTrials(join(target, 'trials'));
     } else {
       cpSync(join(publishedDir, 'runs', id), target, { recursive: true });
     }
