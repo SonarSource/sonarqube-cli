@@ -47,14 +47,10 @@ export interface BindableRoot {
 
 /**
  * The repository slug the new roots can be bound through, or null when they cannot be: binding
- * needs SonarQube Cloud, a GitHub or Azure DevOps remote, and a terminal to ask on, unless
- * `--bind` already gave the consent.
+ * needs SonarQube Cloud and a GitHub or Azure DevOps remote.
  */
-function bindableSlug(
-  remote: string | undefined,
-  { auth, interactive, intent }: DetectDeps,
-): string | null {
-  if (!remote || (!interactive && intent?.kind !== 'bind') || auth.connectionType !== 'cloud') {
+function bindableSlug(remote: string | undefined, { auth }: DetectDeps): string | null {
+  if (!remote || auth.connectionType !== 'cloud') {
     return null;
   }
   return remoteRepositorySlug(remote);
@@ -105,8 +101,10 @@ export async function bindNewRoots(
   }
   const { auth, http, console, dryRun } = deps;
   const noun = roots.length === 1 ? 'project' : 'projects';
+  // Without a terminal, binding is the default: nobody is there to decline it.
   const consent =
     required ||
+    !deps.interactive ||
     requireAnswer(
       await console.confirmPrompt(
         `Bind the ${roots.length} new ${noun} to the repository '${slug}'?`,

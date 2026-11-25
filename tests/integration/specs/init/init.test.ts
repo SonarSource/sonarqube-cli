@@ -327,14 +327,16 @@ describe('sonar init', () => {
   it(
     'continues with a note when the binding lookup cannot tell',
     async () => {
-      await signInToCloud((server) => server.withProjectBindingsStatus(500));
+      await signInToCloud((server) =>
+        withImportableRepo('github', 'example/repository')(server.withProjectBindingsStatus(500)),
+      );
       withRemote(GITHUB_REMOTE);
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(2);
+      expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain('Could not check whether this repository is already bound');
-      expect(result.stderr).toContain(NO_PROJECT);
+      expect(result.stdout).toContain('Created project');
     },
     TIMEOUT,
   );
@@ -342,18 +344,16 @@ describe('sonar init', () => {
   it(
     'resolves the repository remote from a subdirectory given with --path',
     async () => {
-      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      await signInToCloud((server) =>
+        server.withProject('bound_project').withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
+      );
       withRemote(GITHUB_REMOTE);
       harness.cwd.writeFile('packages/app/.keep', '');
 
       const result = await harness.run('init --path packages/app');
 
-      // Linking needs an answer, so the non-interactive run stops and asks for --link.
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain(
-        "A Sonar project already exists for this repository: 'bound_project'",
-      );
-      expect(result.stderr).toContain("Run 'sonar init' again with --link.");
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
     },
     TIMEOUT,
   );
@@ -361,12 +361,14 @@ describe('sonar init', () => {
   it(
     'finds the bound project for a remote that embeds credentials, without printing them',
     async () => {
-      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      await signInToCloud((server) =>
+        server.withProject('bound_project').withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
+      );
       withRemote('https://user:secret-token@github.com/example/repository.git');
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(2);
+      expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('bound_project');
       expect(result.stdout + result.stderr).not.toContain('secret-token');
     },
@@ -393,19 +395,23 @@ describe('sonar init', () => {
   );
 
   it(
-    'asks for --link instead of creating a second project when it cannot ask',
+    'links the project bound to the repository when it cannot ask, creating no second one',
     async () => {
-      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      const server = await newCloudServer()
+        .withProject('bound_project')
+        .withGitRemoteBinding(GITHUB_REMOTE, 'bound_project')
+        .start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
       withRemote(GITHUB_REMOTE);
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain(
-        "A Sonar project already exists for this repository: 'bound_project'",
-      );
-      expect(result.stderr).toContain("Run 'sonar init' again with --link.");
-      expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
+      expect(harness.cwd.file('.sonar-config.json').asText()).toContain('bound_project');
+      expect(
+        server.getRecordedRequests().some((r) => r.path.startsWith('/api/alm_integration/')),
+      ).toBe(false);
     },
     TIMEOUT,
   );
@@ -429,17 +435,35 @@ describe('sonar init', () => {
   );
 
   it(
-    'lists the options that pick a path when no project exists and nothing can be asked',
+    'creates a bound project when no project exists and nothing can be asked',
     async () => {
-      const server = await newCloudServer().start();
+      await signInToCloud(withImportableRepo('github', 'example/repository'));
+      withRemote(GITHUB_REMOTE);
+
+      const result = await harness.run('init --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Created project');
+      expect(harness.cwd.file('.sonar-config.json').asText()).toContain('"projectKey"');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'fails with the authorization link when binding without a terminal needs the organization linked first',
+    async () => {
+      const server = await newCloudServer()
+        .withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }])
+        .start();
       harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
       withRemote(GITHUB_REMOTE);
 
       const result = await harness.run('init --non-interactive');
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain(NO_PROJECT);
-      expect(result.stderr).toContain('one of --bind, --link <key>');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        `Organization '${ORG}' is not linked to your DevOps platform`,
+      );
       expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(
         false,
       );
@@ -880,19 +904,16 @@ describe('sonar init', () => {
       }
 
       it(
-        'asks for --link instead of mapping it when nothing can be asked',
+        'maps it without asking when nothing can be asked',
         async () => {
           const { projectKey, server } = await startWithExistingProject();
 
           const result = await harness.run('init --non-interactive');
 
-          expect(result.exitCode).toBe(2);
-          expect(result.stderr).toContain(
-            `A Sonar project already exists for this repository: '${projectKey}'`,
-          );
-          expect(result.stderr).toContain("Run 'sonar init' again with --link.");
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain(`Linked this directory to project '${projectKey}'`);
           expect(created(server)).toHaveLength(0);
-          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+          expect(harness.cwd.file('.sonar-config.json').asText()).toContain(projectKey);
         },
         TIMEOUT,
       );
@@ -2420,6 +2441,24 @@ describe('sonar init', () => {
         );
 
         it(
+          'binds every new root without a terminal even without --bind',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web', 'docs');
+
+            const result = await harness.run(
+              'init --monorepo --non-interactive --root web=web-key --root docs=docs-key',
+            );
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(1);
+            expect(createdKeys(server)).toEqual([]);
+            expect(result.stdout).toContain('Created and bound to the repository (2):');
+          },
+          TIMEOUT,
+        );
+
+        it(
           'reports which projects were created and which failed, and keeps the created ones',
           async () => {
             const server = await startServer((s) =>
@@ -2621,7 +2660,7 @@ describe('sonar init', () => {
         );
 
         it(
-          'fails that root without a terminal, and still maps a root named with its key',
+          'maps it without a terminal, along with a root named with its key',
           async () => {
             const server = await startServer((s) =>
               s.withProject(generatedKey('web')).withProject('api-key'),
@@ -2630,6 +2669,29 @@ describe('sonar init', () => {
 
             const result = await harness.run(
               'init --monorepo --non-interactive --root web --root api=api-key',
+            );
+
+            expect(result.exitCode).toBe(0);
+            expect(createdKeys(server)).toEqual([]);
+            const roots = linkedRoots() as { path: string; projectKey: string }[];
+            expect(roots.map(({ path, projectKey }) => `${path}=${projectKey}`).sort()).toEqual([
+              'api=api-key',
+              `web=${generatedKey('web')}`,
+            ]);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'fails that root with --bind without a terminal, and still maps a root named with its key',
+          async () => {
+            const server = await startServer((s) =>
+              s.withProject(generatedKey('web')).withProject('api-key'),
+            );
+            makeRepository('api', 'web');
+
+            const result = await harness.run(
+              'init --monorepo --non-interactive --bind --root web --root api=api-key',
             );
 
             expect(result.stdout + result.stderr).toContain('--root web=<project key>');

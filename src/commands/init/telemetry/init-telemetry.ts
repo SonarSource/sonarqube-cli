@@ -35,7 +35,7 @@ export type InitFailureReason =
 /** Organization problems end the run before any project is attempted. */
 export type ProjectFailureReason = Exclude<InitFailureReason, 'no_org' | 'other_org'>;
 
-export type InitPathId = 'already_done' | 'link_existing' | 'bound_new' | 'unbound_new';
+export type InitPathId = 'already_done' | 'link_existing' | 'bound_new' | 'no_project';
 
 export type InitRemoteHost = 'github' | 'gitlab' | 'azure_devops' | 'bitbucket' | 'other';
 
