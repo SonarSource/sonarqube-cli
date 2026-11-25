@@ -34,8 +34,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { HostedMcpClient } from '@/core/host/mcp/hosted-mcp-client.ts';
 
-import type { HostedMcpClient } from './hosted-mcp-client.ts';
 import type { McpRunOptions } from './mcp.ts';
 
 const REQUEST_TIMEOUT_MS = 60000;

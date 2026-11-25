@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { runtimeHealthMessage } from '@/core/host/environment/runtime-health-messages.ts';
-import { checkContainerRuntimeHealth } from '@/core/host/environment/tool-detector.ts';
+import { checkMcpEndpoint } from '@/core/host/mcp/mcp-endpoint.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -28,6 +28,7 @@ export async function warnIfMcpRuntimeUnavailable(
   console: Console,
   integrationId: string,
   targetRoot: string,
+  connection: SonarConnection,
 ): Promise<void> {
   const hasMcp = loadState().integrations.installed.some(
     (integration) =>
@@ -37,16 +38,7 @@ export async function warnIfMcpRuntimeUnavailable(
       ),
   );
   if (!hasMcp) return;
-  let health;
-  try {
-    health = await checkContainerRuntimeHealth();
-  } catch (error) {
-    if (error instanceof InvalidOptionError) {
-      console.warn(error.message);
-      return;
-    }
-    throw error;
-  }
-  const message = runtimeHealthMessage(health);
+  const status = await checkMcpEndpoint(connection);
+  const message = status.startupError ?? runtimeHealthMessage(status.containerRuntime);
   if (message) console.warn(message);
 }

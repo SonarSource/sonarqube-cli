@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { MCP_DEFAULT_TOOLSETS } from '@/core/host/mcp/mcp-helper.ts';
 
-import { TestHarness } from '../../harness';
+import { TestHarness } from '../../../../harness';
 import {
   HostedMcpFixture,
   INIT_RESULT,
@@ -31,7 +31,7 @@ import {
   messages,
   response,
   TOKEN,
-} from './fixtures/hosted-mcp.ts';
+} from '../../../run/fixtures/hosted-mcp.ts';
 
 describe('hosted-mcp-client', () => {
   let harness: TestHarness;
