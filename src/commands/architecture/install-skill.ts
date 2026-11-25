@@ -20,32 +20,30 @@
 
 // `sonar architecture install-skill`: writes the architecture skill where Claude Code
 // (`.claude/skills`) and Cursor (`.agents/skills`) discover it, with the same overwrite
-// guard as `sonar integrate`, and in a repository also a marked coding block in CLAUDE.md
-// and AGENTS.md. Not recorded as an integration, so `system reset` keeps it.
+// guard as `sonar integrate`. Not recorded as an integration, so `system reset` keeps it.
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { IntegrationContext } from '@/core/framework/features/types.ts';
-import { textSnippet } from '@/core/framework/resources/text-snippet.ts';
+import { readTextFile } from '@/core/framework/resources/common.ts';
+import { textSnippetRemover } from '@/core/framework/resources/text-snippet.ts';
 import { wholeFile } from '@/core/framework/resources/whole-file.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 
 import { sonarBeginMarker, sonarEndMarker } from '../integrate/_common/instructions-templates.ts';
-import {
-  ARCHITECTURE_CODING_INSTRUCTIONS,
-  ARCHITECTURE_INSTRUCTIONS_MARKER,
-} from './coding-instructions.ts';
 import { ARCHITECTURE_SKILL, ARCHITECTURE_SKILL_MARKER } from './skill-content.ts';
 
 const SKILL_DIRS = [
   ['.claude', 'skills'],
   ['.agents', 'skills'],
 ];
-/** Claude Code reads CLAUDE.md; Cursor, Codex and other agents read AGENTS.md. */
+/** Files where CLI 1.13 wrote a marked "Architecture while coding" block. */
 const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'];
+/** The id of that block's markers, kept so this command can remove it. */
+const CODING_BLOCK_ID = 'sonarqube-architecture-coding';
 
 export interface InstallSkillOptions {
   global?: boolean;
@@ -77,7 +75,7 @@ export async function installSkill(
   );
   if (global) return;
   await INSTRUCTION_FILES.reduce(
-    (previous, file) => previous.then(() => installInstructions(join(targetRoot, file), context)),
+    (previous, file) => previous.then(() => removeCodingBlock(join(targetRoot, file), context)),
     Promise.resolve(),
   );
 }
@@ -100,21 +98,17 @@ async function installAt(path: string, context: IntegrationContext): Promise<voi
   context.console.print(`Installed ${path}`);
 }
 
-async function installInstructions(path: string, context: IntegrationContext): Promise<void> {
-  const snippet = textSnippet({
-    id: ARCHITECTURE_INSTRUCTIONS_MARKER,
-    displayName: 'architecture coding instructions',
+/** The skill is the whole installation, so a block an earlier version wrote is removed; the rest of the file is kept. */
+async function removeCodingBlock(path: string, context: IntegrationContext): Promise<void> {
+  const startMarker = sonarBeginMarker(CODING_BLOCK_ID);
+  if (!(await readTextFile(path))?.includes(startMarker)) return;
+  await textSnippetRemover({
+    id: CODING_BLOCK_ID,
     targetPath: path,
-    startMarker: sonarBeginMarker(ARCHITECTURE_INSTRUCTIONS_MARKER),
-    endMarker: sonarEndMarker(ARCHITECTURE_INSTRUCTIONS_MARKER),
-    content: ARCHITECTURE_CODING_INSTRUCTIONS,
-  });
-  if (await snippet.isApplied(context)) {
-    context.console.print(`Already up to date: ${path}`);
-    return;
-  }
-  await snippet.apply(context);
-  context.console.print(`Updated ${path}`);
+    startMarker,
+    endMarker: sonarEndMarker(CODING_BLOCK_ID),
+  }).remove(context);
+  context.console.print(`Removed the architecture coding block from ${path}`);
 }
 
 function projectRoot(): string {
