@@ -51,12 +51,11 @@ export class RequestScheduler {
 
   private async wait(write: boolean): Promise<void> {
     // Another request may extend the cooldown while this one is waiting.
-    for (;;) {
-      const delayMs = Math.max(this.resumeAt, write ? this.nextWriteAt : 0) - Date.now();
-      if (delayMs <= 0) {
-        return;
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    const delayMs = Math.max(this.resumeAt, write ? this.nextWriteAt : 0) - Date.now();
+    if (delayMs <= 0) {
+      return;
     }
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    return this.wait(write);
   }
 }
