@@ -473,6 +473,7 @@ export async function systemStatus(
   const mcp: McpEndpointStatus =
     tokenStatus?.status === 'invalid'
       ? {
+          transportSelection: endpointStatus.transportSelection,
           connectionMode: null,
           serverUrl: null,
           fallbackReason: null,
@@ -852,16 +853,20 @@ function renderIntegrationsSection(
 
 function renderMcpEndpoint(status: McpEndpointStatus, console: Console): void {
   console.blank();
-  console.text('MCP (sonar run mcp --transport auto)');
+  console.text('MCP (sonar run mcp)');
   if (status.startupError) {
     console.text(`  • Cannot start: ${status.startupError}`);
     return;
   }
+  const source =
+    status.transportSelection?.source === 'config'
+      ? `, from mcp.transport=${status.transportSelection.mode}`
+      : '';
   if (status.connectionMode === 'hosted') {
-    console.text('  • Transport: HTTP (hosted)');
+    console.text(`  • Transport: HTTP (hosted)${source}`);
     console.text(`  • Endpoint: ${status.serverUrl}`);
   } else if (status.connectionMode === 'container') {
-    console.text('  • Transport: stdio (local container)');
+    console.text(`  • Transport: stdio (local container)${source}`);
     console.text(`  • SonarQube server URL: ${status.serverUrl}`);
   }
   if (status.fallbackReason) console.text(`  • Using container because ${status.fallbackReason}.`);

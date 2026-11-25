@@ -1140,10 +1140,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '--transport <transport>',
-        'MCP backend: stdio (container), http (hosted), or auto',
-      )
-        .choices(['stdio', 'http', 'auto'])
-        .default('auto'),
+        'Choose the MCP backend: stdio (container), http (hosted), or auto. Overrides the mcp.transport configuration. When omitted, uses that configuration or auto.',
+      ).choices(['stdio', 'http', 'auto']),
     )
     .option('--debug', 'Enable debug logging in the MCP server container')
     .option('--read-only', 'Start the MCP server in read-only mode')

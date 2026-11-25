@@ -86,6 +86,13 @@ export const CONFIG_KEY_DEFINITIONS = [
     allowedValues: ['DEBUG', 'INFO', 'WARN', 'ERROR', 'SILENT'],
   },
   {
+    key: 'mcp.transport',
+    sensitive: false,
+    description:
+      'Default MCP backend: auto, http (hosted), or stdio (container). Overridden by --transport. Default: auto.',
+    allowedValues: ['auto', 'http', 'stdio'],
+  },
+  {
     key: 'mcp.container.network',
     sensitive: false,
     description: 'Container network used by the SonarQube MCP server.',
