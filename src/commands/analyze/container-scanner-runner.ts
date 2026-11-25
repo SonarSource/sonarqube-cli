@@ -82,13 +82,16 @@ const SCRATCH_RM_RETRY_DELAY_MS = 100;
 const MAX_TIMER_MS = 2_147_483_647;
 const TIMED_SCANNER_PHASES = 3;
 const WATCHDOG_GRACE_SECS = 30;
+const HANGUP_EXIT_CODE = 129;
 const INTERRUPTED_EXIT_CODE = 130;
 const TERMINATED_EXIT_CODE = 143;
 
-type CancellationSignal = 'SIGINT' | 'SIGTERM';
+type CancellationSignal = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
 
 function signalExitCode(signal: CancellationSignal): number {
   switch (signal) {
+    case 'SIGHUP':
+      return HANGUP_EXIT_CODE;
     case 'SIGINT':
       return INTERRUPTED_EXIT_CODE;
     case 'SIGTERM':
@@ -208,15 +211,16 @@ export async function runContainerScanner(
     cancelledBy ??= signal;
     cancellation.abort();
   }
-  const onSigint = (): void => {
-    cancel('SIGINT');
-  };
-  const onSigterm = (): void => {
-    cancel('SIGTERM');
-  };
-
-  process.on('SIGINT', onSigint);
-  process.on('SIGTERM', onSigterm);
+  // Detached Unix process groups escape parent SIGHUP (and uncatchable SIGKILL); forward SIGHUP on POSIX.
+  const signals: readonly CancellationSignal[] =
+    process.platform === 'win32' ? ['SIGINT', 'SIGTERM'] : ['SIGINT', 'SIGTERM', 'SIGHUP'];
+  const listeners = signals.map((signal) => {
+    const listener = (): void => {
+      cancel(signal);
+    };
+    process.on(signal, listener);
+    return [signal, listener] as const;
+  });
   try {
     let result: SpawnResult;
     try {
@@ -239,8 +243,9 @@ export async function runContainerScanner(
     if (cancelledBy) throw cancelledScanError(cancelledBy);
     return result;
   } finally {
-    process.off('SIGINT', onSigint);
-    process.off('SIGTERM', onSigterm);
+    for (const [signal, listener] of listeners) {
+      process.off(signal, listener);
+    }
     removeScratchDir(scratchDir);
   }
 }

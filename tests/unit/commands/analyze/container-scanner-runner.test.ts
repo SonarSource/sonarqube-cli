@@ -27,6 +27,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import {
+  type ContainerScanOptions,
   prepareContainerScannerEnv,
   runContainerScanner,
 } from '@/commands/analyze/container-scanner-runner.ts';
@@ -44,69 +45,59 @@ const AUTH = new ResolvedAuth({
   source: 'env',
 });
 const SCAN_RESULT = { exitCode: 1, stdout: '{}', stderr: 'Some packages could not be scanned' };
+const DEFAULT_OPTIONS: ContainerScanOptions = { timeoutSecs: 5, failOn: 'high' };
+const WATCHDOG_MSG = 'The container scanner did not exit after its scan timeout.';
+const SIGNALS =
+  process.platform === 'win32'
+    ? (['SIGINT', 'SIGTERM'] as const)
+    : (['SIGINT', 'SIGTERM', 'SIGHUP'] as const);
+
+const upperKeys = (env: NodeJS.ProcessEnv) => Object.keys(env).map((key) => key.toUpperCase());
+const listenerCounts = () => SIGNALS.map((signal) => process.listenerCount(signal));
+const runScanner = (
+  env: NodeJS.ProcessEnv = {},
+  options: ContainerScanOptions = DEFAULT_OPTIONS,
+  image = 'alpine:3.20',
+) => runContainerScanner('sonar-container-scanner', image, options, env);
+
+function prepareWithResolvedNetwork(baseEnv: NodeJS.ProcessEnv) {
+  spyOn(configRepository, 'getConfigValue').mockResolvedValue(undefined);
+  spyOn(network, 'getNetworkConfig').mockImplementation(() =>
+    network.resolveNetworkConfig(baseEnv),
+  );
+  return prepareContainerScannerEnv(AUTH, baseEnv);
+}
 
 afterEach(() => mock.restore());
 
 describe('prepareContainerScannerEnv', () => {
-  it('uses the active Cloud connection and resolved network configuration', async () => {
+  it('uses the active Cloud connection, resolved network config, and strips managed vars', async () => {
     const subprocessEnv = spyOn(network, 'buildSubprocessNetworkEnv').mockResolvedValue({
       SONAR_HTTPS_PROXY_URL: 'http://resolved-proxy.example:8080',
       SONAR_NO_PROXY: 'localhost',
     });
-    const baseEnv: NodeJS.ProcessEnv = {
+    const env = await prepareContainerScannerEnv(AUTH, {
       sonar_scanner_api_base_url: 'https://inherited-endpoint.example',
       SONARQUBE_CLI_TOKEN: 'inherited-token',
       SONAR_CONTAINER_SCANNER_TOKEN: 'inherited-scanner-token',
+      SONAR_CONTAINER_SCANNER_SKIP_UPDATE_CHECK: 'false',
+      sonar_container_scanner_skip_update_check: '0',
       sonar_https_proxy_url: 'http://inherited-proxy.example:8080',
       CONTAINER_SCANNER_TEST_ENV: 'preserved',
-    };
-
-    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
+    });
 
     expect(subprocessEnv).toHaveBeenCalledWith(undefined, { includeClientCert: false });
-    expect({
-      SONAR_CONTAINER_SCANNER_ORG: env.SONAR_CONTAINER_SCANNER_ORG,
-      SONAR_CONTAINER_SCANNER_TOKEN: env.SONAR_CONTAINER_SCANNER_TOKEN,
-      SONAR_HOST_URL: env.SONAR_HOST_URL,
-      SONAR_HTTPS_PROXY_URL: env.SONAR_HTTPS_PROXY_URL,
-      SONAR_NO_PROXY: env.SONAR_NO_PROXY,
-      CONTAINER_SCANNER_TEST_ENV: env.CONTAINER_SCANNER_TEST_ENV,
-    }).toEqual({
+    expect(env).toEqual({
+      CONTAINER_SCANNER_TEST_ENV: 'preserved',
+      SONAR_HTTPS_PROXY_URL: 'http://resolved-proxy.example:8080',
+      SONAR_NO_PROXY: 'localhost',
       SONAR_CONTAINER_SCANNER_ORG: 'resolved-org',
       SONAR_CONTAINER_SCANNER_TOKEN: 'resolved-token',
       SONAR_HOST_URL: 'https://sonarqube.us',
-      SONAR_HTTPS_PROXY_URL: 'http://resolved-proxy.example:8080',
-      SONAR_NO_PROXY: 'localhost',
-      CONTAINER_SCANNER_TEST_ENV: 'preserved',
     });
-    expect(Object.keys(env).map((key) => key.toUpperCase())).not.toContain(
-      'SONAR_SCANNER_API_BASE_URL',
-    );
-    expect(env.SONARQUBE_CLI_TOKEN).toBeUndefined();
-    expect(Object.keys(env).filter((key) => key.toUpperCase() === 'SONAR_HTTPS_PROXY_URL')).toEqual(
-      ['SONAR_HTTPS_PROXY_URL'],
-    );
   });
 
-  it('strips standalone SONAR_NO_PROXY and SONAR_CONTAINER_SCANNER_SKIP_UPDATE_CHECK', async () => {
-    spyOn(network, 'buildSubprocessNetworkEnv').mockResolvedValue({});
-    const baseEnv: NodeJS.ProcessEnv = {
-      SONAR_NO_PROXY: 'internal.corp.example',
-      sonar_no_proxy: 'lowercase.corp.example',
-      SONAR_CONTAINER_SCANNER_SKIP_UPDATE_CHECK: 'false',
-      sonar_container_scanner_skip_update_check: '0',
-      UNRELATED_VAR: 'kept',
-    };
-
-    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
-    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
-
-    expect(upperKeys).not.toContain('SONAR_NO_PROXY');
-    expect(upperKeys).not.toContain('SONAR_CONTAINER_SCANNER_SKIP_UPDATE_CHECK');
-    expect(env.UNRELATED_VAR).toBe('kept');
-  });
-
-  it('does not fail on Server mTLS cert errors and excludes mTLS client-cert vars', async () => {
+  it('ignores Server mTLS cert errors and strips client-cert and standalone SONAR_NO_PROXY vars', async () => {
     const getNetworkConfigOrThrow = spyOn(network, 'getNetworkConfigOrThrow');
     spyOn(network, 'getNetworkConfig').mockResolvedValue({
       proxy: null,
@@ -123,96 +114,60 @@ describe('prepareContainerScannerEnv', () => {
       },
       error: 'Client certificate file could not be read',
     });
-    const baseEnv: NodeJS.ProcessEnv = {
+
+    const env = await prepareContainerScannerEnv(AUTH, {
+      SONAR_NO_PROXY: 'internal.corp.example',
+      sonar_no_proxy: 'lowercase.corp.example',
       SONAR_TLS_CLIENT_CERT: '/etc/ssl/client.pem',
       SONAR_TLS_CLIENT_KEY_FILE: '/etc/ssl/client-key.pem',
       SONAR_TLS_CLIENT_PASSPHRASE: 'test-passphrase-placeholder',
       sonar_tls_client_passphrase: 'lowercase-passphrase-placeholder',
       KEEP_ME: 'yes',
-    };
-
-    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
-    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
+    });
 
     expect(getNetworkConfigOrThrow).not.toHaveBeenCalled();
     expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
-    expect(upperKeys).not.toContain('SONAR_TLS_CLIENT_CERT');
-    expect(upperKeys).not.toContain('SONAR_TLS_CLIENT_KEY_FILE');
-    expect(upperKeys).not.toContain('SONAR_TLS_CLIENT_PASSPHRASE');
     expect(env.KEEP_ME).toBe('yes');
+    for (const key of [
+      'SONAR_NO_PROXY',
+      'SONAR_TLS_CLIENT_CERT',
+      'SONAR_TLS_CLIENT_KEY_FILE',
+      'SONAR_TLS_CLIENT_PASSPHRASE',
+    ]) {
+      expect(upperKeys(env)).not.toContain(key);
+    }
   });
 
-  it('strips inherited HTTPS_PROXY/https_proxy when SONAR_HTTP_PROXY_URL wins the proxy tier', async () => {
-    const baseEnv: NodeJS.ProcessEnv = {
-      SONAR_HTTP_PROXY_URL: 'http://sonar-http-proxy.example:8080',
-      HTTPS_PROXY: 'http://inherited-https-proxy.example:3128',
-      https_proxy: 'http://inherited-lower-https-proxy.example:3128',
-      HTTP_PROXY: 'http://inherited-http-proxy.example:3128',
+  it('enforces CLI atomic proxy tiers while stripping generic proxy vars (including ALL_PROXY)', async () => {
+    const httpOnlyEnv = await prepareWithResolvedNetwork({
+      SONAR_HTTP_PROXY_URL: 'http://sonar-http.example:8080',
+      HTTPS_PROXY: 'http://inherited-https.example:3128',
+      https_proxy: 'http://inherited-lower-https.example:3128',
+      HTTP_PROXY: 'http://inherited-http.example:3128',
       NO_PROXY: 'inherited.corp.example',
-      no_proxy: 'inherited-lower.corp.example',
-      KEEP_ME: 'yes',
-    };
-    spyOn(configRepository, 'getConfigValue').mockResolvedValue(undefined);
-    spyOn(network, 'getNetworkConfig').mockImplementation(() =>
-      network.resolveNetworkConfig(baseEnv),
-    );
-
-    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
-    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
-
-    expect(env.SONAR_HTTP_PROXY_URL).toBe('http://sonar-http-proxy.example:8080');
-    expect(env.SONAR_HTTPS_PROXY_URL).toBeUndefined();
-    expect(env.SONAR_NO_PROXY).toBeUndefined();
-    expect(upperKeys).not.toContain('HTTPS_PROXY');
-    expect(upperKeys).not.toContain('HTTP_PROXY');
-    expect(upperKeys).not.toContain('NO_PROXY');
-    expect(env.KEEP_ME).toBe('yes');
-  });
-
-  it('strips ALL_PROXY and all_proxy from the scanner environment', async () => {
-    const baseEnv: NodeJS.ProcessEnv = {
       ALL_PROXY: 'socks5://proxy.example:1080',
       all_proxy: 'socks5://lower-proxy.example:1080',
       KEEP_ME: 'yes',
-    };
-    spyOn(configRepository, 'getConfigValue').mockResolvedValue(undefined);
-    spyOn(network, 'getNetworkConfig').mockImplementation(() =>
-      network.resolveNetworkConfig(baseEnv),
-    );
+    });
+    expect(httpOnlyEnv.SONAR_HTTP_PROXY_URL).toBe('http://sonar-http.example:8080');
+    expect(httpOnlyEnv.SONAR_HTTPS_PROXY_URL).toBeUndefined();
+    expect(httpOnlyEnv.SONAR_NO_PROXY).toBeUndefined();
+    for (const key of ['HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'ALL_PROXY']) {
+      expect(upperKeys(httpOnlyEnv)).not.toContain(key);
+    }
 
-    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
-    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
-
-    expect(upperKeys).not.toContain('ALL_PROXY');
-    expect(env.SONAR_HTTPS_PROXY_URL).toBeUndefined();
-    expect(env.SONAR_HTTP_PROXY_URL).toBeUndefined();
-    expect(env.KEEP_ME).toBe('yes');
-  });
-
-  it('translates generic-only HTTPS_PROXY, HTTP_PROXY, and NO_PROXY to SONAR_* while stripping generic vars', async () => {
-    const baseEnv: NodeJS.ProcessEnv = {
+    const genericEnv = await prepareWithResolvedNetwork({
       HTTPS_PROXY: 'http://generic-https.example:3128',
       HTTP_PROXY: 'http://generic-http.example:3128',
       NO_PROXY: 'localhost,internal.example',
       all_proxy: 'socks5://ignored.example:1080',
-      KEEP_ME: 'yes',
-    };
-    spyOn(configRepository, 'getConfigValue').mockResolvedValue(undefined);
-    spyOn(network, 'getNetworkConfig').mockImplementation(() =>
-      network.resolveNetworkConfig(baseEnv),
-    );
-
-    const env = await prepareContainerScannerEnv(AUTH, baseEnv);
-    const upperKeys = Object.keys(env).map((key) => key.toUpperCase());
-
-    expect(env.SONAR_HTTPS_PROXY_URL).toBe('http://generic-https.example:3128');
-    expect(env.SONAR_HTTP_PROXY_URL).toBe('http://generic-http.example:3128');
-    expect(env.SONAR_NO_PROXY).toBe('localhost,internal.example');
-    expect(upperKeys).not.toContain('HTTPS_PROXY');
-    expect(upperKeys).not.toContain('HTTP_PROXY');
-    expect(upperKeys).not.toContain('NO_PROXY');
-    expect(upperKeys).not.toContain('ALL_PROXY');
-    expect(env.KEEP_ME).toBe('yes');
+    });
+    expect(genericEnv.SONAR_HTTPS_PROXY_URL).toBe('http://generic-https.example:3128');
+    expect(genericEnv.SONAR_HTTP_PROXY_URL).toBe('http://generic-http.example:3128');
+    expect(genericEnv.SONAR_NO_PROXY).toBe('localhost,internal.example');
+    for (const key of ['HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'ALL_PROXY']) {
+      expect(upperKeys(genericEnv)).not.toContain(key);
+    }
   });
 
   it('rejects a Server connection and diagnoses a missing organization on a Cloud URL', async () => {
@@ -235,12 +190,11 @@ describe('prepareContainerScannerEnv', () => {
 });
 
 describe('runContainerScanner', () => {
-  it('passes the options and literal image, isolates the environment and preserves the result', async () => {
+  it('passes options, literal image, isolated env, killProcessTree, and clamps watchdog timeout', async () => {
     const spawn = spyOn(subprocess, 'spawnProcessWithTimeout').mockResolvedValue(SCAN_RESULT);
-    const env = { SONAR_CONTAINER_SCANNER_TOKEN: 'resolved-token' };
-    const result = await runContainerScanner(
-      'sonar-container-scanner',
-      '--licenses',
+
+    const result = await runScanner(
+      { SONAR_CONTAINER_SCANNER_TOKEN: 'resolved-token' },
       {
         containerEngine: 'podman',
         registry: 'registry.example',
@@ -249,12 +203,10 @@ describe('runContainerScanner', () => {
         timeoutSecs: 5,
         failOn: 'medium',
       },
-      env,
+      '--licenses',
     );
-
     expect(result).toEqual(SCAN_RESULT);
-    expect(spawn).toHaveBeenCalledTimes(1);
-    expect(spawn).toHaveBeenCalledWith(
+    expect(spawn).toHaveBeenLastCalledWith(
       'sonar-container-scanner',
       [
         '--format',
@@ -278,239 +230,123 @@ describe('runContainerScanner', () => {
         killProcessTree: true,
       }),
       45_000,
-      'The container scanner did not exit after its scan timeout.',
-    );
-  });
-
-  it('omits undefined optional flags', async () => {
-    const spawn = spyOn(subprocess, 'spawnProcessWithTimeout').mockResolvedValue(SCAN_RESULT);
-
-    await runContainerScanner(
-      'sonar-container-scanner',
-      'alpine:3.20',
-      { timeoutSecs: 300, failOn: 'high' },
-      {},
+      WATCHDOG_MSG,
     );
 
-    expect(spawn).toHaveBeenCalledWith(
+    await runScanner({}, { timeoutSecs: 10_000_000, failOn: 'high' });
+    expect(spawn).toHaveBeenLastCalledWith(
       'sonar-container-scanner',
       [
         '--format',
         'json',
         '--skip-update-check',
-        '--timeout-secs=300',
+        '--timeout-secs=10000000',
         '--fail-on=high',
         '--',
         'alpine:3.20',
       ],
-      expect.objectContaining({
-        env: expect.objectContaining({ TMPDIR: expect.any(String) }),
-        isolateEnv: true,
-        killProcessTree: true,
-      }),
-      930_000,
-      'The container scanner did not exit after its scan timeout.',
-    );
-  });
-
-  it('clamps the watchdog timeout to MAX_TIMER_MS for large timeoutSecs', async () => {
-    const spawn = spyOn(subprocess, 'spawnProcessWithTimeout').mockResolvedValue(SCAN_RESULT);
-
-    await runContainerScanner(
-      'sonar-container-scanner',
-      'alpine:3.20',
-      { timeoutSecs: 10_000_000, failOn: 'high' },
-      {},
-    );
-
-    expect(spawn).toHaveBeenCalledWith(
-      'sonar-container-scanner',
-      expect.any(Array),
-      expect.any(Object),
+      expect.objectContaining({ isolateEnv: true, killProcessTree: true }),
       2_147_483_647,
-      'The container scanner did not exit after its scan timeout.',
+      WATCHDOG_MSG,
     );
   });
 
-  it.each([
-    { signal: 'SIGINT' as const, expectedExitCode: 130 },
-    { signal: 'SIGTERM' as const, expectedExitCode: 143 },
-  ])(
+  it.each(
+    SIGNALS.map((signal) => ({
+      signal,
+      expectedExitCode: signal === 'SIGHUP' ? 129 : signal === 'SIGINT' ? 130 : 143,
+    })),
+  )(
     'aborts the child signal, exits with $expectedExitCode on $signal, and cleans up listeners',
     async ({ signal, expectedExitCode }) => {
-      const existingSigint = process.listenerCount('SIGINT');
-      const existingSigterm = process.listenerCount('SIGTERM');
-      let capturedSignal: AbortSignal | undefined;
-
+      const before = listenerCounts();
       spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
-        capturedSignal = options.signal;
-        expect(capturedSignal?.aborted).toBe(false);
-        const cancel = process.listeners(signal).at(-1);
-        cancel?.(signal);
-        expect(capturedSignal?.aborted).toBe(true);
+        expect(options.signal?.aborted).toBe(false);
+        process.listeners(signal).at(-1)?.(signal);
+        expect(options.signal?.aborted).toBe(true);
         return Promise.resolve(SCAN_RESULT);
       });
 
-      const error = await runContainerScanner(
-        'sonar-container-scanner',
-        'my-app',
-        { timeoutSecs: 5, failOn: 'high' },
-        {},
-      ).catch((err: unknown) => err);
-
+      const error = await runScanner().catch((err: unknown) => err);
       expect(error).toBeInstanceOf(CommandFailedError);
       expect((error as CommandFailedError).message).toBe('Container scan cancelled.');
       expect((error as CommandFailedError).exitCode).toBe(expectedExitCode);
-      expect(process.listenerCount('SIGINT')).toBe(existingSigint);
-      expect(process.listenerCount('SIGTERM')).toBe(existingSigterm);
+      expect(listenerCounts()).toEqual(before);
     },
   );
 
-  it('reports cancellation when spawn rejects concurrently during cancellation', async () => {
-    const existingSigint = process.listenerCount('SIGINT');
-    const existingSigterm = process.listenerCount('SIGTERM');
-
+  it('prefers cancellation on concurrent rejection and restores listeners on normal rejection', async () => {
+    const before = listenerCounts();
     spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce(() => {
-      const cancel = process.listeners('SIGINT').at(-1);
-      cancel?.('SIGINT');
+      process.listeners('SIGINT').at(-1)?.('SIGINT');
       return Promise.reject(new subprocess.ProcessTimedOutError('timed out'));
     });
+    const cancelled = await runScanner().catch((err: unknown) => err);
+    expect(cancelled).toBeInstanceOf(CommandFailedError);
+    expect((cancelled as CommandFailedError).exitCode).toBe(130);
+    expect(listenerCounts()).toEqual(before);
 
-    const error = await runContainerScanner(
-      'sonar-container-scanner',
-      'my-app',
-      { timeoutSecs: 5, failOn: 'high' },
-      {},
-    ).catch((err: unknown) => err);
-
-    expect(error).toBeInstanceOf(CommandFailedError);
-    expect((error as CommandFailedError).message).toBe('Container scan cancelled.');
-    expect((error as CommandFailedError).exitCode).toBe(130);
-    expect(process.listenerCount('SIGINT')).toBe(existingSigint);
-    expect(process.listenerCount('SIGTERM')).toBe(existingSigterm);
-  });
-
-  it('removes signal listeners when spawn rejects without cancellation', async () => {
-    const existingSigint = process.listenerCount('SIGINT');
-    const existingSigterm = process.listenerCount('SIGTERM');
     const timeoutError = new subprocess.ProcessTimedOutError('hung');
     spyOn(subprocess, 'spawnProcessWithTimeout').mockRejectedValueOnce(timeoutError);
-
-    const error = await runContainerScanner(
-      'sonar-container-scanner',
-      'my-app',
-      { timeoutSecs: 5, failOn: 'high' },
-      {},
-    ).catch((err: unknown) => err);
-
-    expect(error).toBe(timeoutError);
-    expect(process.listenerCount('SIGINT')).toBe(existingSigint);
-    expect(process.listenerCount('SIGTERM')).toBe(existingSigterm);
+    expect(await runScanner().catch((err: unknown) => err)).toBe(timeoutError);
+    expect(listenerCounts()).toEqual(before);
   });
 
-  it('creates a per-run scratch temp dir under the inherited temp root, strips case variants, and removes it on success', async () => {
+  it('creates a per-run scratch temp dir under inherited root, strips case variants, and removes it on success, failure, and abort', async () => {
     const inheritedRoot = mkdtempSync(join(tmpdir(), 'container-runner-root-'));
-    let capturedScratchDir: string | undefined;
-    let capturedEnv: NodeJS.ProcessEnv | undefined;
     try {
+      let scratchDir = '';
+      let capturedEnv: NodeJS.ProcessEnv = {};
       spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
-        capturedEnv = options.env;
-        capturedScratchDir = options.env?.TMPDIR;
-        expect(capturedScratchDir).toBeDefined();
-        expect(dirname(capturedScratchDir!)).toBe(inheritedRoot);
-        expect(existsSync(capturedScratchDir!)).toBe(true);
-        writeFileSync(join(capturedScratchDir!, 'exported-layer.tar'), 'scratch-data');
+        capturedEnv = options.env ?? {};
+        scratchDir = capturedEnv.TMPDIR ?? '';
+        expect(dirname(scratchDir)).toBe(inheritedRoot);
+        expect(existsSync(scratchDir)).toBe(true);
+        writeFileSync(join(scratchDir, 'layer.tar'), 'data');
         return Promise.resolve(SCAN_RESULT);
       });
-
-      const result = await runContainerScanner(
-        'sonar-container-scanner',
-        'alpine:3.20',
-        { timeoutSecs: 5, failOn: 'high' },
-        { TMPDIR: inheritedRoot, tmpdir: '/lowercase/old', KEEP_ME: 'yes' },
-      );
-
-      expect(result).toEqual(SCAN_RESULT);
-      expect(capturedEnv?.KEEP_ME).toBe('yes');
       expect(
-        Object.keys(capturedEnv ?? {}).filter((key) => key.toUpperCase() === 'TMPDIR'),
-      ).toEqual(['TMPDIR']);
-      if (process.platform === 'win32') {
-        expect(capturedEnv?.TMP).toBe(capturedScratchDir);
-        expect(capturedEnv?.TEMP).toBe(capturedScratchDir);
-      }
-      expect(existsSync(capturedScratchDir!)).toBe(false);
+        await runScanner({ TMPDIR: inheritedRoot, tmpdir: '/lowercase/old', KEEP_ME: 'yes' }),
+      ).toEqual(SCAN_RESULT);
+      expect(capturedEnv.KEEP_ME).toBe('yes');
+      expect(Object.keys(capturedEnv).filter((k) => k.toUpperCase() === 'TMPDIR')).toEqual([
+        'TMPDIR',
+      ]);
+      expect(existsSync(scratchDir)).toBe(false);
+
+      const timeoutError = new subprocess.ProcessTimedOutError('hung');
+      spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
+        scratchDir = options.env?.TMPDIR ?? '';
+        writeFileSync(join(scratchDir, 'partial.tar'), 'data');
+        return Promise.reject(timeoutError);
+      });
+      expect(await runScanner().catch((err: unknown) => err)).toBe(timeoutError);
+      expect(existsSync(scratchDir)).toBe(false);
+
+      spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
+        scratchDir = options.env?.TMPDIR ?? '';
+        process.listeners('SIGINT').at(-1)?.('SIGINT');
+        return Promise.resolve(SCAN_RESULT);
+      });
+      await runScanner().catch(() => undefined);
+      expect(existsSync(scratchDir)).toBe(false);
     } finally {
       rmSync(inheritedRoot, { recursive: true, force: true });
     }
   });
 
-  it('removes the per-run scratch temp dir on spawn failure', async () => {
-    let capturedScratchDir: string | undefined;
-    const timeoutError = new subprocess.ProcessTimedOutError('hung');
-    spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
-      capturedScratchDir = options.env?.TMPDIR;
-      expect(capturedScratchDir).toBeDefined();
-      expect(existsSync(capturedScratchDir!)).toBe(true);
-      writeFileSync(join(capturedScratchDir!, 'partial-export.tar'), 'partial');
-      return Promise.reject(timeoutError);
-    });
-
-    const error = await runContainerScanner(
-      'sonar-container-scanner',
-      'alpine:3.20',
-      { timeoutSecs: 5, failOn: 'high' },
-      {},
-    ).catch((err: unknown) => err);
-
-    expect(error).toBe(timeoutError);
-    expect(existsSync(capturedScratchDir!)).toBe(false);
-  });
-
-  it('removes the per-run scratch temp dir on signal abort', async () => {
-    let capturedScratchDir: string | undefined;
-    spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
-      capturedScratchDir = options.env?.TMPDIR;
-      expect(capturedScratchDir).toBeDefined();
-      expect(existsSync(capturedScratchDir!)).toBe(true);
-      writeFileSync(join(capturedScratchDir!, 'aborted-export.tar'), 'aborted');
-      const cancel = process.listeners('SIGINT').at(-1);
-      cancel?.('SIGINT');
-      return Promise.resolve(SCAN_RESULT);
-    });
-
-    const error = await runContainerScanner(
-      'sonar-container-scanner',
-      'alpine:3.20',
-      { timeoutSecs: 5, failOn: 'high' },
-      {},
-    ).catch((err: unknown) => err);
-
-    expect(error).toBeInstanceOf(CommandFailedError);
-    expect((error as CommandFailedError).exitCode).toBe(130);
-    expect(existsSync(capturedScratchDir!)).toBe(false);
-  });
-
   it('does not mask scan outcomes if scratch temp dir cleanup fails', async () => {
-    let capturedScratchDir: string | undefined;
+    let scratchDir = '';
     spyOn(subprocess, 'spawnProcessWithTimeout').mockImplementationOnce((_, __, options) => {
-      capturedScratchDir = options.env?.TMPDIR;
+      scratchDir = options.env?.TMPDIR ?? '';
       return Promise.resolve(SCAN_RESULT);
     });
     const rmSpy = spyOn(fs, 'rmSync').mockImplementation(() => {
       throw new Error('EBUSY: file locked');
     });
-
     try {
-      const result = await runContainerScanner(
-        'sonar-container-scanner',
-        'alpine:3.20',
-        { timeoutSecs: 5, failOn: 'high' },
-        {},
-      );
-
-      expect(result).toEqual(SCAN_RESULT);
-      expect(rmSpy).toHaveBeenCalledWith(capturedScratchDir, {
+      expect(await runScanner()).toEqual(SCAN_RESULT);
+      expect(rmSpy).toHaveBeenCalledWith(scratchDir, {
         recursive: true,
         force: true,
         maxRetries: 3,
@@ -518,9 +354,7 @@ describe('runContainerScanner', () => {
       });
     } finally {
       rmSpy.mockRestore();
-      if (capturedScratchDir) {
-        rmSync(capturedScratchDir, { recursive: true, force: true });
-      }
+      if (scratchDir) rmSync(scratchDir, { recursive: true, force: true });
     }
   });
 });

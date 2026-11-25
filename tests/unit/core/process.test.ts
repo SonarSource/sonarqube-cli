@@ -316,51 +316,28 @@ describe('spawnProcess stdin, against a mocked child', () => {
     expect(stream.writableEnded).toBe(true);
   });
 
-  it('kills the child when options.signal aborts after spawn', async () => {
-    const { stream } = sink();
-    const proc = mockChild(stream);
+  it('kills the child when options.signal aborts (after spawn or already aborted) and cleans up listener', async () => {
     const controller = new AbortController();
-
-    const running = spawnProcess('child', [], { signal: controller.signal });
-    expect(proc.killed).toBe(false);
-
-    controller.abort();
-    expect(proc.killed).toBe(true);
-
-    proc.emit('close', null, 'SIGTERM');
-    const result = await running;
-    expect(result.signal).toBe('SIGTERM');
-  });
-
-  it('kills the child immediately when options.signal is already aborted', async () => {
-    const { stream } = sink();
-    const proc = mockChild(stream);
-    const controller = new AbortController();
-    controller.abort();
-
-    const running = spawnProcess('child', [], { signal: controller.signal });
-    expect(proc.killed).toBe(true);
-
-    proc.emit('close', null, 'SIGTERM');
-    await running;
-  });
-
-  it('removes the abort listener when the child closes normally', async () => {
-    const { stream } = sink();
-    const proc = mockChild(stream);
-    const controller = new AbortController();
+    const proc = mockChild(sink().stream);
     const removeListener = spyOn(controller.signal, 'removeEventListener');
 
     const running = spawnProcess('child', [], { signal: controller.signal });
-    proc.emit('close', 0);
-    await running;
-
+    expect(proc.killed).toBe(false);
+    controller.abort();
+    expect(proc.killed).toBe(true);
+    proc.emit('close', null, 'SIGTERM');
+    expect((await running).signal).toBe('SIGTERM');
     expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+
+    const alreadyAbortedProc = mockChild(sink().stream);
+    const abortedRun = spawnProcess('child', [], { signal: controller.signal });
+    expect(alreadyAbortedProc.killed).toBe(true);
+    alreadyAbortedProc.emit('close', null, 'SIGTERM');
+    await abortedRun;
   });
 
   it('falls back to proc.kill() when process-group termination fails on stdin error', async () => {
-    const { stream } = sink();
-    const proc = mockChild(stream) as ReturnType<typeof mockChild> & { pid?: number };
+    const proc = mockChild(sink().stream) as ReturnType<typeof mockChild> & { pid?: number };
     proc.pid = 999_999_999;
     const spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(proc as unknown as ChildProcess);
     // eslint-disable-next-line @typescript-eslint/require-await -- a generator with nothing to await is still the shape under test
@@ -385,12 +362,16 @@ describe('spawnProcess stdin, against a mocked child', () => {
   });
 });
 
-const GRANDCHILD_SPAWNER = [
-  "const { spawn } = require('node:child_process');",
-  "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60_000)'], { stdio: 'inherit' });",
-  "process.stdout.write(String(child.pid) + '\\n');",
-  'setInterval(() => {}, 60_000);',
-].join(' ');
+function grandchildScript(ignoreSigterm = false): string {
+  const trap = ignoreSigterm ? "process.on('SIGTERM', () => {});" : '';
+  return [
+    trap,
+    "const { spawn } = require('node:child_process');",
+    `const child = spawn(process.execPath, ['-e', "${trap} setInterval(() => {}, 60_000)"], { stdio: 'inherit' });`,
+    "process.stdout.write(String(child.pid) + '\\n');",
+    'setInterval(() => {}, 60_000);',
+  ].join(' ');
+}
 
 function isProcessAlive(pid: number): boolean {
   try {
@@ -423,10 +404,10 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
     }
   });
 
-  function spawnGrandchildTracker(
-    options: Pick<SpawnOptions, 'signal'> & { timeoutMs?: number } = {},
+  function spawnTree(
+    options: { signal?: AbortSignal; timeoutMs?: number; ignoreSigterm?: boolean } = {},
   ) {
-    let stdoutBuffer = '';
+    let buffer = '';
     let reported = false;
     let resolvePid!: (pid: number) => void;
     const grandchildPid = new Promise<number>((resolve) => {
@@ -434,22 +415,21 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
     });
     const running = spawnProcessWithTimeout(
       process.execPath,
-      ['-e', GRANDCHILD_SPAWNER],
+      ['-e', grandchildScript(options.ignoreSigterm)],
       {
         stdout: 'pipe',
         killProcessTree: true,
         signal: options.signal,
         onStdout: (chunk) => {
           if (reported) return;
-          stdoutBuffer += chunk;
-          const newlineIndex = stdoutBuffer.indexOf('\n');
-          if (newlineIndex !== -1) {
-            const pid = Number.parseInt(stdoutBuffer.slice(0, newlineIndex).trim(), 10);
-            if (!Number.isNaN(pid)) {
-              reported = true;
-              spawnedPids.push(pid);
-              resolvePid(pid);
-            }
+          buffer += chunk;
+          const idx = buffer.indexOf('\n');
+          if (idx === -1) return;
+          const pid = Number.parseInt(buffer.slice(0, idx).trim(), 10);
+          if (!Number.isNaN(pid)) {
+            reported = true;
+            spawnedPids.push(pid);
+            resolvePid(pid);
           }
         },
       },
@@ -461,37 +441,35 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
 
   it('terminates descendant processes on signal abort', async () => {
     const controller = new AbortController();
-    const { grandchildPid, running } = spawnGrandchildTracker({ signal: controller.signal });
+    const { grandchildPid, running } = spawnTree({ signal: controller.signal });
 
     const pid = await grandchildPid;
     expect(isProcessAlive(pid)).toBe(true);
 
     controller.abort();
     const result = await running;
-
-    if (process.platform !== 'win32') {
-      expect(result.signal).toBe('SIGTERM');
-    }
+    if (process.platform !== 'win32') expect(result.signal).toBe('SIGTERM');
     expect(await waitForProcessExit(pid)).toBe(true);
   });
 
-  it('terminates descendant processes on timeout', async () => {
-    const { grandchildPid, running } = spawnGrandchildTracker({ timeoutMs: 1000 });
-    const settled = running.catch((err: unknown) => err);
+  it('waits for descendant processes to exit on timeout (including SIGKILL escalation when SIGTERM is trapped)', async () => {
+    const cases = process.platform === 'win32' ? [false] : [false, true];
+    for (const ignoreSigterm of cases) {
+      const { grandchildPid, running } = spawnTree({ timeoutMs: 400, ignoreSigterm });
+      const settled = running.catch((err: unknown) => err);
+      const pid = await Promise.race([
+        grandchildPid,
+        settled.then((outcome) => {
+          throw new Error(`Process settled before reporting grandchild pid: ${String(outcome)}`);
+        }),
+      ]);
+      expect(isProcessAlive(pid)).toBe(true);
 
-    const pid = await Promise.race([
-      grandchildPid,
-      settled.then((outcome) => {
-        throw new Error(`Process settled before reporting grandchild pid: ${String(outcome)}`);
-      }),
-    ]);
-    expect(isProcessAlive(pid)).toBe(true);
-
-    const failure = await settled;
-
-    expect(failure).toBeInstanceOf(ProcessTimedOutError);
-    expect((failure as Error).message).toBe(TEST_TIMEOUT_MESSAGE);
-    expect(await waitForProcessExit(pid)).toBe(true);
+      const failure = await settled;
+      expect(failure).toBeInstanceOf(ProcessTimedOutError);
+      expect((failure as Error).message).toBe(TEST_TIMEOUT_MESSAGE);
+      expect(await waitForProcessExit(pid)).toBe(true);
+    }
   });
 });
 
@@ -518,13 +496,7 @@ describe('spawnProcessCapturingBytes', () => {
         process.execPath,
         [
           '-e',
-          [
-            "const { spawn } = require('node:child_process');",
-            "const { writeFileSync } = require('node:fs');",
-            "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60_000)'], { stdio: 'inherit' });",
-            'writeFileSync(process.argv[1], String(child.pid));',
-            'setInterval(() => {}, 60_000);',
-          ].join(' '),
+          "const { spawn } = require('node:child_process'); const { writeFileSync } = require('node:fs'); const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60_000)'], { stdio: 'inherit' }); writeFileSync(process.argv[1], String(child.pid)); setInterval(() => {}, 60_000);",
           pidFile,
         ],
         { stderr: 'pipe', killProcessTree: true, signal: controller.signal },
@@ -533,9 +505,7 @@ describe('spawnProcessCapturingBytes', () => {
       );
 
       const deadline = Date.now() + 5000;
-      while (Date.now() < deadline && !existsSync(pidFile)) {
-        await Bun.sleep(20);
-      }
+      while (Date.now() < deadline && !existsSync(pidFile)) await Bun.sleep(20);
       grandchildPid = Number.parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
       expect(isProcessAlive(grandchildPid)).toBe(true);
 
