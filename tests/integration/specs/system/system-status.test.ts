@@ -722,6 +722,24 @@ command = "another-tool stop"
     { timeout: 15000 },
   );
 
+  it('skips runtime checks for configured MCP without authentication', async () => {
+    const mcpConfigPath = join(harness.userHome.path, '.claude.json');
+    harness
+      .state()
+      .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
+    harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+    const result = await harness.run('system status --format json', {
+      extraEnv: { SONARQUBE_CLI_MCP_WSL: 'invalid' },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).mcp).toMatchObject({
+      connectionMode: null,
+      fallbackReason: null,
+      startupError: "Not authenticated. Run 'sonar auth login' to authenticate.",
+      containerRuntime: null,
+    });
+  });
+
   it.skipIf(IS_WINDOWS)(
     'reports a ready Docker runtime for configured MCP',
     async () => {
@@ -731,6 +749,11 @@ command = "another-tool stop"
         .state()
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
       harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withExtraEnv({
+        SONARQUBE_CLI_SERVER: server.baseUrl(),
+        SONARQUBE_CLI_TOKEN: 'test-token',
+      });
 
       const result = await harness.run('system status');
 
@@ -750,6 +773,11 @@ command = "another-tool stop"
         .state()
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
       harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withExtraEnv({
+        SONARQUBE_CLI_SERVER: server.baseUrl(),
+        SONARQUBE_CLI_TOKEN: 'test-token',
+      });
 
       const result = await harness.run('system status', {
         extraEnv: { PATH: harness.cwd.path },
@@ -771,6 +799,11 @@ command = "another-tool stop"
         .state()
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
       harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withExtraEnv({
+        SONARQUBE_CLI_SERVER: server.baseUrl(),
+        SONARQUBE_CLI_TOKEN: 'test-token',
+      });
 
       const result = await harness.run('system status --json', {
         extraEnv: { PATH: harness.cwd.path },
@@ -799,6 +832,11 @@ command = "another-tool stop"
         .state()
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
       harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withExtraEnv({
+        SONARQUBE_CLI_SERVER: server.baseUrl(),
+        SONARQUBE_CLI_TOKEN: 'test-token',
+      });
 
       const result = await harness.run('system status --json', {
         extraEnv: { SONARQUBE_CLI_MCP_WSL: 'invalid' },
@@ -1428,7 +1466,7 @@ command = "another-tool stop"
       const lines = stdout.split('\n');
       const mcpLines = lines.filter((line) => line.includes('• MCP Server:'));
       expect(mcpLines).toHaveLength(2);
-      expect(lines.filter((line) => line.includes('MCP Runtime:'))).toHaveLength(1);
+      expect(lines.filter((line) => line.includes('MCP Runtime:'))).toHaveLength(0);
 
       // Both should show CONFIGURED status
       mcpLines.forEach((line) => {
