@@ -66,6 +66,7 @@ export class HostedMcpFixture {
   readonly server: ReturnType<typeof Bun.serve>;
   readonly requests: Array<{ message: Message; headers: Headers }> = [];
   healthStatus = 200;
+  healthRequests = 0;
   healthBody = '';
   healthWait: Promise<void> | undefined;
   handle: (message: Message, request: Request) => Response | Promise<Response> = (message) =>
@@ -78,6 +79,7 @@ export class HostedMcpFixture {
       fetch: async (request) => {
         const path = new URL(request.url).pathname;
         if (path === '/mcp/health') {
+          this.healthRequests++;
           if (this.healthWait) await this.healthWait;
           return new Response(this.healthBody, { status: this.healthStatus });
         }
