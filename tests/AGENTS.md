@@ -16,5 +16,6 @@
 - Every unit test enabling telemetry must set `SONAR_USER_HOME` to a temporary directory. Egress off still writes queued events; a later real CLI command could transmit a developer's queue.
 - When clearing `__SQ_CLI_TELEMETRY_EGRESS` to exercise workers/draining, mock **both** `Bun.spawn` and the network transport in the same test file.
 - Direct calls to `flushTelemetryEvents()` require the network transport mocked: its guard exists only in `flushTelemetry()`.
+- Sole exception: `tests/integration/specs/telemetry/sentry-startup-output.test.ts` runs the binary with production egress, all traffic routed to a refusing local proxy; do not copy it.
 
 Use the shared isolated preload/spawn environment. `withTelemetryEnabled()` does not require `__SQ_CLI_TELEMETRY_FLUSH__=1`; that switch bypasses fact committing and breaks command-event assertions. Reset ambient project-UUID context between tests that use it. Read [telemetry guidance](../src/core/telemetry/AGENTS.md) for lifecycle changes.
