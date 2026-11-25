@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type {
   StatsSinceChoice,
@@ -30,22 +29,20 @@ import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
-import { resolveStatsEntitlement, type StatsEntitlement } from './entitlement.ts';
+import type { StatsEntitlement } from './entitlement.ts';
+import type { StatsViewModel } from './view-model.ts';
 
-export async function renderTextSummary(
-  summary: StatsSummary,
+export function renderTextSummary(
+  summary: StatsViewModel,
   since: StatsSinceChoice,
-  ctx: CommandInvocationContext,
-): Promise<void> {
-  const { console } = ctx;
+  console: Console,
+): void {
   if (summary.allTime.totalRuns === 0) {
     printEmptyState(console);
     return;
   }
 
-  const entitlement = await resolveStatsEntitlement(ctx);
-
-  printSummaryCard(summary, since, entitlement, console);
+  printSummaryCard(summary, since, summary.entitlement, console);
   printAnalyzerBreakdownSection(summary, console);
   printStoppedSection(summary, console);
   printAgentBreakdownSection(summary, console);
@@ -128,16 +125,16 @@ interface StatsPlaceholderRow {
   ctaUrl?: string;
 }
 
-function buildPlaceholderRows(entitlement: StatsEntitlement): StatsPlaceholderRow[] {
+function buildPlaceholderRows(entitlement: StatsEntitlement | null): StatsPlaceholderRow[] {
   const rows: StatsPlaceholderRow[] = [];
-  if (entitlement.vortex === 'not_entitled') {
+  if (entitlement?.vortex === 'not_entitled') {
     rows.push({
       label: VORTEX_NOT_ENTITLED_LABEL,
       message: VORTEX_NOT_ENTITLED_MESSAGE,
       ctaUrl: VORTEX_PRODUCT_URL,
     });
   }
-  if (entitlement.sca === 'not_enabled') {
+  if (entitlement?.sca === 'not_enabled') {
     rows.push({
       label: DEPENDENCY_RISKS_NOT_ENABLED_LABEL,
       message: DEPENDENCY_RISKS_NOT_ENABLED_MESSAGE,
@@ -171,7 +168,7 @@ const HEADER_COLUMN_GAP_WIDTH = 12;
 function printSummaryCard(
   summary: StatsSummary,
   since: StatsSinceChoice,
-  entitlement: StatsEntitlement,
+  entitlement: StatsEntitlement | null,
   console: Console,
 ): void {
   const secretsBlockedTotal =
@@ -208,7 +205,7 @@ function printSummaryCard(
       dailySeries: dailySecretsBlocked,
       allTimeValue: summary.allTime.secretsBlockedTotal,
     },
-    ...(entitlement.sca === 'not_enabled'
+    ...(entitlement?.sca === 'not_enabled'
       ? []
       : [
           {
