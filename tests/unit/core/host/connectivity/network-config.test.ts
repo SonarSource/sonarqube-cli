@@ -865,6 +865,10 @@ describe('buildSubprocessNetworkEnv', () => {
       'HTTPS_PROXY',
       'ALL_PROXY',
       'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'all_proxy',
+      'no_proxy',
     ]);
   });
 });

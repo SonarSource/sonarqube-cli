@@ -79,6 +79,10 @@ export const GENERIC_PROXY_ENV_NAMES = [
   'HTTPS_PROXY',
   'ALL_PROXY',
   'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'no_proxy',
 ] as const;
 
 const PROXY_CONFIGS: Array<SourcedValue<ProxyEnvVars>> = [

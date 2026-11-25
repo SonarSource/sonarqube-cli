@@ -60,9 +60,15 @@ export interface SpawnOptions {
 
 type KillFn = (signal?: NodeJS.Signals) => void;
 
+interface ChildControl {
+  kill: KillFn;
+  isTreeAlive: () => boolean;
+  cleanup: () => void;
+}
+
 interface InternalSpawnOptions extends SpawnOptions {
-  /** Internal hook used by {@link raceWithTimeout} to kill the child on deadline. */
-  onSpawn?: (kill: KillFn) => void;
+  /** Internal hook used by {@link raceWithTimeout} to control the child on deadline or abort. */
+  onSpawn?: (control: ChildControl) => void;
 }
 
 /** A child did not finish before its deadline. Distinct from "the program is not installed". */
@@ -88,6 +94,8 @@ function shouldSpawnDetached(options: SpawnOptions): boolean {
 
 const TREE_CLOSE_GRACE_MS = 1000;
 const TREE_KILL_GRACE_MS = 500;
+const TREE_POLL_MS = 25;
+const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
 function terminateChild(
   proc: ChildProcess,
@@ -123,6 +131,62 @@ function terminateChild(
   }
 }
 
+function isProcessGroupAlive(pid: number | undefined, killProcessTree: boolean): boolean {
+  if (!killProcessTree || process.platform === 'win32' || pid === undefined) return false;
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function attachProcessSignalForwarding(kill: KillFn, killProcessTree: boolean): () => void {
+  if (!killProcessTree || process.platform === 'win32') return () => undefined;
+
+  const onExit = (): void => {
+    kill('SIGTERM');
+  };
+  let cleanedUp = false;
+  const listeners = FORWARDED_SIGNALS.map((signal) => {
+    const listener = (): void => {
+      kill(signal);
+      cleanup();
+      if (process.listenerCount(signal) === 0) {
+        process.kill(process.pid, signal);
+      }
+    };
+    process.on(signal, listener);
+    return [signal, listener] as const;
+  });
+  process.on('exit', onExit);
+
+  function cleanup(): void {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    process.off('exit', onExit);
+    for (const [signal, listener] of listeners) {
+      process.off(signal, listener);
+    }
+  }
+  return cleanup;
+}
+
+function createChildControl(proc: ChildProcess, options: SpawnOptions): ChildControl {
+  const killProcessTree = Boolean(options.killProcessTree);
+  const kill: KillFn = (sig) => {
+    terminateChild(proc, killProcessTree, sig);
+  };
+  const cleanup = attachProcessSignalForwarding(kill, killProcessTree);
+  proc.once('close', cleanup);
+  proc.once('error', cleanup);
+  return {
+    kill,
+    isTreeAlive: () => isProcessGroupAlive(proc.pid, killProcessTree),
+    cleanup,
+  };
+}
+
 function waitBounded(promise: Promise<unknown>, ms: number): Promise<boolean> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -136,41 +200,78 @@ function waitBounded(promise: Promise<unknown>, ms: number): Promise<boolean> {
   });
 }
 
+function waitForGroupExit(isTreeAlive: () => boolean, remainingMs: number): Promise<boolean> {
+  if (!isTreeAlive()) return Promise.resolve(true);
+  if (remainingMs <= 0) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const deadline = Date.now() + remainingMs;
+    const timer = setInterval(() => {
+      if (!isTreeAlive()) {
+        clearInterval(timer);
+        resolve(true);
+      } else if (Date.now() >= deadline) {
+        clearInterval(timer);
+        resolve(false);
+      }
+    }, TREE_POLL_MS);
+  });
+}
+
+async function waitForTreeExit(
+  childPromise: Promise<unknown>,
+  isTreeAlive: () => boolean,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  const childClosed = await waitBounded(childPromise, timeoutMs);
+  if (!childClosed) return false;
+  return waitForGroupExit(isTreeAlive, deadline - Date.now());
+}
+
+async function finishTreeTermination(
+  childPromise: Promise<unknown>,
+  control: ChildControl | undefined,
+): Promise<void> {
+  const isTreeAlive = control?.isTreeAlive ?? (() => false);
+  const exited = await waitForTreeExit(childPromise, isTreeAlive, TREE_CLOSE_GRACE_MS);
+  if (!exited && process.platform !== 'win32') {
+    control?.kill('SIGKILL');
+    await waitForTreeExit(childPromise, isTreeAlive, TREE_KILL_GRACE_MS);
+  }
+}
+
 async function raceWithTimeout<T>(
-  run: (registerKill: (kill: KillFn) => void) => Promise<T>,
+  run: (registerControl: (control: ChildControl) => void) => Promise<T>,
   timeoutMs: number,
   timeoutMessage: string,
   options: Pick<SpawnOptions, 'signal' | 'killProcessTree'> = {},
 ): Promise<T> {
   const { signal, killProcessTree } = options;
-  let killChild: KillFn | undefined;
+  let control: ChildControl | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const state = { timedOut: false };
+  const state: { timedOut: boolean; termination?: Promise<void> } = { timedOut: false };
   const onAbort = (): void => {
-    killChild?.('SIGTERM');
+    control?.kill('SIGTERM');
   };
   signal?.addEventListener('abort', onAbort, { once: true });
 
-  const childPromise = run((kill) => {
-    killChild = kill;
-    if (signal?.aborted) kill('SIGTERM');
+  const childPromise = run((nextControl) => {
+    control = nextControl;
+    if (signal?.aborted) nextControl.kill('SIGTERM');
   });
   void childPromise.catch(() => undefined);
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(() => {
       state.timedOut = true;
-      killChild?.('SIGTERM');
+      control?.kill('SIGTERM');
       if (!killProcessTree) {
         reject(new ProcessTimedOutError(timeoutMessage));
         return;
       }
-      // Wait boundedly for the tree to exit before rejecting so callers can safely clean up temp dirs.
-      void waitBounded(childPromise, TREE_CLOSE_GRACE_MS).then(async (closed) => {
-        if (!closed && process.platform !== 'win32') {
-          killChild?.('SIGKILL');
-          await waitBounded(childPromise, TREE_KILL_GRACE_MS);
-        }
+      // Wait boundedly for the whole process group (not just the direct child) before callers clean up temp dirs.
+      state.termination = finishTreeTermination(childPromise, control);
+      void state.termination.then(() => {
         reject(new ProcessTimedOutError(timeoutMessage));
       });
     }, timeoutMs);
@@ -178,14 +279,21 @@ async function raceWithTimeout<T>(
 
   try {
     const result = await Promise.race([childPromise, timeoutPromise]);
-    if (state.timedOut) throw new ProcessTimedOutError(timeoutMessage);
+    if (state.timedOut) {
+      await state.termination;
+      throw new ProcessTimedOutError(timeoutMessage);
+    }
     return result;
   } catch (error) {
-    if (state.timedOut) throw new ProcessTimedOutError(timeoutMessage);
+    if (state.timedOut) {
+      await state.termination;
+      throw new ProcessTimedOutError(timeoutMessage);
+    }
     throw error;
   } finally {
     clearTimeout(timeoutId);
     signal?.removeEventListener('abort', onAbort);
+    control?.cleanup();
   }
 }
 
@@ -234,10 +342,8 @@ async function spawnProcess(
       stdio: [options.stdin || 'ignore', options.stdout || 'pipe', options.stderr || 'pipe'],
       detached: shouldSpawnDetached(options),
     });
-    const kill: KillFn = (sig) => {
-      terminateChild(proc, Boolean(options.killProcessTree), sig);
-    };
-    options.onSpawn?.(kill);
+    const control = createChildControl(proc, options);
+    options.onSpawn?.(control);
 
     let stdout = '';
     let stderr = '';
@@ -271,7 +377,7 @@ async function spawnProcess(
           reject(error);
         }
       });
-      feedStdin(proc.stdin, options, reject, kill);
+      feedStdin(proc.stdin, options, reject, control.kill);
     }
 
     proc.on('error', reject);
@@ -341,10 +447,8 @@ async function captureProcessBytes(
       stdio: [options.stdin ?? 'ignore', options.stdout ?? 'pipe', options.stderr ?? 'pipe'],
       detached: shouldSpawnDetached(options),
     });
-    const kill: KillFn = (sig) => {
-      terminateChild(proc, Boolean(options.killProcessTree), sig);
-    };
-    options.onSpawn?.(kill);
+    const control = createChildControl(proc, options);
+    options.onSpawn?.(control);
 
     const stdout: Buffer[] = [];
     let stderr = '';
@@ -358,7 +462,7 @@ async function captureProcessBytes(
 
     if (proc.stdin) {
       proc.stdin.on('error', () => undefined);
-      feedStdin(proc.stdin, options, reject, kill);
+      feedStdin(proc.stdin, options, reject, control.kill);
     }
 
     proc.on('error', reject);

@@ -362,12 +362,14 @@ describe('spawnProcess stdin, against a mocked child', () => {
   });
 });
 
-function grandchildScript(ignoreSigterm = false): string {
-  const trap = ignoreSigterm ? "process.on('SIGTERM', () => {});" : '';
+function grandchildScript(
+  options: { ignoreSigterm?: boolean; detachStdio?: boolean } = {},
+): string {
+  const grandchildTrap = options.ignoreSigterm ? "process.on('SIGTERM', () => {});" : '';
+  const stdio = options.detachStdio ? 'ignore' : 'inherit';
   return [
-    trap,
     "const { spawn } = require('node:child_process');",
-    `const child = spawn(process.execPath, ['-e', "${trap} setInterval(() => {}, 60_000)"], { stdio: 'inherit' });`,
+    `const child = spawn(process.execPath, ['-e', "${grandchildTrap} setInterval(() => {}, 60_000)"], { stdio: '${stdio}' });`,
     "process.stdout.write(String(child.pid) + '\\n');",
     'setInterval(() => {}, 60_000);',
   ].join(' ');
@@ -405,7 +407,12 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
   });
 
   function spawnTree(
-    options: { signal?: AbortSignal; timeoutMs?: number; ignoreSigterm?: boolean } = {},
+    options: {
+      signal?: AbortSignal;
+      timeoutMs?: number;
+      ignoreSigterm?: boolean;
+      detachStdio?: boolean;
+    } = {},
   ) {
     let buffer = '';
     let reported = false;
@@ -415,7 +422,7 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
     });
     const running = spawnProcessWithTimeout(
       process.execPath,
-      ['-e', grandchildScript(options.ignoreSigterm)],
+      ['-e', grandchildScript(options)],
       {
         stdout: 'pipe',
         killProcessTree: true,
@@ -452,10 +459,16 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
     expect(await waitForProcessExit(pid)).toBe(true);
   });
 
-  it('waits for descendant processes to exit on timeout (including SIGKILL escalation when SIGTERM is trapped)', async () => {
-    const cases = process.platform === 'win32' ? [false] : [false, true];
-    for (const ignoreSigterm of cases) {
-      const { grandchildPid, running } = spawnTree({ timeoutMs: 400, ignoreSigterm });
+  it('escalates to SIGKILL on timeout even when direct child exits while a stdio-ignored grandchild traps SIGTERM', async () => {
+    const cases =
+      process.platform === 'win32'
+        ? [{ ignoreSigterm: false, detachStdio: false }]
+        : [
+            { ignoreSigterm: false, detachStdio: false },
+            { ignoreSigterm: true, detachStdio: true },
+          ];
+    for (const opts of cases) {
+      const { grandchildPid, running } = spawnTree({ timeoutMs: 400, ...opts });
       const settled = running.catch((err: unknown) => err);
       const pid = await Promise.race([
         grandchildPid,
@@ -471,6 +484,52 @@ describe('spawnProcessWithTimeout killProcessTree', () => {
       expect(await waitForProcessExit(pid)).toBe(true);
     }
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'forwards parent SIGINT to a detached killProcessTree child without leaving orphans',
+    async () => {
+      const processModule = join(import.meta.dir, '../../../src/core/process/process.ts');
+      const driver = `
+      import { spawnProcessWithTimeout } from ${JSON.stringify(processModule)};
+      await spawnProcessWithTimeout(
+        process.execPath,
+        ['-e', ${JSON.stringify(grandchildScript())}],
+        { stdout: 'pipe', killProcessTree: true, onStdout: (c) => process.stdout.write(c) },
+        30_000,
+        'timeout',
+      );
+    `;
+      const parent = childProcess.spawn(process.execPath, ['-e', driver], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const grandchildPid = await new Promise<number>((resolve, reject) => {
+        let buf = '';
+        parent.stdout.on('data', (chunk: Buffer) => {
+          buf += chunk.toString('utf-8');
+          const idx = buf.indexOf('\n');
+          if (idx !== -1) {
+            const pid = Number.parseInt(buf.slice(0, idx).trim(), 10);
+            if (!Number.isNaN(pid)) {
+              spawnedPids.push(pid);
+              resolve(pid);
+            }
+          }
+        });
+        parent.once('error', reject);
+        parent.once('exit', (code, sig) =>
+          reject(new Error(`Parent exited early (${String(code ?? sig)})`)),
+        );
+      });
+      expect(isProcessAlive(grandchildPid)).toBe(true);
+
+      const exited = new Promise<NodeJS.Signals | null>((resolve) => {
+        parent.once('close', (_code, sig) => resolve(sig));
+      });
+      parent.kill('SIGINT');
+      expect(await exited).toBe('SIGINT');
+      expect(await waitForProcessExit(grandchildPid)).toBe(true);
+    },
+  );
 });
 
 describe('spawnProcessCapturingBytes', () => {
