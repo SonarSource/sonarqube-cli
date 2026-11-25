@@ -29,13 +29,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as openpgp from 'openpgp';
 
-import type { PlatformInfo } from '@/core/host/install/install-types.ts';
 import {
   verifyBinarySignature,
   verifyPgpSignature,
 } from '@/core/host/install/sonarsource-releases.ts';
 
-const PLATFORM: PlatformInfo = { os: 'linux', arch: 'x86-64', extension: '' };
+const PLATFORM_KEY = 'linux-x86-64';
 
 async function generateKeyPair(): Promise<{ privateKey: string; publicKey: string }> {
   return openpgp.generateKey({
@@ -109,31 +108,38 @@ describe('verifyBinarySignature', () => {
   });
 
   it('resolves when binary matches the signature and key', async () => {
-    const signatures = { 'linux-x86-64': armoredSignature };
+    const signatures = { [PLATFORM_KEY]: armoredSignature };
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      verifyBinarySignature('sonar-secrets', binaryPath, PLATFORM, signatures, armoredPublicKey),
+      verifyBinarySignature(
+        'sonar-secrets',
+        binaryPath,
+        PLATFORM_KEY,
+        signatures,
+        armoredPublicKey,
+      ),
     ).resolves.toBeUndefined();
   });
 
   it('throws when no signature is registered for the platform', async () => {
-    const unknownPlatform: PlatformInfo = {
-      os: 'linux',
-      arch: 'arm',
-      extension: '',
-    };
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      verifyBinarySignature('sonar-secrets', binaryPath, unknownPlatform, {}, armoredPublicKey),
+      verifyBinarySignature('sonar-secrets', binaryPath, 'linux-arm', {}, armoredPublicKey),
     ).rejects.toThrow("sonar-secrets is not available for platform 'linux-arm'");
   });
 
   it('throws when the binary content does not match the signature', async () => {
     writeFileSync(binaryPath, Buffer.from('tampered binary content'));
-    const signatures = { 'linux-x86-64': armoredSignature };
+    const signatures = { [PLATFORM_KEY]: armoredSignature };
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      verifyBinarySignature('sonar-secrets', binaryPath, PLATFORM, signatures, armoredPublicKey),
+      verifyBinarySignature(
+        'sonar-secrets',
+        binaryPath,
+        PLATFORM_KEY,
+        signatures,
+        armoredPublicKey,
+      ),
     ).rejects.toThrow('Binary signature verification failed');
   });
 });

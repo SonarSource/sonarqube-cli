@@ -78,6 +78,33 @@
         }
       ]
     },
+    "sonar-container-scanner": {
+      "version": "1.0.0.10227",
+      "binaryPath": "CommercialDistribution/sonar-container-scanner",
+      "platformNaming": "x64",
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86-64",
+          "extension": "bin"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64",
+          "extension": "bin"
+        },
+        {
+          "os": "macos",
+          "arch": "arm64",
+          "extension": "bin"
+        },
+        {
+          "os": "windows",
+          "arch": "x86-64",
+          "extension": "exe"
+        }
+      ]
+    },
     "sonar-context-augmentation": {
       "version": "0.28.0.8184",
       "binaryPath": "Distribution/sonar-context-augmentation",
