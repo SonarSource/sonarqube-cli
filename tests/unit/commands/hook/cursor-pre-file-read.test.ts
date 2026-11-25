@@ -75,7 +75,7 @@ describe('cursorPreFileRead', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
   let resolveSecretsBinaryPathSpy: ReturnType<typeof spyOn>;
-  let runSecretsBinaryOnTextSpy: ReturnType<typeof spyOn>;
+  let runSecretsBinaryOnStreamSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSpy: ReturnType<typeof spyOn>;
 
@@ -96,7 +96,10 @@ describe('cursorPreFileRead', () => {
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/usr/bin/sonar-secrets',
     );
-    runSecretsBinaryOnTextSpy = spyOn(analyzeSecrets, 'runSecretsBinaryOnText').mockResolvedValue({
+    runSecretsBinaryOnStreamSpy = spyOn(
+      analyzeSecrets,
+      'runSecretsBinaryOnStream',
+    ).mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
@@ -110,13 +113,13 @@ describe('cursorPreFileRead', () => {
     resolveAuthSpy.mockRestore();
     readStdinJsonSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
-    runSecretsBinaryOnTextSpy.mockRestore();
+    runSecretsBinaryOnStreamSpy.mockRestore();
     existsSyncSpy.mockRestore();
     readFileSpy.mockRestore();
   });
 
   it('blocks with deny JSON when secrets are found in payload content', async () => {
-    runSecretsBinaryOnTextSpy.mockResolvedValue({
+    runSecretsBinaryOnStreamSpy.mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: '',
       stderr: '',
@@ -130,10 +133,11 @@ describe('cursorPreFileRead', () => {
     const ctx = makeCtx();
     await expectCursorDeny(cursorPreFileRead(ctx));
 
-    expect(runSecretsBinaryOnTextSpy).toHaveBeenCalledWith(
+    expect(runSecretsBinaryOnStreamSpy).toHaveBeenCalledWith(
       '/usr/bin/sonar-secrets',
-      SECRET_CONTENT,
+      expect.anything(),
       expect.any(Object),
+      60_000,
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
@@ -143,7 +147,7 @@ describe('cursorPreFileRead', () => {
   });
 
   it('keeps the stats fact for postAction to commit on deny', async () => {
-    runSecretsBinaryOnTextSpy.mockResolvedValue({
+    runSecretsBinaryOnStreamSpy.mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: '',
       stderr: '',
@@ -160,7 +164,7 @@ describe('cursorPreFileRead', () => {
 
     await cursorPreFileRead(makeCtx());
 
-    expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnStreamSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
@@ -170,11 +174,50 @@ describe('cursorPreFileRead', () => {
     await cursorPreFileRead(makeCtx());
 
     expect(readFileSpy).toHaveBeenCalledWith(TEST_FILE, 'utf-8');
-    expect(runSecretsBinaryOnTextSpy).toHaveBeenCalledWith(
+    expect(runSecretsBinaryOnStreamSpy).toHaveBeenCalledWith(
       '/usr/bin/sonar-secrets',
-      SECRET_CONTENT,
+      expect.anything(),
       expect.any(Object),
+      60_000,
     );
+  });
+
+  it('sends exact UTF-8 bytes with a workspace-relative filename', async () => {
+    const content = '// café\nconst value = "different from disk";\n';
+    readStdinJsonSpy.mockResolvedValue({
+      file_path: '/workspace/tests/fixture.ts',
+      content,
+      workspace_roots: ['/workspace'],
+    });
+    await cursorPreFileRead(makeCtx());
+
+    const batch = runSecretsBinaryOnStreamSpy.mock.calls[0][1] as AsyncIterable<Buffer>;
+    const chunks: Buffer[] = [];
+    for await (const chunk of batch) chunks.push(chunk);
+    expect(Buffer.concat(chunks).toString('utf-8')).toBe(
+      `scan cursor\n${Buffer.byteLength(content)} tests/fixture.ts\n${content}\n`,
+    );
+    expect(readFileSpy).not.toHaveBeenCalled();
+  });
+
+  it('scans unencodable filenames as text', async () => {
+    readStdinJsonSpy.mockResolvedValue({ file_path: 'line\nbreak.ts', content: SECRET_CONTENT });
+    const textSpy = spyOn(analyzeSecrets, 'runSecretsBinaryOnText').mockResolvedValue({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
+    try {
+      await cursorPreFileRead(makeCtx());
+      expect(textSpy).toHaveBeenCalledWith(
+        '/usr/bin/sonar-secrets',
+        SECRET_CONTENT,
+        expect.any(Object),
+      );
+      expect(runSecretsBinaryOnStreamSpy).not.toHaveBeenCalled();
+    } finally {
+      textSpy.mockRestore();
+    }
   });
 
   it('denies with the unauthenticated message and exits 2 when auth is unavailable', async () => {
@@ -182,7 +225,7 @@ describe('cursorPreFileRead', () => {
 
     await expectCursorDeny(cursorPreFileRead(makeCtx()));
 
-    expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnStreamSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
@@ -194,7 +237,7 @@ describe('cursorPreFileRead', () => {
 
     await expectCursorDeny(cursorPreFileRead(makeCtx()));
 
-    expect(runSecretsBinaryOnTextSpy).not.toHaveBeenCalled();
+    expect(runSecretsBinaryOnStreamSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
     const output = JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim());
     expect(output.permission).toBe('deny');
@@ -208,7 +251,7 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
   let resolveSecretsBinaryPathSpy: ReturnType<typeof spyOn>;
-  let runSecretsBinaryOnTextSpy: ReturnType<typeof spyOn>;
+  let runSecretsBinaryOnStreamSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), 'cursor-pre-file-read-'));
@@ -226,7 +269,10 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/usr/bin/sonar-secrets',
     );
-    runSecretsBinaryOnTextSpy = spyOn(analyzeSecrets, 'runSecretsBinaryOnText').mockResolvedValue({
+    runSecretsBinaryOnStreamSpy = spyOn(
+      analyzeSecrets,
+      'runSecretsBinaryOnStream',
+    ).mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: '',
       stderr: '',
@@ -238,7 +284,7 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
     resolveAuthSpy.mockRestore();
     readStdinJsonSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
-    runSecretsBinaryOnTextSpy.mockRestore();
+    runSecretsBinaryOnStreamSpy.mockRestore();
     rmSync(projectRoot, { recursive: true, force: true });
   });
 
@@ -260,10 +306,21 @@ describe('cursorPreFileRead — .cursorignore side effect', () => {
   });
 
   it('does not append to .cursorignore when no file path is available', async () => {
+    const textSpy = spyOn(analyzeSecrets, 'runSecretsBinaryOnText').mockResolvedValue({
+      exitCode: EXIT_CODE_SECRETS_FOUND,
+      stdout: '',
+      stderr: '',
+    });
     readStdinJsonSpy.mockResolvedValue({ content: SECRET_CONTENT, workspace_roots: [projectRoot] });
 
     await expectCursorDeny(cursorPreFileRead(makeCtx()));
 
+    expect(textSpy).toHaveBeenCalledWith(
+      '/usr/bin/sonar-secrets',
+      SECRET_CONTENT,
+      expect.any(Object),
+    );
+    textSpy.mockRestore();
     expect(() => readFileSync(join(projectRoot, CURSOR_IGNORE_FILE))).toThrow();
   });
 });

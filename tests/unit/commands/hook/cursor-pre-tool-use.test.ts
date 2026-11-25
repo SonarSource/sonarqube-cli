@@ -75,7 +75,7 @@ describe('cursorPreToolUse', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
   let resolveSecretsBinaryPathSpy: ReturnType<typeof spyOn>;
-  let runSecretsBinaryOnTextSpy: ReturnType<typeof spyOn>;
+  let runSecretsBinaryOnStreamSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSpy: ReturnType<typeof spyOn>;
 
@@ -96,7 +96,10 @@ describe('cursorPreToolUse', () => {
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/usr/bin/sonar-secrets',
     );
-    runSecretsBinaryOnTextSpy = spyOn(analyzeSecrets, 'runSecretsBinaryOnText').mockResolvedValue({
+    runSecretsBinaryOnStreamSpy = spyOn(
+      analyzeSecrets,
+      'runSecretsBinaryOnStream',
+    ).mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
@@ -110,13 +113,13 @@ describe('cursorPreToolUse', () => {
     resolveAuthSpy.mockRestore();
     readStdinJsonSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
-    runSecretsBinaryOnTextSpy.mockRestore();
+    runSecretsBinaryOnStreamSpy.mockRestore();
     existsSyncSpy.mockRestore();
     readFileSpy.mockRestore();
   });
 
   it('blocks with preToolUse deny JSON when secrets are found', async () => {
-    runSecretsBinaryOnTextSpy.mockResolvedValue({
+    runSecretsBinaryOnStreamSpy.mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: '',
       stderr: '',
@@ -140,7 +143,7 @@ describe('cursorPreToolUse', () => {
   });
 
   it('keeps the stats fact for postAction to commit on deny', async () => {
-    runSecretsBinaryOnTextSpy.mockResolvedValue({
+    runSecretsBinaryOnStreamSpy.mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: '',
       stderr: '',
@@ -206,7 +209,7 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
   let resolveSecretsBinaryPathSpy: ReturnType<typeof spyOn>;
-  let runSecretsBinaryOnTextSpy: ReturnType<typeof spyOn>;
+  let runSecretsBinaryOnStreamSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), 'cursor-pre-tool-use-'));
@@ -224,7 +227,10 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/usr/bin/sonar-secrets',
     );
-    runSecretsBinaryOnTextSpy = spyOn(analyzeSecrets, 'runSecretsBinaryOnText').mockResolvedValue({
+    runSecretsBinaryOnStreamSpy = spyOn(
+      analyzeSecrets,
+      'runSecretsBinaryOnStream',
+    ).mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: '',
       stderr: '',
@@ -236,7 +242,7 @@ describe('cursorPreToolUse — .cursorignore side effect', () => {
     resolveAuthSpy.mockRestore();
     readStdinJsonSpy.mockRestore();
     resolveSecretsBinaryPathSpy.mockRestore();
-    runSecretsBinaryOnTextSpy.mockRestore();
+    runSecretsBinaryOnStreamSpy.mockRestore();
     rmSync(projectRoot, { recursive: true, force: true });
   });
 
