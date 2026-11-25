@@ -21,14 +21,24 @@
 import { expect, it, spyOn } from 'bun:test';
 
 import { warnIfMcpRuntimeUnavailable } from '@/commands/integrate/_common/mcp-runtime-warning.ts';
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import * as toolDetector from '@/core/host/environment/tool-detector.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import * as mcpEndpoint from '@/core/host/mcp/mcp-endpoint.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
-it('warns that a timed-out runtime may delay the MCP launcher', async () => {
+it('warns only when the shared MCP check reports a startup or runtime problem', async () => {
+  const connection = {
+    auth: new ResolvedAuth({
+      serverUrl: 'http://localhost:9000',
+      token: 'test-token',
+      connectionType: 'on-premise',
+      source: 'state',
+    }),
+    httpClient: new SonarHttpClient('http://localhost:9000', 'test-token'),
+  };
   const state = getDefaultState('test');
   state.integrations.installed.push({
     id: 'test',
@@ -53,16 +63,29 @@ it('warns that a timed-out runtime may delay the MCP launcher', async () => {
     ],
   });
   const stateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
-  const healthSpy = spyOn(toolDetector, 'checkContainerRuntimeHealth').mockResolvedValue({
-    status: 'not_ready',
-    runtime: 'docker',
-    viaWsl: false,
-    reason: 'timeout',
-  });
   const console = new FakeConsole();
+  const status: mcpEndpoint.McpEndpointStatus = {
+    connectionMode: 'hosted',
+    serverUrl: 'http://localhost:9000/mcp',
+    fallbackReason: null,
+    startupError: null,
+    containerRuntime: null,
+  };
+  const endpointSpy = spyOn(mcpEndpoint, 'checkMcpEndpoint').mockResolvedValue(status);
 
   try {
-    await warnIfMcpRuntimeUnavailable(console, 'claude-code', '/repo');
+    await warnIfMcpRuntimeUnavailable(console, 'claude-code', '/repo', connection);
+    expect(console.calls).toEqual([]);
+    expect(endpointSpy).toHaveBeenCalledWith(connection);
+
+    status.connectionMode = 'container';
+    status.containerRuntime = {
+      status: 'not_ready',
+      runtime: 'docker',
+      viaWsl: false,
+      reason: 'timeout',
+    };
+    await warnIfMcpRuntimeUnavailable(console, 'claude-code', '/repo', connection);
 
     expect(console.calls).toEqual([
       {
@@ -71,19 +94,17 @@ it('warns that a timed-out runtime may delay the MCP launcher', async () => {
       },
     ]);
 
-    healthSpy.mockRejectedValue(
-      new InvalidOptionError('SONARQUBE_CLI_MCP_WSL must be auto, always, or never.'),
-    );
+    status.startupError = "Hosted MCP health check returned HTTP 401. Run 'sonar auth login'.";
     console.calls.length = 0;
-    await warnIfMcpRuntimeUnavailable(console, 'claude-code', '/repo');
+    await warnIfMcpRuntimeUnavailable(console, 'claude-code', '/repo', connection);
     expect(console.calls).toEqual([
       {
         method: 'warn',
-        args: ['SONARQUBE_CLI_MCP_WSL must be auto, always, or never.'],
+        args: ["Hosted MCP health check returned HTTP 401. Run 'sonar auth login'."],
       },
     ]);
   } finally {
+    endpointSpy.mockRestore();
     stateSpy.mockRestore();
-    healthSpy.mockRestore();
   }
 });
