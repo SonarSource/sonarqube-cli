@@ -69,14 +69,12 @@ const POLL_INTERVAL_MS = 1_000;
 const INTEGRATE_FALLBACK =
   "Or run 'sonar integrate' to set up your coding agents without an organization.";
 
-/**
- * Thrown when an account without memberships declines organization creation. It is not
- * a failure: `init` turns it into an outcome that ends the run and exits 0. Every
- * other way the creation can stop is a `CommandFailedError`, so scripts see a non-zero exit.
- */
+/** Declining fails standalone login; `init` handles it as a normal stop with exit code 0. */
 export class OrganizationCreationDeclined extends CommandFailedError {
   constructor() {
-    super('Organization creation declined');
+    super('Organization creation declined', {
+      remediationHint: "Join a SonarQube Cloud organization, then run 'sonar auth login' again.",
+    });
     this.name = 'OrganizationCreationDeclined';
   }
 }
