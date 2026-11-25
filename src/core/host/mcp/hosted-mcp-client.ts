@@ -29,8 +29,6 @@ import {
 } from '@/core/server/http-constants.ts';
 import { resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 
-import type { McpRunOptions } from './mcp.ts';
-
 const MCP_ENDPOINT = '/mcp';
 const HEALTH_TIMEOUT_MS = 5000;
 const REQUEST_TIMEOUT_MS = 60000;
@@ -69,7 +67,10 @@ export class HostedMcpClient {
       : { available: false, reason: `health check returned HTTP ${status}` };
   }
 
-  request(init: RequestInit, options: McpRunOptions): Promise<Response> {
+  request(
+    init: RequestInit,
+    options: { readOnly?: boolean; toolsets?: string },
+  ): Promise<Response> {
     const headers = new Headers(init.headers);
     if (this.connection.auth.orgKey) headers.set('SONARQUBE_ORG', this.connection.auth.orgKey);
     if (options.readOnly) headers.set('SONARQUBE_READ_ONLY', 'true');

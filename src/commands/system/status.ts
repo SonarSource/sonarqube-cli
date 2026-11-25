@@ -55,6 +55,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
+import { checkMcpEndpoint, type McpEndpointStatus } from '@/core/host/mcp/mcp-endpoint.ts';
 import { mcpLoopbackAdvice, readMcpContainerSettings } from '@/core/host/mcp/mcp-network.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { CliState } from '@/core/state/state.ts';
@@ -83,7 +84,6 @@ import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
 import { checkForUpdate, type UpdateCheckResult } from '../update/update-check.ts';
 import { renderCodexInstallation } from './status-codex.ts';
-import { checkMcpEndpoint, type McpEndpointStatus, renderMcpEndpoint } from './status-mcp.ts';
 import {
   buildVortexJson,
   buildVortexRecommendation,
@@ -848,6 +848,25 @@ function renderIntegrationsSection(
     }
   }
   if (containerRuntime) console.text(`  • MCP Runtime: ${runtimeStatusLine(containerRuntime)}`);
+}
+
+function renderMcpEndpoint(status: McpEndpointStatus, console: Console): void {
+  console.blank();
+  console.text('MCP (sonar run mcp --transport auto)');
+  if (status.startupError) {
+    console.text(`  • Cannot start: ${status.startupError}`);
+    return;
+  }
+  if (status.connectionMode === 'hosted') {
+    console.text('  • Transport: HTTP (hosted)');
+    console.text(`  • Endpoint: ${status.serverUrl}`);
+  } else if (status.connectionMode === 'container') {
+    console.text('  • Transport: stdio (local container)');
+    console.text(`  • SonarQube server URL: ${status.serverUrl}`);
+  }
+  if (status.fallbackReason) console.text(`  • Using container because ${status.fallbackReason}.`);
+  if (status.containerRuntime)
+    console.text(`  • Container runtime: ${runtimeStatusLine(status.containerRuntime)}`);
 }
 
 function renderRecommendationsSection(recommendations: string[], console: Console): void {
