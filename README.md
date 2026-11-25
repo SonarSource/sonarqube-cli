@@ -148,30 +148,11 @@ sonar --version
 
 ### Step 2: Authenticate
 
-Connect to SonarQube Cloud EU (default):
-
 ```bash
 sonar auth login
+# Asks where to connect: SonarQube Cloud (EU, US or AU region) or a self-hosted SonarQube Server
 # Opens your browser to sign in to SonarQube and generates a user token
 # Returns to terminal when complete
-```
-
-For SonarQube Cloud US:
-
-```bash
-sonar auth login --server https://sonarqube.us
-```
-
-For SonarQube Cloud AU:
-
-```bash
-sonar auth login --server https://sonarqube.au
-```
-
-For self-hosted SonarQube Server:
-
-```bash
-sonar auth login --server https://sonarqube.mycompany.com
 ```
 
 **Verify authentication:**
