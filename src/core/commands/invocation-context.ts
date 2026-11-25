@@ -123,6 +123,11 @@ export class CommandInvocationContext {
     return this.runtime.isPrivateBetaEnabled(this.lifecycle.betaFlagKey);
   }
 
+  /** Resolves an organization-scoped LaunchDarkly flag; false when it cannot be resolved. */
+  isFeatureFlagEnabled(flagKey: string): Promise<boolean> {
+    return this.runtime.resolveFeatureFlag(flagKey);
+  }
+
   /**
    * A context for the same invocation once credentials exist that this context's memoized
    * {@link resolveAuth} cannot see, such as right after a login. Its telemetry and stats facts

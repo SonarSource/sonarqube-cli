@@ -49,6 +49,16 @@ export class FlagsResolver {
     this.decisions = await this.memo;
   }
 
+  /** Registers a flag key on demand and resolves it, for flags that do not gate a command or option. */
+  async ensureResolved(flagKey: string): Promise<void> {
+    if (flagKey in this.decisions) {
+      return;
+    }
+    this.registry.record(flagKey);
+    this.memo = undefined;
+    await this.resolveFlags();
+  }
+
   private async load(flagKeys: readonly string[]): Promise<Record<string, boolean>> {
     const authResult = await this.authResolver.resolveAuth();
     const auth = authResult.isOk() ? authResult.value : null;
