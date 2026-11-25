@@ -23,14 +23,16 @@ import { incompatibleResponse } from './errors.ts';
 import type { FindingType } from './findings.ts';
 
 export const SUMMARY_CATEGORIES = {
-  deviations: ['structuralDeviation', 'relationshipDeviation'],
+  deviations: ['structuralDeviation', 'relationshipDeviation', 'assertionDeviation'],
   flaws: ['tangle', 'oversizedComponent'],
   smells: ['weakTangle', 'splitResponsibility'],
 } as const satisfies Record<string, readonly FindingType[]>;
+// Servers released before assertion deviations omit this count; absent means not reported, not zero.
+const OPTIONAL_SUMMARY_TYPES: readonly FindingType[] = ['assertionDeviation'];
 
 export interface SummaryCounts {
   total: number;
-  [type: string]: number;
+  [type: string]: number | undefined;
 }
 export interface Coverage {
   coverage?: number;
@@ -57,6 +59,7 @@ function parseCounts(value: unknown, types: readonly FindingType[]): SummaryCoun
   const result: SummaryCounts = { total: 0 };
   for (const key of ['total', ...types]) {
     const count = source[key];
+    if (count == null && (OPTIONAL_SUMMARY_TYPES as readonly string[]).includes(key)) continue;
     if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) throw invalid();
     result[key] = count;
   }

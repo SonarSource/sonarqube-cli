@@ -121,6 +121,36 @@ describe('architecture summary response', () => {
       }),
     ).toEqual({ summaries: [summary, { ...summary, language: 'py' }] });
   });
+  it('reads assertion deviation counts and treats a missing count as not reported', () => {
+    const deviations = { ...summary.deviations, total: 5, assertionDeviation: 2 };
+    expect(
+      parseSummaries({ projectSummaries: [{ ...summary, deviations }] }).summaries[0].deviations,
+    ).toEqual(deviations);
+    for (const assertionDeviation of [undefined, null]) {
+      const [row] = parseSummaries({
+        projectSummaries: [
+          { ...summary, deviations: { ...summary.deviations, assertionDeviation } },
+        ],
+      }).summaries;
+      expect(row.deviations).toEqual(summary.deviations);
+      expect('assertionDeviation' in row.deviations).toBe(false);
+    }
+    for (const assertionDeviation of [-1, 1.5, '2']) {
+      expect(() =>
+        parseSummaries({
+          projectSummaries: [
+            { ...summary, deviations: { ...summary.deviations, assertionDeviation } },
+          ],
+        }),
+      ).toThrow('Invalid public architecture summary response');
+    }
+  });
+  it('keeps the other summary counts required', () => {
+    const { relationshipDeviation: _, ...deviations } = summary.deviations;
+    expect(() => parseSummaries({ projectSummaries: [{ ...summary, deviations }] })).toThrow(
+      'Invalid public architecture summary response',
+    );
+  });
   it('preserves an empty result without inventing zero counts', () => {
     expect(parseSummaries({ projectSummaries: [] })).toEqual({ summaries: [] });
   });

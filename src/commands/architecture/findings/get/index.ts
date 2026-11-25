@@ -115,6 +115,8 @@ function findingDescription(finding: ProjectFinding): string {
       return `${d.nodeKey} (${d.reason}${countText(d.misplacedComponentCount, 'component')})`;
     case 'relationshipDeviation':
       return `${d.fromNodeKey} -> ${d.toNodeKey} (${d.reason}${countText(d.dependencyCount, 'dependency', 'dependencies')})`;
+    case 'assertionDeviation':
+      return `${d.fromNodeKey} -> ${d.toNodeKey} (assertion '${d.assertionName}'${countText(d.dependencyCount, 'dependency', 'dependencies')})`;
     case 'tangle':
     case 'weakTangle':
       return `${d.nodeKeys?.join(', ')} (${d.nodeCount} ${d.nodeCount === 1 ? 'node' : 'nodes'})`;

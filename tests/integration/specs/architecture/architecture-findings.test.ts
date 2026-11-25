@@ -46,6 +46,7 @@ describe('public architecture findings contract', () => {
     h.withAuth(server.recordedAuthServerUrl(), 'findings-token', cloud ? 'my-org' : undefined);
     return server;
   }
+  const assertion = findings[8];
   const requests = (server: Awaited<ReturnType<typeof configured>>) =>
     server.getRecordedRequests().filter((r) => r.path.includes('project-findings'));
 
@@ -98,7 +99,7 @@ describe('public architecture findings contract', () => {
       expect(JSON.parse(result.stdout)).toEqual({
         project: 'shop',
         findings,
-        page: { pageIndex: 1, pageSize: 50, total: 8 },
+        page: { pageIndex: 1, pageSize: 50, total: 9 },
       });
       const [request] = requests(server);
       expect(request.path).toBe('/architecture/project-findings');
@@ -177,6 +178,23 @@ describe('public architecture findings contract', () => {
     expect(none.stderr).toContain('type relationshipDeviation belongs to category deviation');
     expect(requests(server)).toHaveLength(1);
   });
+  it('reads assertion deviations by type and within the deviation category', async () => {
+    const server = await configured();
+    const byType = await h.run('arch findings get -p shop --type assertionDeviation --format json');
+    expect(byType.exitCode).toBe(0);
+    expect(JSON.parse(byType.stdout).findings).toEqual([assertion]);
+    expect(requests(server)[0].query.type).toBe('assertionDeviation');
+    const byCategory = await h.run('arch findings get -p shop --category deviation --format json');
+    expect(JSON.parse(byCategory.stdout).findings).toContainEqual(assertion);
+    const toon = await h.run('arch findings get -p shop --type assertionDeviation --format toon');
+    expect(toon.exitCode).toBe(0);
+    expect(toon.stdout).toContain('assertionName: web-not-db');
+    const mismatch = await h.run(
+      'arch findings get -p shop --type assertionDeviation --category flaw --format json',
+    );
+    expect(mismatch.exitCode).toBe(2);
+    expect(mismatch.stderr).toContain('type assertionDeviation belongs to category deviation');
+  });
   it('pages without requiring IDs or deduplicating identical findings', async () => {
     await configured(true, (api) => api.withFindings([findings[0], findings[0], findings[1]]));
     const text = await h.run('arch findings get -p shop --page-size 1 --format text');
@@ -190,7 +208,7 @@ describe('public architecture findings contract', () => {
     await configured();
     const result = await h.run('arch findings get -p shop --page-size 0 --format text');
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Page 1: 0 of 8 findings.');
+    expect(result.stdout).toContain('Page 1: 0 of 9 findings.');
     expect(result.stdout).toContain('Use --page-size greater than 0');
     expect(result.stdout).not.toContain('Use --page to continue');
   });
@@ -253,6 +271,12 @@ describe('public architecture findings contract', () => {
     { ...findings[2], details: { reason: 'disallowedDependency', fromNodeKey: 'a' } },
     { ...findings[4], details: { nodeKeys: ['a'], nodeCount: -1 } },
     { ...findings[5], details: { nodeKey: 'a', leafArtifactCount: '40' } },
+    { ...assertion, details: { ...assertion.details, assertionName: undefined } },
+    { ...assertion, details: { ...assertion.details, toNodeKey: 1 } },
+    { ...assertion, details: { ...assertion.details, dependencyCount: undefined } },
+    { ...assertion, details: { ...assertion.details, dependencyCount: 0 } },
+    { ...assertion, details: { ...assertion.details, dependencyCount: 1.5 } },
+    { ...assertion, category: 'smell' },
   ];
   it.each(invalidFindings)('rejects malformed public finding %j', async (finding) => {
     await configured(true, (api) =>
@@ -438,6 +462,8 @@ describe('public architecture findings contract', () => {
     expect(result.stdout).toContain('a, b (2 nodes)');
     expect(result.stdout).toContain('large (40 leaf artifacts)');
     expect(result.stdout).toContain('util (3 fragments)');
+    expect(result.stdout).toContain('deviation: assertionDeviation (java)');
+    expect(result.stdout).toContain("app:web -> app:db (assertion 'web-not-db', 2 dependencies)");
     expect(result.stdout).not.toContain('details: {');
   });
 

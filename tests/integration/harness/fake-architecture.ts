@@ -97,6 +97,14 @@ export class FakeArchitecture {
   private findings: ProjectFinding[] = [];
   private analyzedLanguages?: string[];
 
+  private summaryAssertionDeviations = true;
+
+  /** Mimics servers released before summaries reported assertion deviations. */
+  withoutSummaryAssertionDeviations(): this {
+    this.summaryAssertionDeviations = false;
+    return this;
+  }
+
   withAnalyzedLanguages(languages: string[]): this {
     this.analyzedLanguages = [...languages];
     return this;
@@ -297,6 +305,9 @@ export class FakeArchitecture {
           const count = (type: string) => items.filter((item) => item.type === type).length;
           const structuralDeviation = count('structuralDeviation');
           const relationshipDeviation = count('relationshipDeviation');
+          const assertionDeviation = this.summaryAssertionDeviations
+            ? count('assertionDeviation')
+            : 0;
           const tangle = count('tangle');
           const oversizedComponent = count('oversizedComponent');
           const weakTangle = count('weakTangle');
@@ -304,9 +315,10 @@ export class FakeArchitecture {
           return {
             language,
             deviations: {
-              total: structuralDeviation + relationshipDeviation,
+              total: structuralDeviation + relationshipDeviation + assertionDeviation,
               structuralDeviation,
               relationshipDeviation,
+              ...(this.summaryAssertionDeviations ? { assertionDeviation } : {}),
             },
             flaws: { total: tangle + oversizedComponent, tangle, oversizedComponent },
             smells: { total: weakTangle + splitResponsibility, weakTangle, splitResponsibility },

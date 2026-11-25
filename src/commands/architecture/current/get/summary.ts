@@ -91,7 +91,10 @@ function printSummaryText(
     for (const category of ['deviations', 'flaws', 'smells'] as const) {
       const types = SUMMARY_CATEGORIES[category];
       const counts = summary[category];
-      const details = types.map((type) => `${type}: ${counts[type]}`).join(', ');
+      const details = types
+        .filter((type) => counts[type] !== undefined)
+        .map((type) => `${type}: ${counts[type]}`)
+        .join(', ');
       ctx.console.info(`  ${category}: ${counts.total} (${details})`);
     }
   }
