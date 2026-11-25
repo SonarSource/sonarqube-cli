@@ -96,26 +96,37 @@ describe('container scanner report', () => {
     expect(parseContainerScanReport({ exitCode: 0, stdout, stderr: '' })).toBeUndefined();
   });
 
-  it('rejects contradictory gate-failed reports with empty findings or disabled threshold', () => {
-    expect(
-      parseContainerScanReport({
+  it('rejects reports whose native exit code contradicts the configured fail threshold', () => {
+    const contradictoryReports = [
+      { issues: [], errors: [], configuration, exitCode: 1 },
+      {
+        issues: [{ severity: 'blocker', vulnerabilityId: 'CVE-2025-0001' }],
+        errors: [],
+        configuration: { ...configuration, failOn: 'none' },
         exitCode: 1,
-        stdout: JSON.stringify({ issues: [], errors: [], configuration, exitCode: 1 }),
-        stderr: '',
-      }),
-    ).toBeUndefined();
-    expect(
-      parseContainerScanReport({
+      },
+      {
+        issues: [{ severity: 'medium', vulnerabilityId: 'CVE-2025-0002' }],
+        errors: [],
+        configuration,
         exitCode: 1,
-        stdout: JSON.stringify({
-          issues: [{ severity: 'blocker', vulnerabilityId: 'CVE-2025-0001' }],
-          errors: [],
-          configuration: { ...configuration, failOn: 'none' },
-          exitCode: 1,
+      },
+      {
+        issues: [{ severity: 'high', vulnerabilityId: 'CVE-2025-0003' }],
+        errors: [],
+        configuration,
+        exitCode: 0,
+      },
+    ];
+    for (const report of contradictoryReports) {
+      expect(
+        parseContainerScanReport({
+          exitCode: report.exitCode,
+          stdout: JSON.stringify(report),
+          stderr: '',
         }),
-        stderr: '',
-      }),
-    ).toBeUndefined();
+      ).toBeUndefined();
+    }
   });
 
   it('does not accept a valid report without a recognized process exit code', () => {
