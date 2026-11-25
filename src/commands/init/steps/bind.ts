@@ -159,7 +159,7 @@ class CreateBoundStep implements InitStep<string | undefined> {
 
     const almKey = await authorizedAlmKey();
     if (!almKey) {
-      return declined(undefined);
+      return declined(undefined, 'cancelled');
     }
     console.info(`Organization: ${org.key}`);
     const projectKey = await console.withSpinner('Creating the project', () =>

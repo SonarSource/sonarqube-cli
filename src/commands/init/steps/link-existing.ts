@@ -184,6 +184,6 @@ export class LinkExistingStep implements InitStep<InitOutcome> {
     if (outcome.kind === 'linked') {
       return success(outcome, { projectKey: outcome.projectKey });
     }
-    return outcome.kind === 'dry-run' ? skipped(outcome) : declined(outcome);
+    return outcome.kind === 'dry-run' ? skipped(outcome) : declined(outcome, 'cancelled');
   }
 }

@@ -302,7 +302,7 @@ class CreateOrganizationStep implements InitStep<string | undefined> {
       await console.confirmPrompt('Create an organization now?', true),
     );
     if (!accepted) {
-      return declined(undefined);
+      return declined(undefined, 'no_org');
     }
 
     const name = await this.askOrganizationName(console);
@@ -400,6 +400,7 @@ class CreateOrganizationStep implements InitStep<string | undefined> {
 export function createOrganizationHook(console: Console, steps: StepRunner): OnNoMemberships {
   return async (client) => {
     const key = await steps.run(new CreateOrganizationStep(console, client));
+    // todo strange throw
     if (key === undefined) {
       throw new OrganizationCreationDeclined();
     }

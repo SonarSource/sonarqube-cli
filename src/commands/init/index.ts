@@ -79,7 +79,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const steps = new StepRunner(telemetry);
   const session: { auth?: ResolvedAuth } = {};
   try {
-    await onboard(options, ctx, { interactive, dryRun, telemetry, steps, session });
+    await onboard(options, ctx, { interactive, dryRun, steps, session });
   } catch (error) {
     telemetry.failRun(error);
     throw error;
@@ -95,7 +95,6 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
 interface OnboardSettings {
   interactive: boolean;
   dryRun: boolean;
-  telemetry: InitTelemetryRecorder;
   steps: StepRunner;
   /** Filled once signed in, so the telemetry of a failed run still carries the connection. */
   session: { auth?: ResolvedAuth };
@@ -104,7 +103,7 @@ interface OnboardSettings {
 async function onboard(
   options: InitOptions,
   ctx: CommandInvocationContext,
-  { interactive, dryRun, telemetry, steps, session }: OnboardSettings,
+  { interactive, dryRun, steps, session }: OnboardSettings,
 ): Promise<void> {
   const { console } = ctx;
 
@@ -126,15 +125,11 @@ async function onboard(
     monorepo: options.monorepo === true,
     monorepoRoots,
     pathGiven: options.path !== undefined,
-    telemetry,
     steps,
     session,
   });
   if (outcome.kind === 'complete') {
     warnIgnoredIntent(intent, console);
-  }
-  if (outcome.kind === 'declined') {
-    telemetry.stopAtDeclined();
   }
   renderInitOutcome(outcome, auth, console, dryRun);
   if (dryRun) {
@@ -175,7 +170,6 @@ interface RunSettings {
   monorepoRoots: readonly MonorepoRootOption[];
   /** `--path` fixed the directory, so there is no folder to choose. */
   pathGiven: boolean;
-  telemetry: InitTelemetryRecorder;
   steps: StepRunner;
   session: { auth?: ResolvedAuth };
 }
@@ -192,11 +186,9 @@ async function run(
   console: Console,
   settings: RunSettings,
 ): Promise<RunResult> {
-  const { interactive, dryRun, intent, monorepo, monorepoRoots, telemetry } = settings;
-  const { steps } = settings;
+  const { interactive, dryRun, intent, monorepo, monorepoRoots, steps } = settings;
   const auth = await steps.run(new LoginStep(ctx, interactive, dryRun, steps));
   if (!auth) {
-    telemetry.stopAt('create_org', 'no_org');
     return { outcome: { kind: 'no-organization' } };
   }
   settings.session.auth = auth;
@@ -216,11 +208,7 @@ async function run(
     const linkOnly = intent?.kind === 'link';
     const monorepoDeps: DetectDeps =
       linkOnly && interactive ? { ...deps, chooseProject: projectChooser(ctx, auth) } : deps;
-    const outcome = await runMonorepo(projectRoot, monorepoDeps, roots, linkOnly);
-    if (outcome.kind === 'no-monorepo-roots') {
-      telemetry.stopAt('detect', 'unknown');
-    }
-    return { outcome, auth };
+    return { outcome: await runMonorepo(projectRoot, monorepoDeps, roots, linkOnly), auth };
   }
   // The folders are asked about only once the user agrees to link, so the steps do the asking.
   const pickingDeps: DetectDeps = askFolders(settings, intent)

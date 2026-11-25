@@ -20,8 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { SettledStep } from '@/commands/init/flow/settled-step.ts';
-import { alreadyDone, skipped, success } from '@/commands/init/flow/step-result.ts';
+import { alreadyDone, success } from '@/commands/init/flow/step-result.ts';
 import { StepRunner } from '@/commands/init/flow/step-runner.ts';
 
 import { ScriptedStep } from '../scripted-step.ts';
@@ -51,10 +50,6 @@ describe('StepRunner', () => {
         ),
       ),
     ).toBe('web-key');
-  });
-
-  it('hands on the result of a step settled outside of it', async () => {
-    expect(await new StepRunner().run(new SettledStep({ step: 'integrate' }, skipped(3)))).toBe(3);
   });
 
   it('rethrows the error of a failed step unchanged', async () => {

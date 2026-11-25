@@ -29,7 +29,7 @@ import { CreateRoot } from './monorepo/create-root.ts';
 import { DetectRootsStep } from './monorepo/detect-roots-step.ts';
 import { IsolatedRootStep } from './monorepo/isolated-root.ts';
 import type { RootOnboarding } from './monorepo/root-onboarding.ts';
-import { type BindableRoot, bindNewRoots } from './monorepo-bind.ts';
+import { type BatchImport, type BindableRoot, bindNewRoots } from './monorepo-bind.ts';
 
 /**
  * Reports the project roots that `.sonar-config.json` maps as configured, and onboards the ones named
@@ -51,47 +51,45 @@ export async function runMonorepo(
     return { kind: 'no-monorepo-roots' };
   }
   const planned = detected.map(({ target }) => target);
-  const bound = await bindNewRootsTogether(planned, deps);
-  return { kind: 'monorepo', roots: await onboardInOrder(planned, bound, deps) };
+  const batch = await bindNewRootsTogether(planned, deps);
+  const roots = planned.map((root) => (root instanceof CreateRoot ? root.withImport(batch) : root));
+  return { kind: 'monorepo', roots: await onboardInOrder(roots, deps) };
 }
 
 /**
  * The roots that need a new project are bound to the repository in one call, asked once, before
- * any root runs. A root left out of it (the user declined, or the repository cannot be bound) fails
- * afterwards with how to map an existing project instead.
+ * any root runs. Each new root then reads its part of the import when it runs; a root left out of
+ * it (the user declined, or the repository cannot be bound) fails with how to map an existing
+ * project instead.
  */
 async function bindNewRootsTogether(
   roots: readonly RootOnboarding[],
   deps: DetectDeps,
-): Promise<ReadonlyMap<string, MonorepoRootResult>> {
+): Promise<BatchImport | undefined> {
   // `--link` never creates a project, and binding is a way of creating one: its roots are never planned for creation.
   const newRoots = roots.filter((root) => root instanceof CreateRoot).map(({ target }) => target);
   if (newRoots.length === 0) {
-    return new Map();
+    return undefined;
   }
   const { gitRoot, isGit } = findGitRoot(newRoots[0].repositoryRoot);
   const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
   const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
-  const bindable = newRoots.map(({ root, path, mapping }): BindableRoot => ({
+  const bindable = newRoots.map(({ root, mapping }): BindableRoot => ({
     root,
-    path,
-    projectRoot: mapping.projectRoot,
     projectKey: mapping.projectKey,
     projectName: generateProjectProposal(mapping.projectRoot, remote, deps.auth.orgKey).projectName,
   }));
-  const results = (await bindNewRoots(bindable, remote, deps)) ?? [];
-  return new Map(results.map((result) => [result.path, result]));
+  return bindNewRoots(bindable, remote, deps);
 }
 
-/** One root finishes, prompts included, before the next starts; a root the batch bound has finished already. */
+/** One root finishes, prompts included, before the next starts. */
 function onboardInOrder(
   roots: readonly RootOnboarding[],
-  bound: ReadonlyMap<string, MonorepoRootResult>,
   deps: DetectDeps,
 ): Promise<MonorepoRootResult[]> {
   return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
     const done = await previous;
-    done.push(bound.get(root.target.path) ?? (await deps.steps.run(new IsolatedRootStep(root))));
+    done.push(await deps.steps.run(new IsolatedRootStep(root)));
     return done;
   }, Promise.resolve([]));
 }

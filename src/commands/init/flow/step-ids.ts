@@ -27,5 +27,11 @@ export type InitStepId = RunStepId | ProjectStepId;
 /** How a step ended. `failed` without an error means it ended with nothing left to do. */
 export type InitStepOutcome = 'success' | 'already_done' | 'skipped' | 'declined' | 'failed';
 
+/**
+ * Why a step that threw nothing still ends the run. `cancelled` lands on the last step the user
+ * declined, and is dropped when nothing was declined.
+ */
+export type InitStopReason = 'no_org' | 'unknown' | 'cancelled';
+
 /** The onboarding path a project root takes. */
 export type InitPathId = 'already_done' | 'link_existing' | 'bound_new' | 'unbound_new';

@@ -27,11 +27,12 @@ import type {
   InitPathId,
   InitStepId,
   InitStepOutcome,
+  InitStopReason,
   ProjectStepId,
   RunStepId,
 } from '../flow/step-ids.ts';
 import type { StepReport } from '../flow/step-result.ts';
-import type { DetectedRoot, InitRoot, StepRef } from '../flow/step-runner.ts';
+import type { DetectedRoot, InitRoot, ProjectStepRef, StepRef } from '../flow/step-runner.ts';
 import { classifyInitFailure } from './failure-reason.ts';
 import {
   buildInitExecutedFact,
@@ -161,15 +162,25 @@ export class InitTelemetryRecorder {
     }
   }
 
-  /** A root that ends `failed` stops there; the run carries on past a run-level step that did. */
+  /**
+   * A root that ends `failed` stops there; the run carries on past a run-level step that did,
+   * unless the step says it stops the run.
+   */
   finished(ref: StepRef, report: StepReport): void {
     if (report.roots) {
       this.rootsDetected(report.roots);
     }
-    if (!ref.root) {
+    if (ref.root) {
+      this.settleProject(ref, report);
+    } else {
       this.log.finish(ref.step, report.outcome);
-      return;
     }
+    if (report.stop) {
+      this.stopWith(ref, report.stop);
+    }
+  }
+
+  private settleProject(ref: ProjectStepRef, report: StepReport): void {
     const project = this.project(ref.root);
     if (report.initPath) {
       project?.setPath(report.initPath);
@@ -209,23 +220,33 @@ export class InitTelemetryRecorder {
     this.runStop ??= { step: null, reason: classifyInitFailure(error) };
   }
 
-  stopAt(step: RunStepId, reason: InitFailureReason): void {
-    this.runStop ??= { step, reason };
-  }
-
-  /** The user declined every option, which the run reports as a cancellation at the last refusal. */
-  stopAtDeclined(): void {
-    const project = this.isMonorepo ? undefined : this.projects?.[0];
-    const projectStep = project?.lastDeclined();
-    if (project && projectStep) {
-      project.stopAt(projectStep, 'cancelled');
-      this.runStop ??= { step: projectStep, reason: 'cancelled' };
+  private stopWith(ref: StepRef, reason: InitStopReason): void {
+    if (reason !== 'cancelled') {
+      this.stopAt(ref, reason);
       return;
+    }
+    if (ref.root) {
+      const projectStep = this.project(ref.root)?.lastDeclined();
+      if (projectStep) {
+        this.stopAt({ step: projectStep, root: ref.root }, reason);
+        return;
+      }
     }
     const runStep = this.log.lastDeclined();
     // A run that ends with nothing created, but where nothing was declined, was not cancelled.
     if (runStep) {
-      this.runStop ??= { step: runStep, reason: 'cancelled' };
+      this.stopAt({ step: runStep }, reason);
+    }
+  }
+
+  private stopAt(ref: StepRef, reason: InitFailureReason): void {
+    if (!ref.root) {
+      this.runStop ??= { step: ref.step, reason };
+      return;
+    }
+    this.project(ref.root)?.stopAt(ref.step, reason);
+    if (!this.isMonorepo) {
+      this.runStop ??= { step: ref.step, reason };
     }
   }
 

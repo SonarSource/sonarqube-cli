@@ -75,6 +75,7 @@ export class LoginStep implements InitStep<ResolvedAuth | undefined> {
 
   private async signIn(): Promise<StepResult<ResolvedAuth | undefined>> {
     const { ctx, steps } = this;
+    // todo check if this is necessary
     try {
       await authLogin({}, ctx, { onNoMemberships: createOrganizationHook(ctx.console, steps) });
     } catch (error) {

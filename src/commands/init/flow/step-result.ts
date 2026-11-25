@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { InitPathId, InitStepOutcome } from './step-ids.ts';
+import type { InitPathId, InitStepOutcome, InitStopReason } from './step-ids.ts';
 import type { DetectedRoot } from './step-runner.ts';
 
 /** How a step ended, and what it settled about its root. */
@@ -32,6 +32,8 @@ export interface StepReport {
   cause?: unknown;
   /** The roots a detection found, each with the path it is expected to take. */
   roots?: readonly DetectedRoot[];
+  /** The run ends with this step, though nothing was thrown. */
+  stop?: InitStopReason;
 }
 
 /** What an onboarding step did, and the value it hands to the next one. */
@@ -53,15 +55,15 @@ export function alreadyDone<T>(
   return { outcome: 'already_done', value, ...settled };
 }
 
-export function skipped<T>(value: T): StepResult<T> {
-  return { outcome: 'skipped', value };
+export function skipped<T>(value: T, stop?: InitStopReason): StepResult<T> {
+  return { outcome: 'skipped', value, stop };
 }
 
-export function declined<T>(value: T): StepResult<T> {
-  return { outcome: 'declined', value };
+export function declined<T>(value: T, stop?: InitStopReason): StepResult<T> {
+  return { outcome: 'declined', value, stop };
 }
 
 /** The step could not do its part, and returns instead of throwing `cause`. */
-export function failed<T>(value: T, cause?: unknown): StepResult<T> {
-  return { outcome: 'failed', value, cause };
+export function failed<T>(value: T, cause?: unknown, stop?: InitStopReason): StepResult<T> {
+  return { outcome: 'failed', value, cause, stop };
 }

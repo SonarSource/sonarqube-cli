@@ -107,7 +107,7 @@ class DetectRootsStep implements InitStep<Detected<RootOnboarding>[] | undefined
       ),
     ];
     if (mappings.length === 0) {
-      return failed(undefined);
+      return failed(undefined, undefined, 'unknown');
     }
 
     this.warnOnNestedConfig(configDir, repositoryRoot, console);

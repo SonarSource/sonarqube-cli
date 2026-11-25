@@ -63,7 +63,7 @@ export class NoProjectStep implements InitStep<InitOutcome> {
       );
       return skipped(outcome);
     }
-    return skipped(this.reportNoProject());
+    return skipped(this.reportNoProject(), 'cancelled');
   }
 
   private reportNoProject(): InitOutcome {

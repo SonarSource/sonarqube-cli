@@ -22,7 +22,13 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 
 import { OnboardingCancelledError } from '@/commands/init/answer.ts';
 import type { InitPathId, InitStepOutcome } from '@/commands/init/flow/step-ids.ts';
-import { type StepResult, success } from '@/commands/init/flow/step-result.ts';
+import {
+  declined,
+  failed,
+  skipped,
+  type StepResult,
+  success,
+} from '@/commands/init/flow/step-result.ts';
 import { type InitRoot, StepRunner } from '@/commands/init/flow/step-runner.ts';
 import {
   CLI_INIT_EXECUTED,
@@ -383,8 +389,11 @@ describe('InitTelemetryRecorder', () => {
     recorder.rootsDetected([{ root: ROOT, initPath: 'bound_new' }]);
     await steps.run(new ScriptedStep({ step: 'project_bind', root: ROOT }, done('declined')));
     recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
-    await steps.run(new ScriptedStep({ step: 'create_project', root: ROOT }, done('declined')));
-    recorder.stopAtDeclined();
+    await steps.run(
+      new ScriptedStep({ step: 'create_project', root: ROOT }, () =>
+        Promise.resolve(declined(undefined, 'cancelled')),
+      ),
+    );
 
     const { run, projects } = await emit(recorder);
 
@@ -402,8 +411,11 @@ describe('InitTelemetryRecorder', () => {
     const { recorder, steps } = watched();
     recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
     await steps.run(new ScriptedStep({ step: 'project_bind', root: ROOT }, done('skipped')));
-    await steps.run(new ScriptedStep({ step: 'create_project', root: ROOT }, done('skipped')));
-    recorder.stopAtDeclined();
+    await steps.run(
+      new ScriptedStep({ step: 'create_project', root: ROOT }, () =>
+        Promise.resolve(skipped(undefined, 'cancelled')),
+      ),
+    );
 
     const { run, projects } = await emit(recorder);
 
@@ -412,10 +424,46 @@ describe('InitTelemetryRecorder', () => {
     expect(projects[0].stopped_at).toBeNull();
   });
 
+  it('reports a cancellation at a declined run step when the root declined nothing', async () => {
+    const { recorder, steps } = watched();
+    recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
+    await steps.run(new ScriptedStep({ step: 'project_bind', root: ROOT }, done('success')));
+    await steps.run(new ScriptedStep({ step: 'org_bind' }, done('declined')));
+    await steps.run(
+      new ScriptedStep({ step: 'create_project', root: ROOT }, () =>
+        Promise.resolve(skipped(undefined, 'cancelled')),
+      ),
+    );
+
+    const { run, projects } = await emit(recorder);
+
+    expect(run).toMatchObject({ stopped_at: 'org_bind', failure_reason: 'cancelled' });
+    expect(projects[0].stopped_at).toBeNull();
+  });
+
+  it('stops the run at a run step that failed with a stop', async () => {
+    const { recorder, steps } = watched(true);
+    await steps.run(
+      new ScriptedStep({ step: 'detect' }, () =>
+        Promise.resolve(failed(undefined, undefined, 'unknown')),
+      ),
+    );
+
+    expect((await emit(recorder)).run).toMatchObject({
+      steps: ['detect:failed'],
+      stopped_at: 'detect',
+      failure_reason: 'unknown',
+    });
+  });
+
   it('keeps the first stop when a later error reaches the run', async () => {
     const { recorder, steps } = watched();
     await steps.run(new ScriptedStep({ step: 'login' }, done('already_done')));
-    recorder.stopAt('create_org', 'no_org');
+    await steps.run(
+      new ScriptedStep({ step: 'create_org' }, () =>
+        Promise.resolve(declined(undefined, 'no_org')),
+      ),
+    );
     recorder.failRun(new TransportError('offline'));
 
     const { run } = await emit(recorder);
