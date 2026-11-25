@@ -20,6 +20,7 @@
 
 import type { SpawnResult } from '@/core/process/process.ts';
 
+import type { Severity } from '../severity.ts';
 import { type ScaScannerInvocation, ScaScannerRunnerBase } from './sca-scanner-runner-base.ts';
 
 // Response shape from sca-scanner. Mirrors `AnalyzeProjectResponse` in
@@ -48,7 +49,7 @@ export interface AnalyzeProjectRelease {
 
 export type ScaIssueType = 'VULNERABILITY' | 'PROHIBITED_LICENSE' | 'MALWARE';
 export type SoftwareQuality = 'MAINTAINABILITY' | 'RELIABILITY' | 'SECURITY';
-export type Severity = 'BLOCKER' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+export type { Severity } from '../severity.ts';
 export type ScaStatus = 'OPEN' | 'CONFIRM' | 'SAFE' | 'FIXED' | 'ACCEPT';
 
 export interface AnalyzeProjectIssue {
