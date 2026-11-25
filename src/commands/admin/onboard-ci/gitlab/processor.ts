@@ -27,6 +27,7 @@ import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import { deleteBranchUnlessRequestOpen } from '../branch-guard.ts';
 import { hasSonarAnalysis } from '../ci-detection.ts';
+import { hasExistingProjectAnalysis } from '../shared.ts';
 import type { OnboardCiSqsClient } from '../sqs-api.ts';
 import {
   buildUpdatedCiYml,
@@ -164,18 +165,26 @@ async function classifyNewRepo(
 export async function assessRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
-  bindingMap: Map<string, string>,
+  bindingMap: ReadonlyMap<string, ReadonlySet<string>>,
 ): Promise<RepoClassification> {
-  const existingProjectKey = bindingMap.get(String(repo.id));
-  if (!existingProjectKey) {
+  const projectKeys = bindingMap.get(String(repo.id));
+  if (!projectKeys?.size) {
     return {
       outcome: 'skip',
       reason: SkipReason.NotInSonarQube,
       message: 'skipped (not bound in SonarQube)',
     };
   }
+  if (projectKeys.size > 1) {
+    return {
+      outcome: 'skip',
+      reason: SkipReason.MultipleProjectKeys,
+      message: 'skipped (repository is bound to multiple SonarQube project keys)',
+    };
+  }
+  const [existingProjectKey] = projectKeys;
 
-  if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey).orThrow()) {
+  if (await hasExistingProjectAnalysis(ctx.sqs.components, existingProjectKey)) {
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,
@@ -220,7 +229,7 @@ export async function assessRepo(
 export async function executeRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
-  bindingMap: Map<string, string>,
+  bindingMap: ReadonlyMap<string, ReadonlySet<string>>,
 ): Promise<ExecuteResult> {
   const assessment = await assessRepo(ctx, repo, bindingMap);
   if (assessment.outcome !== 'proceed') {

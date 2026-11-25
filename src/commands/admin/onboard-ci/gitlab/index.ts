@@ -27,12 +27,10 @@ import type { Console } from '@/core/ui/console.ts';
 import { resolveDopSetting } from '../dop-setting.ts';
 import {
   assertOnPremiseConnection,
-  DRY_RUN_REPORT_FILE,
+  finishOnboarding,
   readOptionFile,
   readReposFile,
-  REPORT_FILE,
   runRepos,
-  writeReportFile,
 } from '../shared.ts';
 import { OnboardCiSqsClient } from '../sqs-api.ts';
 import type { ProcessRepoContext, RepoWithBranch } from './processor.ts';
@@ -213,7 +211,7 @@ async function fetchGroupData(
   dopSettingId: string,
   options: OnboardCiGitlabOptions,
   console: Console,
-): Promise<{ repos: RepoWithBranch[]; bindingMap: Map<string, string> }> {
+): Promise<{ repos: RepoWithBranch[]; bindingMap: Map<string, Set<string>> }> {
   const bindingMap = await console.withSpinner('Fetching SonarQube project bindings...', () =>
     sqsClient.bindings.getAllProjectBindings(dopSettingId).orThrow(),
   );
@@ -230,10 +228,6 @@ async function fetchGroupData(
   }
 
   return { repos, bindingMap };
-}
-
-function buildOutroMessage(opened: number, skipped: number, failed: number): string {
-  return `Opened ${opened.toLocaleString()} MRs · ${skipped.toLocaleString()} skipped · ${failed.toLocaleString()} failed`;
 }
 
 export async function onboardCiGitlab(
@@ -297,39 +291,16 @@ export async function onboardCiGitlab(
       wouldSkip: results.skipped.map(({ repo, reason }) => ({ repo, reason })),
       failed: results.failed,
     };
-    const { wouldOpenMr, wouldSkip, failed } = dryRunResults;
-    console.outro(
-      buildOutroMessage(wouldOpenMr.length, wouldSkip.length, failed.length),
-      failed.length > 0 ? 'error' : 'success',
-      'No changes were made',
-    );
-    writeReportFile(dryRunResults, DRY_RUN_REPORT_FILE, console);
-    if (failed.length > 0) {
-      throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
-        remediationHint: 'See the per-repository errors above and the report file for details.',
-      });
-    }
+    finishOnboarding(results, dryRunResults, 'MR', console, true);
     return;
   }
 
   const { opened, skipped, failed } = results;
-  console.outro(
-    buildOutroMessage(opened.length, skipped.length, failed.length),
-    failed.length > 0 ? 'error' : 'success',
-  );
   // Preserve GitLab's published report keys while sharing prUrl internally.
-  writeReportFile(
-    {
-      opened: opened.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
-      skipped: skipped.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
-      failed,
-    },
-    REPORT_FILE,
-    console,
-  );
-  if (failed.length > 0) {
-    throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
-      remediationHint: 'See the per-repository errors above and the report file for details.',
-    });
-  }
+  const report = {
+    opened: opened.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
+    skipped: skipped.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
+    failed,
+  };
+  finishOnboarding(results, report, 'MR', console);
 }

@@ -40,7 +40,7 @@ import { TestHarness } from '../../harness/index.js';
 
 const REPO = 'test-org/sample';
 const PROJECT = 'sample-project';
-const BINDINGS = new Map([[REPO, PROJECT]]);
+const BINDINGS = new Map([[REPO, new Set([PROJECT])]]);
 const BUILD_PATH = '.github/workflows/build.yml';
 const BUILD =
   'name: Build\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./gradlew build\n';
@@ -135,7 +135,7 @@ describe('GitHub onboarding repository lifecycle', () => {
   it('matches mixed-case GitHub names against lowercase bindings', async () => {
     const projectKey = 'MixedCaseProject';
     const { ctx, repo } = await setup({ projectKey, fullName: 'Test-Org/Sample' });
-    const bindings = new Map([['test-org/sample', projectKey]]);
+    const bindings = new Map([['test-org/sample', new Set([projectKey])]]);
 
     expect(await assessRepo(ctx, repo, bindings)).toMatchObject({
       outcome: 'proceed',
@@ -260,7 +260,7 @@ describe('GitHub onboarding repository lifecycle', () => {
 
   it('validates rendered YAML before writes and commits a correctly quoted template', async () => {
     const projectKey = 'sample-project:';
-    const bindings = new Map([[REPO, projectKey]]);
+    const bindings = new Map([[REPO, new Set([projectKey])]]);
     const { ctx, repo, github } = await setup({ projectKey });
     ctx.workflowTemplate =
       'on: push\njobs:\n  scan:\n    runs-on: self-hosted\n    steps:\n      - run: echo {{SONAR_PROJECT_KEY}}\n';
@@ -285,7 +285,7 @@ describe('GitHub onboarding repository lifecycle', () => {
   it('propagates Server and GitHub lookup failures without writes', async () => {
     const { ctx, repo, github, server } = await setup();
     expect(
-      await assessRepo(ctx, repo, new Map([[REPO, 'missing-project']])).catch(
+      await assessRepo(ctx, repo, new Map([[REPO, new Set(['missing-project'])]])).catch(
         (error: unknown) => error,
       ),
     ).toMatchObject({ message: expect.stringContaining('missing or inaccessible') });
@@ -322,7 +322,6 @@ describe('GitHub onboarding repository lifecycle', () => {
     });
     expect(await ctx.github.listOpenPullRequests(REPO, CI_BRANCH)).toHaveLength(1);
   });
-
   it('rejects a failed workflow write and succeeds on rerun', async () => {
     const { ctx, repo } = await setup();
     spyOn(ctx.github, 'createFile').mockRejectedValueOnce(

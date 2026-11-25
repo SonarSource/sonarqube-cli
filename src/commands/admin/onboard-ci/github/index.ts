@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { GitHubClient, GitHubRepo } from '@/core/github/client.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -26,12 +26,10 @@ import type { Console } from '@/core/ui/console.ts';
 import { assertGithubComUrl, resolveDopSetting } from '../dop-setting.ts';
 import {
   assertOnPremiseConnection,
-  DRY_RUN_REPORT_FILE,
+  finishOnboarding,
   readOptionFile,
   readReposFile,
-  REPORT_FILE,
   runRepos,
-  writeReportFile,
 } from '../shared.ts';
 import { OnboardCiSqsClient } from '../sqs-api.ts';
 import type { OnboardCiOptions } from '../types.ts';
@@ -125,30 +123,10 @@ export async function onboardCiGithub(
       wouldSkip: results.skipped,
       failed: results.failed,
     };
-    const { wouldOpenPr, wouldSkip, failed } = dryRunResults;
-    console.outro(
-      `Would open ${wouldOpenPr.length.toLocaleString()} PRs · ${wouldSkip.length.toLocaleString()} skipped · ${failed.length.toLocaleString()} failed`,
-      failed.length ? 'error' : 'success',
-      'No changes were made',
-    );
-    writeReportFile(dryRunResults, DRY_RUN_REPORT_FILE, console);
-    if (failed.length) {
-      throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
-        remediationHint: 'See the per-repository errors above and the report file for details.',
-      });
-    }
+    finishOnboarding(results, dryRunResults, 'PR', console, true);
     return;
   }
 
   const { opened, skipped, failed } = results;
-  console.outro(
-    `Opened ${opened.length.toLocaleString()} PRs · ${skipped.length.toLocaleString()} skipped · ${failed.length.toLocaleString()} failed`,
-    failed.length ? 'error' : 'success',
-  );
-  writeReportFile({ opened, skipped, failed }, REPORT_FILE, console);
-  if (failed.length) {
-    throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
-      remediationHint: 'See the per-repository errors above and the report file for details.',
-    });
-  }
+  finishOnboarding(results, { opened, skipped, failed }, 'PR', console);
 }
