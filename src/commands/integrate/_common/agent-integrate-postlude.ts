@@ -91,5 +91,10 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
       });
     },
   });
-  await warnIfMcpRuntimeUnavailable(params.ctx.console, params.integrationId, installRoot);
+  await warnIfMcpRuntimeUnavailable(
+    params.ctx.console,
+    params.integrationId,
+    installRoot,
+    params.ctx.withAuth(auth).connection,
+  );
 }
