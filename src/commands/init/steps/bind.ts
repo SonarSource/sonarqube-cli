@@ -28,9 +28,9 @@ import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import { alreadyDone, declined, type StepResult, success } from '../flow/step-result.ts';
+import { alreadyDone, declined, skipped, type StepResult, success } from '../flow/step-result.ts';
 import type { InitStep, StepRef } from '../flow/step-runner.ts';
-import type { BoundNewPath, InitOutcome, NoProjectPath } from '../init-outcome.ts';
+import type { BoundNewPath, InitOutcome } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import {
   reportProjectCreated,
@@ -38,13 +38,7 @@ import {
   showAnalysisResults,
   writeMapping,
 } from './mapping.ts';
-
-interface BoundProjectTarget {
-  api: ImportApiClient;
-  org: ResolvedOrg;
-  repositorySlug: string;
-  projectRoot: string;
-}
+import { NoProjectStep } from './no-project.ts';
 
 const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
 const AUTHORIZATION_TIMEOUT_MS = 300_000;
@@ -140,39 +134,74 @@ export class OrgBindStep implements InitStep<string | undefined> {
   }
 }
 
-/** Under `--bind`, the authorization is part of creating the project, so declining it creates nothing. */
-class CreateBoundStep implements InitStep<string | undefined> {
+/**
+ * Creates the project bound to the repository with the `sonar import --repo` logic and maps it in
+ * `.sonar-config.json`. When the user declines the DevOps platform authorization, nothing is
+ * created: `--bind` ends as declined, and otherwise the root falls back to the no-project path.
+ */
+export class BoundNewStep implements InitStep<InitOutcome> {
   readonly ref: StepRef;
+  readonly initPath = 'bound_new';
 
   constructor(
-    private readonly target: BoundProjectTarget,
-    private readonly authorizedAlmKey: () => Promise<string | undefined>,
+    private readonly path: BoundNewPath,
     private readonly deps: DetectDeps,
   ) {
     this.ref = { step: 'create_project', root: deps.root };
   }
 
-  async run(): Promise<StepResult<string | undefined>> {
-    const { api, org, repositorySlug, projectRoot } = this.target;
-    const { authorizedAlmKey } = this;
-    const { auth, console } = this.deps;
-
-    const almKey = await authorizedAlmKey();
-    if (!almKey) {
-      return declined(undefined, 'cancelled');
+  async run(): Promise<StepResult<InitOutcome>> {
+    const { repositorySlug } = this.path;
+    const { auth, http, dryRun, interactive, intent, steps } = this.deps;
+    const api = new ImportApiClient(http);
+    const org = await resolveOrg(api, auth.orgKey);
+    const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
+    // The browser authorization and the import both change things, so a preview stops short of them.
+    if (dryRun) {
+      // A real run without a terminal fails here, so its preview must fail too.
+      if (!linkedAlmKey && !interactive) {
+        throw notLinkedError(auth, org.key);
+      }
+      return skipped({
+        kind: 'dry-run',
+        action: {
+          type: 'bind',
+          repositorySlug,
+          organization: org.key,
+          authorizationNeeded: !linkedAlmKey,
+        },
+      });
     }
+    const almKey = await steps.run(new OrgBindStep(linkedAlmKey, api, auth, org.key, this.deps));
+    if (almKey) {
+      return this.create(api, { ...org, almKey });
+    }
+    return intent?.kind === 'bind' ? declined({ kind: 'declined' }, 'cancelled') : this.fallBack();
+  }
+
+  /** The no-project path settles this same `create_project` step, so it runs inside this one. */
+  private async fallBack(): Promise<StepResult<InitOutcome>> {
+    const { projectRoot, remote } = this.path;
+    const noProject = new NoProjectStep({ path: 'no-project', projectRoot, remote }, this.deps);
+    return { ...(await noProject.run()), initPath: noProject.initPath };
+  }
+
+  private async create(api: ImportApiClient, org: ResolvedOrg): Promise<StepResult<InitOutcome>> {
+    const { projectRoot, repositorySlug } = this.path;
+    const { auth, http, console } = this.deps;
     console.info(`Organization: ${org.key}`);
     const projectKey = await console.withSpinner('Creating the project', () =>
-      this.importRepository(
-        api,
-        auth,
-        repositorySlug,
-        { ...org, almKey },
-        new QuietConsole(console),
-      ),
+      this.importRepository(api, auth, repositorySlug, org, new QuietConsole(console)),
     );
     await writeMapping(auth, projectKey, projectRoot, console, 'created');
-    return success(projectKey, { projectKey });
+    reportProjectCreated(console, projectKey);
+    await showAnalysisResults(
+      http,
+      projectKey,
+      console,
+      'No analysis results yet: the first analysis of the new project is pending.',
+    );
+    return success({ kind: 'bound', projectKey }, { projectKey });
   }
 
   /** Provisions the project for one repository through `sonar import`'s plan, and returns its key. */
@@ -201,62 +230,4 @@ class CreateBoundStep implements InitStep<string | undefined> {
     }
     return projectKey;
   }
-}
-
-/**
- * Creates the project bound to the repository with the `sonar import --repo` logic and maps it in
- * `.sonar-config.json`. When the user declines the DevOps platform authorization, nothing is
- * created: `--bind` ends as declined, and otherwise the no-project step says how to go on.
- */
-export async function runBoundNew(
-  { projectRoot, remote, repositorySlug }: BoundNewPath,
-  deps: DetectDeps,
-): Promise<InitOutcome | NoProjectPath> {
-  const { auth, http, console, intent } = deps;
-  const api = new ImportApiClient(http);
-  const org = await resolveOrg(api, auth.orgKey);
-  const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
-  // The browser authorization and the import both change things, so a preview stops short of them.
-  if (deps.dryRun) {
-    // A real run without a terminal fails here, so its preview must fail too.
-    if (!linkedAlmKey && !deps.interactive) {
-      throw notLinkedError(auth, org.key);
-    }
-    return {
-      kind: 'dry-run',
-      action: {
-        type: 'bind',
-        repositorySlug,
-        organization: org.key,
-        authorizationNeeded: !linkedAlmKey,
-      },
-    };
-  }
-  const authorize = (): Promise<string | undefined> =>
-    deps.steps.run(new OrgBindStep(linkedAlmKey, api, auth, org.key, deps));
-  const bindRequired = intent?.kind === 'bind';
-  // Without `--bind`, a declined authorization leaves the no-project step to say how to go on.
-  const almKey = bindRequired ? undefined : await authorize();
-  if (!bindRequired && !almKey) {
-    return { path: 'no-project', projectRoot, remote };
-  }
-
-  const projectKey = await deps.steps.run(
-    new CreateBoundStep(
-      { api, org, repositorySlug, projectRoot },
-      async () => almKey ?? (await authorize()),
-      deps,
-    ),
-  );
-  if (!projectKey) {
-    return { kind: 'declined' };
-  }
-  reportProjectCreated(console, projectKey);
-  await showAnalysisResults(
-    http,
-    projectKey,
-    console,
-    'No analysis results yet: the first analysis of the new project is pending.',
-  );
-  return { kind: 'bound', projectKey };
 }

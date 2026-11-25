@@ -32,6 +32,7 @@ type CompleteOutcome = Extract<InitOutcome, { kind: 'complete' }>;
 /** The file says the directory is set up; the remote may disagree, which is reported but never repaired. */
 export class CompleteLinkStep implements InitStep<InitOutcome> {
   readonly ref: StepRef;
+  readonly initPath = 'already_done';
 
   constructor(
     private readonly path: CompletePath,

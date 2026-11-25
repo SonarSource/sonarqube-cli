@@ -39,12 +39,12 @@ import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/proj
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { InitPathId } from '../flow/step-ids.ts';
 import { alreadyDone, declined, skipped, type StepResult, success } from '../flow/step-result.ts';
 import type { Detected, InitRoot, InitStep, StepRef, StepRunner } from '../flow/step-runner.ts';
 import type { InitPath } from '../init-outcome.ts';
 import type { InitIntent } from '../options.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
+import { type PathOnboarding, planPath } from './plan-path.ts';
 
 export interface DetectDeps {
   auth: ResolvedAuth;
@@ -88,8 +88,8 @@ export function resolveProjectRoot(pathOption: string): string {
 // A committed config is untrusted and the name ends up in a command the user is told to run.
 const ORGANIZATION_KEY = /^[A-Za-z0-9_.-]+$/;
 
-/** Inspects the directory and its git remote, then picks the onboarding path without running it. */
-export class DetectStep implements InitStep<Detected<InitPath>[]> {
+/** Inspects the directory and its git remote, then plans the onboarding path without running it. */
+export class DetectStep implements InitStep<Detected<PathOnboarding>[]> {
   readonly ref = { step: 'detect' } as const;
 
   constructor(
@@ -97,9 +97,10 @@ export class DetectStep implements InitStep<Detected<InitPath>[]> {
     private readonly deps: DetectDeps,
   ) {}
 
-  async run(): Promise<StepResult<Detected<InitPath>[]>> {
+  async run(): Promise<StepResult<Detected<PathOnboarding>[]>> {
     const path = await this.findPath();
-    const roots = [{ root: this.deps.root, initPath: this.initPathIdOf(path), target: path }];
+    const onboarding = planPath(path, this.deps);
+    const roots = [{ root: this.deps.root, initPath: onboarding.initPath, target: onboarding }];
     return path.path === 'complete' ? alreadyDone(roots, { roots }) : success(roots, { roots });
   }
 
@@ -191,21 +192,6 @@ export class DetectStep implements InitStep<Detected<InitPath>[]> {
         ORGANIZATION_KEY.test(mapping.organization) &&
         mapping.organization !== auth.orgKey,
     )?.organization;
-  }
-
-  /** The path a directory is expected to take, before it runs; its steps may change it. */
-  private initPathIdOf(detected: InitPath): InitPathId {
-    switch (detected.path) {
-      case 'complete':
-        return 'already_done';
-      case 'link-existing':
-        return 'link_existing';
-      case 'bound-new':
-        return 'bound_new';
-      // The telemetry id predates the removal of unbound creation, and names the same path.
-      case 'no-project':
-        return 'unbound_new';
-    }
   }
 
   private lookupRemoteBinding(

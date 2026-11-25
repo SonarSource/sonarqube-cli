@@ -35,7 +35,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { OnboardingCancelledError } from './answer.ts';
 import { singleRoot, StepRunner } from './flow/step-runner.ts';
-import type { InitOutcome, InitPath, NoProjectPath } from './init-outcome.ts';
+import type { InitOutcome } from './init-outcome.ts';
 import {
   type InitIntent,
   type MonorepoRootOption,
@@ -46,14 +46,10 @@ import {
 import { renderInitOutcome } from './output.ts';
 import { classifyRemoteHost } from './remote-host.ts';
 import { LoginStep } from './steps/auth.ts';
-import { runBoundNew } from './steps/bind.ts';
-import { CompleteLinkStep } from './steps/complete-link.ts';
 import { type DetectDeps, DetectStep, resolveProjectRoot } from './steps/detect.ts';
 import { pickFolders } from './steps/folder-selection.ts';
 import { IntegrateStep } from './steps/integrate.ts';
-import { LinkExistingStep } from './steps/link-existing.ts';
 import { runMonorepo } from './steps/monorepo.ts';
-import { NoProjectStep } from './steps/no-project.ts';
 import { type InitRunContext, InitTelemetryRecorder } from './telemetry/init-telemetry-recorder.ts';
 
 export interface InitOptions {
@@ -215,11 +211,7 @@ async function run(
     ? { ...deps, pickLinkFolder: true }
     : deps;
   const [detected] = await steps.run(new DetectStep(projectRoot, pickingDeps));
-  return {
-    outcome: await runDetectedPath(detected.target, pickingDeps),
-    auth,
-    deps,
-  };
+  return { outcome: await steps.run(detected.target), auth, deps };
 }
 
 /** The project prompts of `sonar link`, with leaving them ending the onboarding. */
@@ -267,25 +259,4 @@ function askFolders(
 ): boolean {
   const keyGiven = intent?.kind === 'link' && intent.projectKey !== undefined;
   return interactive && !pathGiven && !keyGiven;
-}
-
-/** `bound-new` hands back `no-project` only when the user declined the DevOps platform authorization. */
-async function runDetectedPath(detected: InitPath, deps: DetectDeps): Promise<InitOutcome> {
-  switch (detected.path) {
-    case 'bound-new':
-      return fallBack(await runBoundNew(detected, deps), deps);
-    case 'link-existing':
-      return deps.steps.run(new LinkExistingStep(detected, deps));
-    case 'no-project':
-      return deps.steps.run(new NoProjectStep(detected, deps));
-    case 'complete':
-      return deps.steps.run(new CompleteLinkStep(detected, deps));
-  }
-}
-
-function fallBack(
-  result: InitOutcome | NoProjectPath,
-  deps: DetectDeps,
-): InitOutcome | Promise<InitOutcome> {
-  return 'kind' in result ? result : deps.steps.run(new NoProjectStep(result, deps));
 }
