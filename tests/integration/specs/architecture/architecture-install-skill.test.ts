@@ -34,6 +34,7 @@ const SKILL_PATHS = [
   join('.claude', 'skills', 'sonar-architecture', 'SKILL.md'),
   join('.agents', 'skills', 'sonar-architecture', 'SKILL.md'),
 ];
+const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'];
 
 describe('sonar architecture install-skill', () => {
   let harness: TestHarness;
@@ -54,6 +55,7 @@ describe('sonar architecture install-skill', () => {
     const installerHelp = await harness.run('architecture install-skill --help');
     expect(installerHelp.exitCode).toBe(0);
     expect(installerHelp.stdout).toContain('[BETA]');
+    expect(installerHelp.stdout).not.toContain('CLAUDE.md');
     expect(help.stdout).not.toContain('[ALPHA]');
     const current = await harness.run('architecture current get --help');
     expect(current.exitCode).toBe(0);
@@ -141,6 +143,54 @@ describe('sonar architecture install-skill', () => {
   );
 
   it(
+    'writes only the skill, without touching CLAUDE.md or AGENTS.md',
+    async () => {
+      const result = await harness.run('arch install-skill');
+
+      expect(result.exitCode).toBe(0);
+      for (const file of INSTRUCTION_FILES) {
+        expect(harness.cwd.exists(file)).toBe(false);
+      }
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes the coding block an earlier version wrote, keeping the rest of the file',
+    async () => {
+      const block = [
+        '<!-- sonar:begin:sonarqube-architecture-coding -->',
+        '# Architecture while coding',
+        '',
+        'Read the intended architecture before adding a dependency.',
+        '<!-- sonar:end:sonarqube-architecture-coding -->',
+      ].join('\n');
+      harness.cwd.writeFile('AGENTS.md', `# Team rules\n\nKeep functions small.\n\n${block}\n`);
+      harness.cwd.writeFile('CLAUDE.md', `${block}\n`);
+
+      const first = await harness.run('arch install-skill');
+
+      expect(first.exitCode).toBe(0);
+      const agents = readFileSync(join(harness.cwd.path, 'AGENTS.md'), 'utf8');
+      expect(agents).toStartWith('# Team rules\n\nKeep functions small.\n');
+      expect(agents).not.toContain('sonarqube-architecture-coding');
+      expect(agents).not.toContain('Architecture while coding');
+      expect(harness.cwd.exists('CLAUDE.md')).toBe(false);
+      for (const file of INSTRUCTION_FILES) {
+        expect(first.stdout).toContain(
+          `Removed the architecture coding block from ${join(harness.cwd.path, file)}`,
+        );
+      }
+
+      const second = await harness.run('arch install-skill');
+      expect(second.exitCode).toBe(0);
+      expect(second.stdout).not.toContain('Removed');
+      expect(readFileSync(join(harness.cwd.path, 'AGENTS.md'), 'utf8')).toBe(agents);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     '--global installs in the home directory',
     async () => {
       const result = await harness.run('architecture install-skill --global');
@@ -149,6 +199,10 @@ describe('sonar architecture install-skill', () => {
       expect(harness.userHome.exists(SKILL_PATHS[0])).toBe(true);
       expect(harness.userHome.exists(SKILL_PATHS[1])).toBe(true);
       expect(harness.cwd.exists(SKILL_PATHS[0])).toBe(false);
+      for (const file of INSTRUCTION_FILES) {
+        expect(harness.cwd.exists(file)).toBe(false);
+        expect(harness.userHome.exists(file)).toBe(false);
+      }
     },
     { timeout: 15000 },
   );
