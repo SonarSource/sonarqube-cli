@@ -33,9 +33,7 @@ import {
   containerScanErrorReport,
   countContainerAnalysisErrors,
   formatContainerScanJson,
-  formatContainerScanTable,
   parseContainerScanReport,
-  sanitizeScannerTerminalText,
 } from './container-scanner-report.ts';
 import {
   ContainerScanCancelledError,
@@ -43,6 +41,10 @@ import {
   prepareContainerScannerEnv,
   runContainerScanner,
 } from './container-scanner-runner.ts';
+import {
+  formatContainerScanTable,
+  sanitizeScannerTerminalText,
+} from './container-scanner-table.ts';
 
 export const CONTAINER_SCAN_FORMATS = ['json', 'table'] as const;
 

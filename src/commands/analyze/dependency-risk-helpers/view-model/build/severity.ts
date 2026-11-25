@@ -18,27 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { Severity } from '../../sca-scanner.ts';
-import { type RiskVM } from '../risk.ts';
+import { compareSeverity } from '../../../severity.ts';
+import type { RiskVM } from '../risk.ts';
 
-const SEVERITY_RANK: Record<Severity, number> = {
-  BLOCKER: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  INFO: 4,
-};
-
-export const SEVERITIES = Object.keys(SEVERITY_RANK) as Severity[];
-
-export function severityRank(severity: Severity): number {
-  const ranks: Partial<Record<Severity, number>> = SEVERITY_RANK;
-  return ranks[severity] ?? Number.MAX_SAFE_INTEGER;
-}
-
-export function compareSeverity(a: Severity, b: Severity): number {
-  return severityRank(a) - severityRank(b);
-}
+export { compareSeverity, SEVERITIES, severityRank } from '../../../severity.ts';
 
 export function sortBySeverity<T extends RiskVM>(items: T[]): T[] {
   return [...items].sort((a, b) => compareSeverity(a.severity, b.severity));
