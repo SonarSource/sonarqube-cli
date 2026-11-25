@@ -144,7 +144,7 @@
     "launchdarkly-node-client-sdk": "3.4.3",
     "neverthrow": "8.2.0",
     "node-forge": "1.4.3",
-    "openpgp": "6.3.2",
+    "openpgp": "6.3.3",
     "picocolors": "1.1.1",
     "picomatch": "4.0.7",
     "smol-toml": "1.9.1"
