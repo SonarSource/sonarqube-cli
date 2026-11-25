@@ -63,6 +63,9 @@ const GITHUB_TEST_TOKEN = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef1234';
 const EXIT_CODE_SECRETS_FOUND = 51;
 const HTTP_TOO_MANY_REQUESTS = 429;
 
+// The secrets scan limit is 60s; 15s aborts these tests under parallel CI load.
+const SECRETS_SCAN_TEST_TIMEOUT_MS = 30_000;
+
 describe('analyze (no subcommand)', () => {
   let harness: TestHarness;
 
@@ -122,7 +125,7 @@ describe('analyze (no subcommand)', () => {
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       );
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -157,7 +160,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.agentic).not.toBeNull();
       expect(report.agentic?.summary.totalIssues).toBe(0);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -190,7 +193,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.secrets.summary.totalIssues).toBeGreaterThan(0);
       expect(report.agentic).toBeNull();
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -223,7 +226,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.secrets.summary.totalIssues).toBe(0);
       expect(report.agentic).not.toBeNull();
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -255,7 +258,7 @@ describe('analyze (no subcommand)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -285,7 +288,7 @@ describe('analyze (no subcommand)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -318,7 +321,7 @@ describe('analyze (no subcommand)', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(0);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -358,7 +361,7 @@ describe('analyze (no subcommand)', () => {
       expect(request.files).toHaveLength(1);
       expect(request.analysisDepth).toBe('DEEP');
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -398,7 +401,7 @@ describe('analyze (no subcommand)', () => {
       const request = JSON.parse(sqaaCalls[0].body ?? '{}') as { projectKey?: string };
       expect(request.projectKey).toBe('explicit-project');
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -478,7 +481,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.agentic?.ignored.length).toBeGreaterThan(0);
       expect(report.agentic?.ignored[0].reason).toBe('binary');
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -543,7 +546,7 @@ describe('analyze (no subcommand)', () => {
       expect(report.agentic).not.toBeNull();
       expect(report.agentic?.summary.totalIssues).toBe(0);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 });
 
@@ -1357,7 +1360,7 @@ describe('sonar analyze — analysis telemetry', () => {
       expect(secretsEvents[0].event_payload.findings_count).toBe(0);
       expect(sqaaEvents[0].event_payload.findings_count).toBe(0);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -1388,7 +1391,7 @@ describe('sonar analyze — analysis telemetry', () => {
       expect(secretsEvents[0].event_payload.caller_command).toBe(SECRETS_CALLER_COMMANDS.analyze);
       expect(sqaaEvents[0].event_payload.caller_command).toBe(SQAA_ANALYZE_CALLER_COMMAND);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -1424,7 +1427,7 @@ describe('sonar analyze — analysis telemetry', () => {
       expect(commandEvent.event_payload.command).toBe('analyze');
       expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
@@ -1453,7 +1456,7 @@ describe('sonar analyze — analysis telemetry', () => {
       expect(commandEvent.event_payload.command).toBe('analyze');
       expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 });
 
@@ -3449,7 +3452,7 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
         { path: 'docs/readme.md', reason: 'outside-project' },
       ]);
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it.each(['analyze agentic', 'analyze'])(
@@ -3470,7 +3473,7 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
         [PROJECT_B]: ['lib/y.ts'],
       });
     },
-    { timeout: 30000 },
+    { timeout: SECRETS_SCAN_TEST_TIMEOUT_MS },
   );
 
   it(
