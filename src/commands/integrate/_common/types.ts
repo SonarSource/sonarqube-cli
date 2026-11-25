@@ -28,6 +28,8 @@ export interface IntegrateAgentOptions {
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;
   vortexDisposition?: VortexDisposition;
+  /** Bulk setup owns the installation lock and requires committed state. */
+  fromBulkSetup?: boolean;
 }
 
 export interface HookCommand {

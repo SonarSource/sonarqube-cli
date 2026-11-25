@@ -27,6 +27,7 @@ import {
 } from '@/core/host/environment/installed-agent-detector.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { integrateAllAgents, previewBulkSetup } from './_common/bulk-agent-setup.ts';
 import { findInstalledIntegrationIds } from './_common/installed-integrations.ts';
 import { integrateAntigravity } from './antigravity';
 import { antigravityIntegration } from './antigravity/declaration.ts';
@@ -53,6 +54,7 @@ import { piIntegration } from './pi/declaration.ts';
 
 export interface IntegrateBareOptions {
   nonInteractive?: boolean;
+  all?: boolean;
   /** Marks handlers as invoked via the bare router; forwarded to telemetry only. */
   isFromRouter?: boolean;
 }
@@ -133,6 +135,19 @@ export async function integrateBare(
 ): Promise<void> {
   const { console } = ctx;
 
+  const detected = detectInstalledAgents();
+  if (options.all) {
+    if (
+      options.nonInteractive ||
+      (console.canPrompt() && (await previewBulkSetup(console, detected)))
+    ) {
+      await integrateAllAgents(ctx, detected);
+    } else if (!console.canPrompt()) {
+      throw new InvalidOptionError('Use --non-interactive for unattended setup.');
+    }
+    return;
+  }
+
   if (options.nonInteractive) {
     throw new InvalidOptionError(
       '--non-interactive requires an explicit agent.',
@@ -140,7 +155,6 @@ export async function integrateBare(
     );
   }
 
-  const detected = detectInstalledAgents();
   if (detected.length > 0) {
     console.info(`Detected agents on your machine: ${detected.map(agentDisplayName).join(', ')}`);
   }
@@ -152,12 +166,20 @@ export async function integrateBare(
 
   noteConflictingAgents(detected, console);
 
-  const selected = await console.selectPrompt(
+  const selected = await console.selectPrompt<(typeof TOOLS)[number] | 'all'>(
     'Select the tool you want to integrate with',
-    TOOLS.map((tool) => ({ value: tool, label: tool.label })),
+    [
+      ...TOOLS.map((tool) => ({ value: tool, label: tool.label })),
+      ...(detected.length ? [{ value: 'all' as const, label: 'Set up all detected agents' }] : []),
+    ],
   );
 
   if (!selected) throw new CommandFailedError('No integration selected');
+
+  if (selected === 'all') {
+    if (await previewBulkSetup(console, detected)) await integrateAllAgents(ctx, detected);
+    return;
+  }
 
   await selected.handler({ ...options, isFromRouter: true }, ctx);
 }
