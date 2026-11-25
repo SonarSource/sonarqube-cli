@@ -121,7 +121,7 @@ async function tryRunHostedMcp(
   }
   const hint =
     auth.connectionType === 'on-premise'
-      ? ' For Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
+      ? ' For SonarQube Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
       : '';
   process.stderr.write(
     `[sonarqube-cli] MCP: local container fallback — ${hosted.url}/health ${availability.reason}.${hint}\n`,
