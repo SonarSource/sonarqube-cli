@@ -95,6 +95,23 @@ describe('analyze container', () => {
     ]);
   }, 30_000);
 
+  it('returns a JSON error report when the first-use download fails', async () => {
+    await harness.newFakeBinariesServer().noArtifacts().start();
+    const result = await harness.run('analyze container ./my-image.tar');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Download failed: 404');
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      issues: [],
+      errors: [
+        { kind: 'scannerExecution', message: expect.stringContaining('Download failed: 404') },
+      ],
+      configuration: { imageInput: IMAGE },
+      exitCode: 1,
+    });
+    expect(harness.cliHome.file('bin', binaryName).exists()).toBeFalse();
+  });
+
   it.skipIf(IS_WINDOWS)(
     'reports SIGTERM cancellation with exit 143 in JSON and the process status',
     async () => {
@@ -128,7 +145,8 @@ describe('analyze container', () => {
       configuration: { ...configuration, failOn: 'none' },
       exitCode: 0,
     };
-    installStub(harness, { stdout: JSON.stringify(report), exitCode: 0 }, [
+    const summary = 'PASS: 2 finding(s), highest severity high (fail-on: none)';
+    installStub(harness, { stdout: JSON.stringify(report), stderr: summary, exitCode: 0 }, [
       'SONAR_CONTAINER_SCANNER_TOKEN',
       'SONAR_CONTAINER_SCANNER_ORG',
       'SONAR_HOST_URL',
@@ -144,6 +162,7 @@ describe('analyze container', () => {
     });
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual(report);
+    expect(result.stderr).toContain(summary);
     expect(readContainerScannerInvocations(harness)).toEqual([
       {
         argv: [
@@ -165,11 +184,13 @@ describe('analyze container', () => {
   });
 
   it('passes the active connection and the requested options, clears inherited overrides, and renders a table', async () => {
+    const warning = 'WARNING: the backend skipped 1 package(s)';
+    const summary = 'FAIL: 2 finding(s), highest severity high (fail-on: high)';
     installStub(
       harness,
       {
         stdout: JSON.stringify({ issues: findings, errors: [], configuration, exitCode: 1 }),
-        stderr: 'WARNING: the backend skipped 1 package(s)',
+        stderr: `${warning}\r\n${summary}\r\n`,
         exitCode: 1,
       },
       [
@@ -203,7 +224,9 @@ describe('analyze container', () => {
     expect(result.stdout).toContain('CVE-2025-0001');
     expect(result.stdout).toContain('CVE-2025-0002');
     expect(result.stdout).toContain('1 finding reached the threshold');
-    expect(result.stderr).toContain('WARNING: the backend skipped 1 package(s)');
+    expect(result.stdout).toContain('Results are incomplete.');
+    expect(result.stderr).toContain(warning);
+    expect(result.stderr).not.toContain(summary);
     expect(readContainerScannerInvocations(harness)).toEqual([
       {
         argv: [
