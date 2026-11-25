@@ -20,8 +20,9 @@
 
 // Process management helpers
 
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
+import { win32 } from 'node:path';
 import type { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { StringDecoder } from 'node:string_decoder';
@@ -44,12 +45,24 @@ export interface SpawnOptions {
    * Vortex Context deletes inherited `SONAR_CONTEXT_*` keys, which a merge would put back.
    */
   isolateEnv?: boolean;
-  /** Called immediately after the child process spawns, with a function to kill it. */
-  onSpawn?: (kill: () => void) => void;
+  /** Kills the direct child (or its process tree when `killProcessTree` is set) when aborted (including if already aborted on spawn). */
+  signal?: AbortSignal;
+  /**
+   * When true, kills the child's entire process tree on timeout, abort, or stdin failure
+   * (process group via `detached: true` on Unix; `taskkill /T /F` on Windows).
+   */
+  killProcessTree?: boolean;
   /** Receives each decoded stdout chunk as it arrives, in addition to the captured `stdout`. */
   onStdout?: (text: string) => void;
   /** Receives each decoded stderr chunk as it arrives, in addition to the captured `stderr`. */
   onStderr?: (text: string) => void;
+}
+
+type KillFn = (signal?: NodeJS.Signals) => void;
+
+interface InternalSpawnOptions extends SpawnOptions {
+  /** Internal hook used by {@link raceWithTimeout} to kill the child on deadline. */
+  onSpawn?: (kill: KillFn) => void;
 }
 
 /** A child did not finish before its deadline. Distinct from "the program is not installed". */
@@ -67,27 +80,112 @@ function childEnv(options: SpawnOptions): NodeJS.ProcessEnv {
   return { ...process.env, ...options.env };
 }
 
+function shouldSpawnDetached(options: SpawnOptions): boolean {
+  return (
+    Boolean(options.detached) || (Boolean(options.killProcessTree) && process.platform !== 'win32')
+  );
+}
+
+const TREE_CLOSE_GRACE_MS = 1000;
+const TREE_KILL_GRACE_MS = 500;
+
+function terminateChild(
+  proc: ChildProcess,
+  killProcessTree: boolean,
+  signal: NodeJS.Signals = 'SIGTERM',
+): void {
+  if (!killProcessTree || proc.pid === undefined) {
+    proc.kill(signal);
+    return;
+  }
+  if (process.platform === 'win32') {
+    const taskkillPath = win32.join(
+      process.env.SystemRoot ?? String.raw`C:\Windows`,
+      'System32',
+      'taskkill.exe',
+    );
+    try {
+      const result = spawnSync(taskkillPath, ['/PID', String(proc.pid), '/T', '/F'], {
+        stdio: 'ignore',
+      });
+      if (result.error || result.status !== 0) {
+        proc.kill();
+      }
+    } catch {
+      proc.kill();
+    }
+    return;
+  }
+  try {
+    process.kill(-proc.pid, signal);
+  } catch {
+    proc.kill(signal);
+  }
+}
+
+function waitBounded(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      resolve(false);
+    }, ms);
+    const done = (): void => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    void promise.then(done, done);
+  });
+}
+
 async function raceWithTimeout<T>(
-  run: (registerKill: (kill: () => void) => void) => Promise<T>,
+  run: (registerKill: (kill: KillFn) => void) => Promise<T>,
   timeoutMs: number,
   timeoutMessage: string,
+  options: Pick<SpawnOptions, 'signal' | 'killProcessTree'> = {},
 ): Promise<T> {
-  let killChild: (() => void) | undefined;
+  const { signal, killProcessTree } = options;
+  let killChild: KillFn | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const state = { timedOut: false };
+  const onAbort = (): void => {
+    killChild?.('SIGTERM');
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+
+  const childPromise = run((kill) => {
+    killChild = kill;
+    if (signal?.aborted) kill('SIGTERM');
+  });
+  void childPromise.catch(() => undefined);
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      state.timedOut = true;
+      killChild?.('SIGTERM');
+      if (!killProcessTree) {
+        reject(new ProcessTimedOutError(timeoutMessage));
+        return;
+      }
+      // Wait boundedly for the tree to exit before rejecting so callers can safely clean up temp dirs.
+      void waitBounded(childPromise, TREE_CLOSE_GRACE_MS).then(async (closed) => {
+        if (!closed && process.platform !== 'win32') {
+          killChild?.('SIGKILL');
+          await waitBounded(childPromise, TREE_KILL_GRACE_MS);
+        }
+        reject(new ProcessTimedOutError(timeoutMessage));
+      });
+    }, timeoutMs);
+  });
+
   try {
-    return await Promise.race([
-      run((kill) => {
-        killChild = kill;
-      }),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          killChild?.();
-          reject(new ProcessTimedOutError(timeoutMessage));
-        }, timeoutMs);
-      }),
-    ]);
+    const result = await Promise.race([childPromise, timeoutPromise]);
+    if (state.timedOut) throw new ProcessTimedOutError(timeoutMessage);
+    return result;
+  } catch (error) {
+    if (state.timedOut) throw new ProcessTimedOutError(timeoutMessage);
+    throw error;
   } finally {
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -127,16 +225,19 @@ function feedStdin(
 async function spawnProcess(
   command: string,
   args: string[],
-  options: SpawnOptions = {},
+  options: InternalSpawnOptions = {},
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       cwd: options.cwd,
       env: childEnv(options),
       stdio: [options.stdin || 'ignore', options.stdout || 'pipe', options.stderr || 'pipe'],
-      detached: options.detached || false,
+      detached: shouldSpawnDetached(options),
     });
-    options.onSpawn?.(() => proc.kill());
+    const kill: KillFn = (sig) => {
+      terminateChild(proc, Boolean(options.killProcessTree), sig);
+    };
+    options.onSpawn?.(kill);
 
     let stdout = '';
     let stderr = '';
@@ -170,7 +271,7 @@ async function spawnProcess(
           reject(error);
         }
       });
-      feedStdin(proc.stdin, options, reject, () => proc.kill());
+      feedStdin(proc.stdin, options, reject, kill);
     }
 
     proc.on('error', reject);
@@ -189,7 +290,7 @@ async function spawnProcess(
 
 /**
  * Spawn a process and reject with {@link ProcessTimedOutError} if it does not finish within `timeoutMs`.
- * Kills the direct child on timeout.
+ * Kills the direct child (or its process tree when `options.killProcessTree` is set) on timeout.
  */
 export async function spawnProcessWithTimeout(
   command: string,
@@ -199,16 +300,10 @@ export async function spawnProcessWithTimeout(
   timeoutMessage: string,
 ): Promise<SpawnResult> {
   return raceWithTimeout(
-    (registerKill) =>
-      spawnProcess(command, args, {
-        ...options,
-        onSpawn: (kill) => {
-          registerKill(kill);
-          options.onSpawn?.(kill);
-        },
-      }),
+    (registerKill) => spawnProcess(command, args, { ...options, onSpawn: registerKill }),
     timeoutMs,
     timeoutMessage,
+    options,
   );
 }
 export interface BytesSpawnResult {
@@ -227,32 +322,29 @@ export async function spawnProcessCapturingBytes(
   timeoutMessage: string,
 ): Promise<BytesSpawnResult> {
   return raceWithTimeout(
-    (registerKill) =>
-      captureProcessBytes(command, args, {
-        ...options,
-        onSpawn: (kill) => {
-          registerKill(kill);
-          options.onSpawn?.(kill);
-        },
-      }),
+    (registerKill) => captureProcessBytes(command, args, { ...options, onSpawn: registerKill }),
     timeoutMs,
     timeoutMessage,
+    options,
   );
 }
 
 async function captureProcessBytes(
   command: string,
   args: string[],
-  options: SpawnOptions,
+  options: InternalSpawnOptions,
 ): Promise<BytesSpawnResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       cwd: options.cwd,
       env: childEnv(options),
       stdio: [options.stdin ?? 'ignore', options.stdout ?? 'pipe', options.stderr ?? 'pipe'],
-      detached: options.detached || false,
+      detached: shouldSpawnDetached(options),
     });
-    options.onSpawn?.(() => proc.kill());
+    const kill: KillFn = (sig) => {
+      terminateChild(proc, Boolean(options.killProcessTree), sig);
+    };
+    options.onSpawn?.(kill);
 
     const stdout: Buffer[] = [];
     let stderr = '';
@@ -266,7 +358,7 @@ async function captureProcessBytes(
 
     if (proc.stdin) {
       proc.stdin.on('error', () => undefined);
-      feedStdin(proc.stdin, options, reject, () => proc.kill());
+      feedStdin(proc.stdin, options, reject, kill);
     }
 
     proc.on('error', reject);
