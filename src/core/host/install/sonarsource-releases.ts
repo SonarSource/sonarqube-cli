@@ -31,7 +31,11 @@ import {
   SONARSOURCE_BINARIES_URL,
 } from '../../config-constants.ts';
 import logger from '../../observability/logger.ts';
-import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.ts';
+import {
+  buildCagPlatformSuffix,
+  formatArtifactPlatformKey,
+  type PlatformInfo,
+} from './install-types.ts';
 
 const DOWNLOAD_TIMEOUT_MS = 60000;
 
@@ -40,18 +44,22 @@ export type DependencyExtension = 'bin' | 'exe' | 'tar.gz';
 
 /**
  * Build the CDN filename for dependency binaries installed via `buildDownloadUrl`
- * (e.g. sonar-secrets, sca-scanner-cli). The extension is not a constant across
- * binaries.sonarsource.com: some binaries/versions publish `.exe` on every
- * platform, others follow the CLI's own convention (`.bin` on Linux/macOS, `.exe`
- * on Windows only). `BinarySpec.extensions` records which, per platform.
+ * (e.g. sonar-secrets, sca-scanner-cli, sonar-container-scanner). The extension is
+ * not a constant across binaries.sonarsource.com: some binaries/versions publish
+ * `.exe` on every platform, others follow the CLI's own convention (`.bin` on
+ * Linux/macOS, `.exe` on Windows only). `BinarySpec.extensions` records which, per platform.
  */
-function buildDownloadFilename(
+export function buildDownloadFilename(
   binaryName: string,
   version: string,
-  platformInfo: PlatformInfo,
+  platformKey: string,
   extension: DependencyExtension,
 ): string {
-  return `${binaryName}-${version}-${platformInfo.os}-${platformInfo.arch}.${extension}`;
+  return `${binaryName}-${version}-${platformKey}.${extension}`;
+}
+
+export function buildArtifactDownloadUrl(distPrefix: string, filename: string): string {
+  return `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${filename}`;
 }
 
 /**
@@ -66,8 +74,13 @@ export function buildDownloadUrl(
   platformInfo: PlatformInfo,
   extension: DependencyExtension,
 ): string {
-  const filename = buildDownloadFilename(binaryName, version, platformInfo, extension);
-  return `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${filename}`;
+  const filename = buildDownloadFilename(
+    binaryName,
+    version,
+    formatArtifactPlatformKey(platformInfo),
+    extension,
+  );
+  return buildArtifactDownloadUrl(distPrefix, filename);
 }
 
 /**
@@ -146,11 +159,10 @@ export async function verifyPgpSignature(
 export async function verifyBinarySignature(
   binaryName: string,
   binaryPath: string,
-  platformInfo: PlatformInfo,
+  platformKey: string,
   signatures: Record<string, string>,
   armoredPublicKey: string,
 ): Promise<void> {
-  const platformKey = `${platformInfo.os}-${platformInfo.arch}`;
   const armoredSignature = signatures[platformKey];
   if (!armoredSignature) {
     throw new CommandFailedError(`${binaryName} is not available for platform '${platformKey}'.`);

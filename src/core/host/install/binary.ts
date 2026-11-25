@@ -27,9 +27,15 @@ import { join } from 'node:path';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
-import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install/install-types.ts';
 import {
-  buildDownloadUrl,
+  buildPlatformSuffix,
+  formatArtifactPlatformKey,
+  type PlatformInfo,
+  type PlatformNamingScheme,
+} from '@/core/host/install/install-types.ts';
+import {
+  buildArtifactDownloadUrl,
+  buildDownloadFilename,
   type DependencyExtension,
   downloadBinary,
   verifyBinarySignature,
@@ -52,17 +58,31 @@ export interface BinarySpec {
   signatures: Record<string, string>;
   publicKey: string;
   extensions: Record<string, DependencyExtension>;
+  platformNaming?: PlatformNamingScheme;
 }
 
-export function resolveDownloadExtension(
-  spec: BinarySpec,
-  platform: PlatformInfo,
-): DependencyExtension {
-  const platformKey = `${platform.os}-${platform.arch}`;
+export interface BinaryArtifact {
+  readonly platformKey: string;
+  readonly filename: string;
+  readonly url: string;
+}
+
+export function resolveBinaryArtifact(spec: BinarySpec, platform: PlatformInfo): BinaryArtifact {
+  const platformKey = formatArtifactPlatformKey(platform, spec.platformNaming);
   if (!(platformKey in spec.extensions)) {
     throw new CommandFailedError(`${spec.name} is not available for platform '${platformKey}'.`);
   }
-  return spec.extensions[platformKey];
+  const filename = buildDownloadFilename(
+    spec.name,
+    spec.version,
+    platformKey,
+    spec.extensions[platformKey],
+  );
+  return {
+    platformKey,
+    filename,
+    url: buildArtifactDownloadUrl(spec.distPrefix, filename),
+  };
 }
 
 export interface InstallOptions {
@@ -134,26 +154,26 @@ async function downloadAndInstall(
 
   console.text(`     Installing ${spec.name} ${spec.version}`, undefined, channel);
 
-  const downloadExtension = resolveDownloadExtension(spec, platform);
-  const downloadUrl = buildDownloadUrl(
-    spec.name,
-    spec.version,
-    spec.distPrefix,
-    platform,
-    downloadExtension,
-  );
+  const artifact = resolveBinaryArtifact(spec, platform);
   const stagingDir = mkdtempSync(join(resolvedBinDir, '.install-'));
   const stagedPath = join(stagingDir, binaryName);
   let published: boolean;
   try {
     await console.withSpinner(
       `Downloading ${spec.name} ${spec.version}`,
-      () => downloadBinary(downloadUrl, stagedPath),
+      () => downloadBinary(artifact.url, stagedPath),
       channel,
     );
     await console.withSpinner(
       'Verifying signature',
-      () => verifyBinarySignature(spec.name, stagedPath, platform, spec.signatures, spec.publicKey),
+      () =>
+        verifyBinarySignature(
+          spec.name,
+          stagedPath,
+          artifact.platformKey,
+          spec.signatures,
+          spec.publicKey,
+        ),
       channel,
     );
     if (platform.os !== 'windows') {

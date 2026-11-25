@@ -20,7 +20,11 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { buildCagPlatformSuffix, buildPlatformSuffix } from '@/core/host/install/install-types.ts';
+import {
+  buildCagPlatformSuffix,
+  buildPlatformSuffix,
+  formatArtifactPlatformKey,
+} from '@/core/host/install/install-types.ts';
 
 describe('install-types', () => {
   describe('buildPlatformSuffix (sonar-secrets convention)', () => {
@@ -30,6 +34,19 @@ describe('install-types', () => {
       ['macos', 'arm64', '', '-macos-arm64'],
     ] as const)('%s/%s%s → %s', (os, arch, extension, expected) => {
       expect(buildPlatformSuffix({ os, arch, extension })).toBe(expected);
+    });
+  });
+
+  describe('formatArtifactPlatformKey', () => {
+    it.each([
+      ['linux', 'x86-64', undefined, 'linux-x86-64'],
+      ['windows', 'x86-64', undefined, 'windows-x86-64'],
+      ['linux', 'x86-64', 'x64', 'linux-x64'],
+      ['windows', 'x86-64', 'x64', 'windows-x64'],
+      ['linux', 'arm64', 'x64', 'linux-arm64'],
+      ['macos', 'arm64', 'x64', 'macos-arm64'],
+    ] as const)('%s/%s (naming=%s) → %s', (os, arch, naming, expected) => {
+      expect(formatArtifactPlatformKey({ os, arch }, naming)).toBe(expected);
     });
   });
 

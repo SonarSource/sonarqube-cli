@@ -38,6 +38,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import * as openpgp from 'openpgp';
 
 import { SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
+import {
+  formatArtifactPlatformKey,
+  type PlatformNamingScheme,
+} from '@/core/host/install/install-types.ts';
 import { SONARSOURCE_PUBLIC_KEY } from '@/core/host/install/signatures.ts';
 import type { DependencyExtension } from '@/core/host/install/sonarsource-releases.ts';
 
@@ -48,7 +52,6 @@ interface Platform {
 }
 
 type ArchiveFormat = 'tar.gz';
-type PlatformNamingScheme = 'x64';
 
 interface ExternalBinary {
   version: string;
@@ -58,7 +61,7 @@ interface ExternalBinary {
   archive?: ArchiveFormat;
   /**
    * Optional platform naming override. When set to `'x64'`, `x86-64` is rewritten
-   * to `x64` in the URL (sonar-context-augmentation distribution convention).
+   * to `x64` in the URL and generated platform keys.
    */
   platformNaming?: PlatformNamingScheme;
 }
@@ -101,7 +104,14 @@ async function fetchSignatures(): Promise<void> {
       extensions[urlPlatformKey(platform, externalBinary)] = platform.extension;
     }
 
-    patchSignaturesTs(binaryName, version, signatures, extensions, SIGNATURES_TS_PATH);
+    patchSignaturesTs(
+      binaryName,
+      version,
+      signatures,
+      extensions,
+      externalBinary.platformNaming,
+      SIGNATURES_TS_PATH,
+    );
     console.log('');
   }
 }
@@ -111,6 +121,7 @@ function patchSignaturesTs(
   version: string,
   signatures: Record<string, string>,
   extensions: Record<string, DependencyExtension>,
+  platformNaming: PlatformNamingScheme | undefined,
   outputPath: URL,
 ): void {
   const PREFIX = binaryName.toUpperCase().replaceAll('-', '_');
@@ -119,6 +130,12 @@ function patchSignaturesTs(
   content = content.replace(
     new RegExp(`^export const ${PREFIX}_VERSION = '.*';$`, 'm'),
     `export const ${PREFIX}_VERSION = '${version}';`,
+  );
+
+  const platformNamingValue = platformNaming ? `'${platformNaming}'` : 'undefined';
+  content = content.replace(
+    new RegExp(`^export const ${PREFIX}_PLATFORM_NAMING[^=]*=.*;$`, 'm'),
+    `export const ${PREFIX}_PLATFORM_NAMING: PlatformNamingScheme | undefined = ${platformNamingValue};`,
   );
 
   const sigEntries = Object.entries(signatures)
@@ -142,9 +159,7 @@ function patchSignaturesTs(
 }
 
 function urlPlatformKey(platform: Platform, binary: ExternalBinary): string {
-  const arch =
-    binary.platformNaming === 'x64' && platform.arch === 'x86-64' ? 'x64' : platform.arch;
-  return `${platform.os}-${arch}`;
+  return formatArtifactPlatformKey(platform, binary.platformNaming);
 }
 
 function buildAscUrl(platform: Platform, binary: ExternalBinary): string {
@@ -167,7 +182,7 @@ async function fetchAndVerifySignature(
 ): Promise<SignatureResult | null> {
   const displayPlatformKey = `${platform.os}-${platform.arch}`;
   // The map key must match the URL platform so runtime lookups in signatures.ts
-  // resolve correctly when a binary maps `x86-64 → x64` (CAG).
+  // resolve correctly when a binary maps `x86-64 → x64`.
   const mapPlatformKey = urlPlatformKey(platform, binary);
   const ascUrl = buildAscUrl(platform, binary);
 
