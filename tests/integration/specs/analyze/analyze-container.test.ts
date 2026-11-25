@@ -24,6 +24,7 @@ import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName, resolveBinaryArtifact } from '@/core/host/install/binary.ts';
 import { CONTAINER_SCANNER_SPEC } from '@/core/host/install/container-scanner.ts';
 
+import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { TestHarness } from '../../harness';
 import { IS_WINDOWS } from '../../harness/platform.ts';
 import {
@@ -96,6 +97,7 @@ describe('analyze container', () => {
   }, 30_000);
 
   it('returns a JSON error report when the first-use download fails', async () => {
+    harness.state().withTelemetryEnabled();
     await harness.newFakeBinariesServer().noArtifacts().start();
     const result = await harness.run('analyze container ./my-image.tar');
 
@@ -110,6 +112,8 @@ describe('analyze container', () => {
       exitCode: 1,
     });
     expect(harness.cliHome.file('bin', binaryName).exists()).toBeFalse();
+    expect(readAnalysisEvents(harness.sonarUserHome.path)).toEqual([]);
+    expect(readCommandEvents(harness.sonarUserHome.path)).toHaveLength(1);
   });
 
   it.skipIf(IS_WINDOWS)(
@@ -163,6 +167,7 @@ describe('analyze container', () => {
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual(report);
     expect(result.stderr).toContain(summary);
+    expect(readAnalysisEvents(harness.sonarUserHome.path)).toEqual([]);
     expect(readContainerScannerInvocations(harness)).toEqual([
       {
         argv: [
@@ -321,6 +326,59 @@ describe('analyze container', () => {
     expect(binaries.getRecordedRequests()).toEqual([]);
   });
 
+  it.each([
+    {
+      title: 'threshold hit with partial results',
+      nativeExit: 1,
+      stdout: JSON.stringify({
+        issues: findings,
+        errors: [{ kind: 'backendAnalysis', message: 'Sensitive package detail' }],
+        configuration,
+        exitCode: 1,
+      }),
+      cliExit: 51,
+      observedFindings: 2,
+      errors: 1,
+      failures: 0,
+    },
+    {
+      title: 'malformed output',
+      nativeExit: 0,
+      stdout: '[',
+      cliExit: 1,
+      observedFindings: 0,
+      errors: 0,
+      failures: 1,
+    },
+  ])('records one correlated analysis fact for $title', async (test) => {
+    harness.state().withTelemetryEnabled();
+    installStub(harness, { stdout: test.stdout, exitCode: test.nativeExit });
+    const result = await harness.run('analyze container ./my-image.tar');
+    expect(result.exitCode).toBe(test.cliExit);
+    const analysis = readAnalysisEvents(harness.sonarUserHome.path);
+    const commands = readCommandEvents(harness.sonarUserHome.path);
+    expect(analysis).toHaveLength(1);
+    expect(commands).toHaveLength(1);
+    expect(commands[0].event_payload).toMatchObject({
+      command: 'analyze',
+      subcommand: 'container',
+    });
+    expect(analysis[0].event_payload).toMatchObject({
+      analyzer: 'sonar-container-scanner',
+      caller_command: 'analyze container',
+      findings_count: test.observedFindings,
+      errors_count: test.errors,
+      failures_count: test.failures,
+      exit_code: test.cliExit,
+      invocation_id: commands[0].event_payload.invocation_id,
+      details: '',
+    });
+    expect(analysis[0].event_payload.scan_duration_ms).toBeGreaterThanOrEqual(0);
+    expect(JSON.stringify([analysis, commands])).not.toMatch(
+      /my-image|CVE-2025|Sensitive package detail/,
+    );
+  });
+
   it.each(['0', '1.5', '2s'])(
     'rejects malformed timeout %s before attempting to install',
     async (timeout) => {
@@ -334,6 +392,7 @@ describe('analyze container', () => {
   );
 
   it('rejects a Server connection and a Cloud connection without an organization before installing', async () => {
+    harness.state().withTelemetryEnabled();
     harness.withAuth(cloudUrl, TOKEN);
     const serverResult = await harness.run('analyze container ./my-image.tar');
     expect(serverResult.exitCode).toBe(1);
@@ -349,5 +408,7 @@ describe('analyze container', () => {
     expect(noOrg.exitCode).toBe(1);
     expect(noOrg.stderr).toContain('Could not determine the SonarQube Cloud organization');
     expect(harness.cliHome.file('bin', binaryName).exists()).toBeFalse();
+    expect(readAnalysisEvents(harness.sonarUserHome.path)).toEqual([]);
+    expect(readCommandEvents(harness.sonarUserHome.path)).toHaveLength(2);
   });
 });
