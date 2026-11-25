@@ -58,6 +58,8 @@ export default tseslint.config(
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/prefer-nullish-coalescing': 'off',
       '@typescript-eslint/array-type': 'off',
+      // Commander types children/this as Command and openpgp types keys loosely; downcasts are an established pattern here
+      '@typescript-eslint/no-unsafe-class-instance-assignment': 'off',
       // Allow numbers and booleans in template literals — very common in CLI output
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
       // Downgrade unsafe rules to warn — CLI code often interacts with loosely typed APIs
