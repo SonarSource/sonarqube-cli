@@ -112,6 +112,27 @@ describe('hosted-mcp-bridge', () => {
     expect(result.stderr).toContain('Ignoring duplicate pending MCP request ID');
   });
 
+  it('forwards cancellation and exits on EOF without waiting for the cancelled request', async () => {
+    const received = Promise.withResolvers<void>();
+    fixture.handle = (message) => {
+      if (message.id === 2) received.resolve();
+      return new Response(null, { status: 202 });
+    };
+    const session = await fixture.connect();
+    session.write(line({ jsonrpc: '2.0', id: 2, method: 'tools/list' }));
+    await received.promise;
+    const cancellation: Message = {
+      jsonrpc: '2.0',
+      method: 'notifications/cancelled',
+      params: { requestId: 2 },
+    };
+    session.write(line(cancellation));
+    const result = await session.waitFinish();
+    expect(result.exitCode).toBe(0);
+    expect(fixture.requests.map((r) => r.message)).toContainEqual(cancellation);
+    expect(messages(result.stdout).filter((m) => m.id === 2)).toEqual([]);
+  }, 15000);
+
   it('recovers from malformed input, malformed HTTP JSON, and a failed notification', async () => {
     fixture.handle = (message) =>
       message.id === 2

@@ -24,6 +24,14 @@ import {
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { JSONRPCMessage, RequestId } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CancelledNotificationSchema,
+  InitializeResultSchema,
+  isJSONRPCErrorResponse,
+  isJSONRPCNotification,
+  isJSONRPCRequest,
+  isJSONRPCResultResponse,
+} from '@modelcontextprotocol/sdk/types.js';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 
@@ -162,10 +170,21 @@ class HostedMcpBridge {
     }
   }
 
+  private handleCancellation(message: JSONRPCMessage): void {
+    if (!isJSONRPCNotification(message)) return;
+    const cancellation = CancelledNotificationSchema.safeParse(message);
+    const requestId = cancellation.success ? cancellation.data.params.requestId : undefined;
+    if (requestId === undefined) return;
+    const pending = this.pendingRequests.get(requestId);
+    if (pending) clearTimeout(pending.timer);
+    this.pendingRequests.delete(requestId);
+  }
+
   private async forwardToHosted(message: JSONRPCMessage): Promise<void> {
     if (this.stopping) return;
+    this.handleCancellation(message);
     let request: PendingRequest | undefined;
-    if ('method' in message && 'id' in message) {
+    if (isJSONRPCRequest(message)) {
       if (this.pendingRequests.has(message.id)) {
         // A second response with this ID would also be ambiguous, so preserve the original request.
         process.stderr.write('[sonarqube-cli] Ignoring duplicate pending MCP request ID.\n');
@@ -188,11 +207,7 @@ class HostedMcpBridge {
       await this.hostedTransport.send(message);
     } catch (error) {
       // The SDK reports transport errors through onerror; only the failed request needs a reply.
-      if (
-        'method' in message &&
-        'id' in message &&
-        this.pendingRequests.get(message.id) === request
-      ) {
+      if (isJSONRPCRequest(message) && this.pendingRequests.get(message.id) === request) {
         await this.forwardToAgent({
           jsonrpc: '2.0',
           id: message.id,
@@ -205,21 +220,26 @@ class HostedMcpBridge {
     }
   }
 
+  private handleInitialization(message: JSONRPCMessage, request: PendingRequest): void {
+    if (request.method !== 'initialize' || !isJSONRPCResultResponse(message)) return;
+    const initialization = InitializeResultSchema.safeParse(message.result);
+    if (initialization.success) {
+      this.hostedTransport.setProtocolVersion(initialization.data.protocolVersion);
+    }
+  }
+
   private async forwardToAgent(message: JSONRPCMessage): Promise<void> {
     if (this.stopping) return;
-    if ('id' in message && message.id !== undefined && !('method' in message)) {
+    if (
+      (isJSONRPCResultResponse(message) || isJSONRPCErrorResponse(message)) &&
+      message.id !== undefined
+    ) {
       const request = this.pendingRequests.get(message.id);
       // Ignore late responses after a timeout or a response already delivered to the agent.
       if (!request) return;
       clearTimeout(request.timer);
       this.pendingRequests.delete(message.id);
-      if (
-        request.method === 'initialize' &&
-        'result' in message &&
-        typeof message.result.protocolVersion === 'string'
-      ) {
-        this.hostedTransport.setProtocolVersion(message.result.protocolVersion);
-      }
+      this.handleInitialization(message, request);
     }
     this.activeForwards++;
     try {
