@@ -34,6 +34,7 @@ import {
   type ContainerRuntimeDetection,
   detectContainerRuntime,
 } from '@/core/host/environment/tool-detector.ts';
+import { HostedMcpClient } from '@/core/host/mcp/hosted-mcp-client.ts';
 import {
   clientCertCachePath,
   type McpServerContext,
@@ -54,7 +55,6 @@ import {
 } from '@/core/project-discovery/project-info.ts';
 
 import { bridgeHostedMcp } from './hosted-mcp-bridge.ts';
-import { HostedMcpClient } from './hosted-mcp-client.ts';
 
 export interface McpRunOptions {
   transport?: 'stdio' | 'http' | 'auto';

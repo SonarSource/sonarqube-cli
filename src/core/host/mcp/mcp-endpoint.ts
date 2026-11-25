@@ -20,7 +20,6 @@
 
 import { CliError } from '@/core/commands/command-error.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
-import { runtimeStatusLine } from '@/core/host/environment/runtime-health-messages.ts';
 import {
   checkContainerRuntimeHealth,
   type ContainerRuntimeHealth,
@@ -30,9 +29,8 @@ import {
   resolveMcpContainerNetworking,
 } from '@/core/host/mcp/mcp-network.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import type { Console } from '@/core/ui/console.ts';
 
-import { HostedMcpClient } from '../run/hosted-mcp-client.ts';
+import { HostedMcpClient } from './hosted-mcp-client.ts';
 
 export interface McpEndpointStatus {
   connectionMode: 'hosted' | 'container' | null;
@@ -86,23 +84,4 @@ export async function checkMcpEndpoint(
         : message;
   }
   return status;
-}
-
-export function renderMcpEndpoint(status: McpEndpointStatus, console: Console): void {
-  console.blank();
-  console.text('MCP (sonar run mcp --transport auto)');
-  if (status.startupError) {
-    console.text(`  • Cannot start: ${status.startupError}`);
-    return;
-  }
-  if (status.connectionMode === 'hosted') {
-    console.text('  • Transport: HTTP (hosted)');
-    console.text(`  • Endpoint: ${status.serverUrl}`);
-  } else if (status.connectionMode === 'container') {
-    console.text('  • Transport: stdio (local container)');
-    console.text(`  • SonarQube server URL: ${status.serverUrl}`);
-  }
-  if (status.fallbackReason) console.text(`  • Using container because ${status.fallbackReason}.`);
-  if (status.containerRuntime)
-    console.text(`  • Container runtime: ${runtimeStatusLine(status.containerRuntime)}`);
 }
