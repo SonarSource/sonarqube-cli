@@ -56,7 +56,7 @@ sonar analyze agentic --depth DEEP
 
 Per-edit hooks use faster STANDARD analysis. The end-of-turn check uses DEEP depth, including when only one file changed.
 
-In a repository with several Sonar projects (a monorepo), the directory you run the command from decides what is analyzed. From the monorepo root, one command analyzes every changed file against the project that owns it. From inside one project, only that project is analyzed: a \`--file\` path outside the current directory is rejected, and changes in other projects are listed as not analyzed. Run the command from a directory that contains every file changed this turn, usually the monorepo root. Files owned by no project are skipped in the change-set report and rejected as \`--file\` paths; leave them out rather than retrying.
+In a repository with several SonarQube projects (a monorepo), the directory you run the command from decides what is analyzed. From the monorepo root, one command analyzes every changed file against the project that owns it. From inside one project, only that project is analyzed: a \`--file\` path outside the current directory is rejected, and changes in other projects are listed as not analyzed. Run the command from a directory that contains every file changed this turn, usually the monorepo root. Files owned by no project are skipped in the change-set report and rejected as \`--file\` paths; leave them out rather than retrying.
 
 After the analysis:
 

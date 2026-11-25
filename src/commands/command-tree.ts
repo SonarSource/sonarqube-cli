@@ -875,7 +875,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.command('init')
     .description(
-      'Set up SonarQube for this project: login, pick an organization and link an existing SonarQube project or create one bound to the repository',
+      'Set up SonarQube for this project: log in, pick an organization and link an existing SonarQube project or create one bound to the repository',
     )
     .stage(Stage.Beta())
     .rootHelp({

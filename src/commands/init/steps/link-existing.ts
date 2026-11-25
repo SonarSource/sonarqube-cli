@@ -53,7 +53,7 @@ export async function runLinkExisting(
     await assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey);
     return linkProject(foundKey, projectRoot, deps);
   }
-  const situation = `A Sonar project already exists for this repository: '${foundKey}'.`;
+  const situation = `A SonarQube project already exists for this repository: '${foundKey}'.`;
   if (intent?.kind === 'link') {
     const linked = await linkInChosenFolder(foundKey, projectRoot, deps);
     if (linked === null) {

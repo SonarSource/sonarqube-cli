@@ -26,5 +26,5 @@ export const piPreToolUse = createPreToolUseHook({
   callerCommand: SECRETS_CALLER_COMMANDS.piPreToolUse,
   logPrefix: 'pi-pre-tool-use',
   blockOnUnexpectedExitCode: true,
-  blockedFileReason: (filePath) => `Sonar detected secrets in file: ${filePath}.`,
+  blockedFileReason: (filePath) => `SonarQube detected secrets in file: ${filePath}.`,
 });

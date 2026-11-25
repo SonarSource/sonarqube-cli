@@ -217,7 +217,7 @@ describe('sonar hook antigravity-pre-tool-use', () => {
       expect(result.stdout).toContain('"decision"');
       expect(result.stdout).toContain('"deny"');
       expect(result.stdout).toContain('"reason"');
-      expect(result.stdout).toContain('Sonar detected secrets in file');
+      expect(result.stdout).toContain('SonarQube detected secrets in file');
     },
     { timeout: 30000 },
   );
