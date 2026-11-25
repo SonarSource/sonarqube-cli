@@ -239,8 +239,9 @@ function mergeBindingsPage(
   result: ProjectBindingsPageResponse,
   bindingMap: Map<string, string>,
 ): void {
+  // SQS preserves repository casing; normalize keys for case-insensitive lookups.
   for (const binding of result.projectBindings) {
-    bindingMap.set(binding.repository, binding.projectKey);
+    bindingMap.set(binding.repository.toLowerCase(), binding.projectKey);
   }
 }
 
