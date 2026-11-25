@@ -498,6 +498,42 @@ describe('sonar architecture intended set', () => {
     );
 
     it(
+      'refuses a constraint between groups that are not siblings before any request',
+      async () => {
+        const server = await start();
+        harness.cwd.writeFile(
+          'model.json',
+          JSON.stringify({
+            models: [
+              {
+                type: 'namespace',
+                language: 'java',
+                groups: [
+                  { label: 'Web', patterns: ['app:**'] },
+                  { label: 'Domain', patterns: [], groups: [{ label: 'Billing', patterns: [] }] },
+                ],
+                constraints: [{ from: 'Web', to: 'Domain/Billing' }],
+              },
+            ],
+          }),
+        );
+
+        const result = await harness.run(
+          `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
+        );
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The java constraint Web -> Domain/Billing must link sibling groups.',
+        );
+        expect(
+          server.getRecordedRequests().filter(({ path }) => path.includes('/architecture/')),
+        ).toEqual([]);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
       'updates a saved model by backup and PATCH',
       async () => {
         const server = await startWith((fake) => fake.withIntended(SAVED));

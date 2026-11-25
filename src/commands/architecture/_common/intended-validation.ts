@@ -40,7 +40,7 @@ const FULL_EXPORT_HINT =
 export const VALID_MODEL_RULES =
   'Each model requires type (file or namespace), a supported language, groups and constraints arrays. ' +
   'Groups require a label; optional patterns contain strings. Constraints require from and to strings. ' +
-  'Sibling group labels must be unique and constraint endpoints must name groups (or use public wildcard selectors). Self-references and duplicate constraints are rejected by this client.';
+  'Sibling group labels must be unique. Constraint endpoints must name exactly one group, outside imported patterns, and link sibling groups (the same parent). Self-references and duplicate constraints are rejected by this client.';
 
 /** A model file, as `intended get --format json` writes it, or a bare array of models. */
 export interface IntendedFile {
@@ -261,15 +261,11 @@ function parseConstraints(value: unknown, context: GroupContext): IntendedConstr
       return [];
     }
     const { from, to } = raw;
-    for (const endpoint of [from, to]) {
-      if (!isKnownConstraintEnd(endpoint, context)) {
-        problems.push(
-          `The ${language} constraint endpoint "${endpoint}" does not name a unique group.`,
-        );
-      }
-    }
-    if (from === to && !from.includes('*') && !from.includes('?'))
-      problems.push(`The ${language} constraint ${from} -> ${to} refers to itself.`);
+    const endpointProblems = [from, to].flatMap((endpoint) => endpointProblem(endpoint, context));
+    problems.push(...endpointProblems);
+    if (endpointProblems.length === 0 && parentKey(from) !== parentKey(to))
+      problems.push(`The ${language} constraint ${from} -> ${to} must link sibling groups.`);
+    if (from === to) problems.push(`The ${language} constraint ${from} -> ${to} refers to itself.`);
     const pair = JSON.stringify([from, to]);
     if (seen.has(pair)) {
       problems.push(`The ${language} constraint ${from} -> ${to} is defined twice.`);
@@ -279,13 +275,23 @@ function parseConstraints(value: unknown, context: GroupContext): IntendedConstr
   });
 }
 
-function isKnownConstraintEnd(endpoint: string, context: GroupContext): boolean {
-  // Wildcard selectors and server-resolved imported descendants keep their public semantics.
-  const count = context.endpointCounts.get(endpoint);
-  if (count !== undefined) return count === 1;
-  if (endpoint.includes('*') || endpoint.includes('?')) return true;
-  if (context.importedKeys.some((key) => endpoint.startsWith(`${key}/`))) return true;
-  return false;
+// The public API resolves endpoints as exact group keys and rejects children of imported patterns.
+function endpointProblem(endpoint: string, context: GroupContext): string[] {
+  const { language } = context;
+  const imported = context.importedKeys.find((key) =>
+    endpoint.startsWith(`${key}${GROUP_KEY_SEPARATOR}`),
+  );
+  if (imported !== undefined)
+    return [
+      `The ${language} constraint endpoint "${endpoint}" is inside the imported pattern of "${imported}"; name "${imported}" instead.`,
+    ];
+  if (context.endpointCounts.get(endpoint) === 1) return [];
+  return [`The ${language} constraint endpoint "${endpoint}" does not name a unique group.`];
+}
+
+function parentKey(key: string): string {
+  const end = key.lastIndexOf(GROUP_KEY_SEPARATOR);
+  return end < 0 ? '' : key.slice(0, end);
 }
 
 function partialViewError(): CommandFailedError {

@@ -101,9 +101,11 @@ tree. If a physical mapping is ambiguous or the necessary artifacts are unavaila
 constructing it. The clients report discovery-backed warnings without moving groups or rewriting
 patterns. An unavailable discovery check is not proof that a pattern matches.
 
-Constraint endpoints name full intended group keys, not discovery component keys. Check both
-endpoints against the same perspective. Self-references and nonexistent or ambiguous exact keys
-are rejected. Public wildcard selectors and descendants of imported patterns remain server-resolved.
+Constraint endpoints name full intended group keys, not discovery component keys. A constraint
+links two sibling groups of the same perspective, such as \`Domain/Billing\` -> \`Domain/Shipping\`
+or \`Domain\` -> \`Infrastructure\`. Wildcards, children of imported patterns, self-references and
+nonexistent or ambiguous keys are rejected. To allow a dependency between groups at different levels,
+ask the user which sibling groups should carry the constraint.
 
 Clearing a stored intended resource requires its exported revision; preview it before applying.
 Never use partial or truncated input, discard perspectives to fit the API, or remove a revision
