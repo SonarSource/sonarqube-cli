@@ -597,7 +597,7 @@ describe('buildFetchNetworkOptions', () => {
   });
 
   describe('CA cert', () => {
-    it('sets tls.ca as array of rootCertificates + BunFile when caCert is explicit', async () => {
+    it('adds the configured CA contents to the system root certificates', async () => {
       const pemPath = join(tmpdir(), 'sonar-test-ca.pem');
       writeFileSync(pemPath, '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----');
 
@@ -606,9 +606,7 @@ describe('buildFetchNetworkOptions', () => {
 
       const ca = opts.tls?.ca as Array<unknown>;
       expect(ca).toHaveLength(rootCertificates.length + 1);
-      // Last entry is the BunFile pointing at the configured path
-      const bunFile = ca.at(-1) as { name?: string };
-      expect(bunFile?.name).toBe(pemPath);
+      expect(ca.at(-1)).toBe(readFileSync(pemPath, 'utf-8'));
     });
 
     it('does not set tls.ca when caCert is generic-env (not explicit)', async () => {
