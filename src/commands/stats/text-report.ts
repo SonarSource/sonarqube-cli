@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type {
   StatsSinceChoice,
   StatsStoppedBreakdown,
@@ -29,7 +28,6 @@ import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
-import { resolveStatsEntitlement } from './entitlement.ts';
 import {
   bar,
   BAR_WIDTH,
@@ -37,21 +35,19 @@ import {
   computeAlignedTotalsLayout,
   printSummaryCard,
 } from './text-report-helpers.ts';
+import type { StatsViewModel } from './view-model.ts';
 
-export async function renderTextSummary(
-  summary: StatsSummary,
+export function renderTextSummary(
+  summary: StatsViewModel,
   since: StatsSinceChoice,
-  ctx: CommandInvocationContext,
-): Promise<void> {
-  const { console } = ctx;
+  console: Console,
+): void {
   if (summary.allTime.totalRuns === 0) {
     printEmptyState(console);
     return;
   }
 
-  const entitlement = await resolveStatsEntitlement(ctx);
-
-  printSummaryCard(summary, since, entitlement, console);
+  printSummaryCard(summary, since, summary.entitlement, console);
   printAnalyzerBreakdownSection(summary, console);
   printStoppedSection(summary, console);
   printAgentBreakdownSection(summary, console);
