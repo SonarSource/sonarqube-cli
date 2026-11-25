@@ -57,6 +57,7 @@ import { bridgeHostedMcp } from './hosted-mcp-bridge.ts';
 import { HostedMcpClient } from './hosted-mcp-client.ts';
 
 export interface McpRunOptions {
+  transport?: 'stdio' | 'http' | 'auto';
   debug?: boolean;
   readOnly?: boolean;
   toolsets?: string;
@@ -84,7 +85,7 @@ export async function runMcp(
   try {
     resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
     const auth = await resolveMcpAuth(ctx);
-    if (await tryRunHostedMcp(ctx, auth, options)) return;
+    if (options.transport !== 'stdio' && (await tryRunHostedMcp(ctx, auth, options))) return;
     await runMcpContainer(ctx, auth, options, resolvedNetwork);
   } catch (error) {
     const startupError = asStartupError(error);
@@ -123,6 +124,11 @@ async function tryRunHostedMcp(
     auth.connectionType === 'on-premise'
       ? ' For Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
       : '';
+  if (options.transport === 'http') {
+    throw new CommandFailedError(
+      `Hosted MCP unavailable — ${hosted.url}/health ${availability.reason}.${hint}`,
+    );
+  }
   process.stderr.write(
     `[sonarqube-cli] MCP: local container fallback — ${hosted.url}/health ${availability.reason}.${hint}\n`,
   );
