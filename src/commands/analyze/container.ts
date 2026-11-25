@@ -26,9 +26,7 @@ import { ProcessTimedOutError } from '@/core/process/process.ts';
 import {
   containerScanErrorReport,
   formatContainerScanJson,
-  formatContainerScanTable,
   parseContainerScanReport,
-  sanitizeScannerTerminalText,
 } from './container-scanner-report.ts';
 import {
   ContainerScanCancelledError,
@@ -36,6 +34,10 @@ import {
   prepareContainerScannerEnv,
   runContainerScanner,
 } from './container-scanner-runner.ts';
+import {
+  formatContainerScanTable,
+  sanitizeScannerTerminalText,
+} from './container-scanner-table.ts';
 
 export const CONTAINER_SCAN_FORMATS = ['json', 'table'] as const;
 

@@ -25,11 +25,13 @@ import {
   countContainerAnalysisErrors,
   EXIT_CODE_CONTAINER_THRESHOLD_REACHED,
   formatContainerScanJson,
+  parseContainerScanReport,
+} from '@/commands/analyze/container-scanner-report.ts';
+import {
   formatContainerScanTable,
   hasSkippedPackagesWarning,
-  parseContainerScanReport,
   sanitizeScannerTerminalText,
-} from '@/commands/analyze/container-scanner-report.ts';
+} from '@/commands/analyze/container-scanner-table.ts';
 
 const configuration = {
   imageInput: './my-image.tar',
@@ -332,7 +334,24 @@ describe('container scanner report', () => {
     expect(output).not.toContain('@1.0');
     expect(output).not.toContain('openssl@');
     expect(output).not.toContain('CVSS');
-    expect(output).toContain('6 findings in 4 affected packages');
+    expect(output).toContain(
+      '4 findings in 3 affected packages · 2 findings with unknown package identity',
+    );
+  });
+
+  it('keeps different source identities when the displayed package labels match', () => {
+    const output = formatContainerScanTable({
+      issues: [
+        { packageName: 'demo-lib', version: '1.0', severity: 'low', key: 'FINDING-1' },
+        { packageName: 'demo-lib ', version: '1.0', severity: 'low', key: 'FINDING-2' },
+      ],
+      errors: [],
+      configuration,
+      exitCode: 0,
+    });
+
+    expect(output.match(/── demo-lib@1\.0 \(1 finding\) ──/g)).toHaveLength(2);
+    expect(output).toContain('2 findings in 2 affected packages');
   });
 
   it('qualifies zero findings for structured errors or skipped-package warnings (including ANSI)', () => {
@@ -382,7 +401,14 @@ describe('container scanner report', () => {
 
     expect(report.exitCode).toBe(EXIT_CODE_CONTAINER_THRESHOLD_REACHED);
     expect(countContainerAnalysisErrors(report)).toBe(1);
-    const output = formatContainerScanTable(report, 'WARNING: the backend skipped 1 package(s)');
+    const output = formatContainerScanTable(report);
+    expect(output).toContain('Results are incomplete.');
+    expect(
+      formatContainerScanTable(
+        { ...report, errors: [] },
+        'WARNING: the backend skipped 1 package(s)',
+      ),
+    ).toContain('Results are incomplete.');
     expect(output).toContain('── busybox@1.37 (1 finding) ──');
     expect(output).toContain('Fail threshold: HIGH · 1 finding reached the threshold');
   });
