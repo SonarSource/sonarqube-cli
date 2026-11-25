@@ -31,6 +31,7 @@ import {
   buildFetchNetworkOptions,
   buildSubprocessNetworkEnv,
   clearNetworkConfigCache,
+  GENERIC_PROXY_ENV_NAMES,
   resolveNetworkConfig,
   SUBPROCESS_NETWORK_ENV_NAMES,
 } from '@/core/host/connectivity/network-config.ts';
@@ -858,5 +859,18 @@ describe('buildSubprocessNetworkEnv', () => {
     );
 
     expect(new Set(Object.keys(env))).toEqual(new Set(SUBPROCESS_NETWORK_ENV_NAMES));
+  });
+
+  it('exports the generic proxy env names stripped from subprocess environments', () => {
+    expect([...GENERIC_PROXY_ENV_NAMES]).toEqual([
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'ALL_PROXY',
+      'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'all_proxy',
+      'no_proxy',
+    ]);
   });
 });
