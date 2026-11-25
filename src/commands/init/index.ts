@@ -36,19 +36,13 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { OnboardingCancelledError } from './answer.ts';
-import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
+import type { InitOutcome, InitPath, NoProjectPath } from './init-outcome.ts';
 import {
-  assertDryRunOptions,
   type InitIntent,
   type MonorepoRootOption,
   parseMonorepoRoots,
-  type UnboundNewOptions,
   validateIntentOptions,
-  validateScanOptions,
-  validateUnboundNewOptions,
   warnIgnoredIntent,
-  warnIgnoredScanOptions,
-  warnIgnoredUnboundNewOptions,
 } from './options.ts';
 import { renderInitOutcome } from './output.ts';
 import { classifyRemoteHost } from './remote-host.ts';
@@ -60,15 +54,8 @@ import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
 import { findLinkedProjectIssues, isUnavailable } from './steps/linked-projects.ts';
 import { runMonorepo } from './steps/monorepo.ts';
+import { runNoProject } from './steps/no-project.ts';
 import { OrganizationCreationDeclined } from './steps/organization.ts';
-import {
-  NOT_RUN,
-  reportScan,
-  runFirstScan,
-  type ScanOptions,
-  type ScanResult,
-} from './steps/scan.ts';
-import { runUnboundNew } from './steps/unbound.ts';
 import type { InitPathId } from './telemetry/init-telemetry.ts';
 import {
   type InitRunContext,
@@ -84,20 +71,12 @@ export interface InitOptions {
   /** `true` for a bare `--link`, the key for `--link <key>`. */
   link?: string | boolean;
   bind?: boolean;
-  create?: boolean;
-  project?: string;
-  name?: string;
-  visibility?: string;
-  scannerProperty?: string[];
-  verbose?: boolean;
-  detach?: boolean;
-  scan?: boolean;
   dryRun?: boolean;
 }
 
 /**
  * Signs in, resolves the organization, detects the project and selects the onboarding path.
- * It runs `bound-new`, `link-existing` and `unbound-new`. It keeps everything it completed:
+ * It runs `bound-new`, `link-existing` and `no-project`. It keeps everything it completed:
  * running it again resumes from whatever is already in place.
  */
 export async function init(options: InitOptions, ctx: CommandInvocationContext): Promise<void> {
@@ -141,18 +120,14 @@ async function onboard(
 
   const intent = validateIntentOptions(options);
   const projectRoot = resolveProjectRoot(options.path ?? '.');
-  const unboundNewOptions = validateUnboundNewOptions(options);
-  const scanOptions = validateScanOptions(options);
   if (dryRun) {
-    assertDryRunOptions(scanOptions);
     console.info('DRY RUN: no changes will be made.');
   }
 
-  const { outcome, auth, deps } = await run(projectRoot, ctx, console, {
+  const { outcome, auth } = await run(projectRoot, ctx, console, {
     interactive,
     dryRun,
     intent,
-    unboundNewOptions,
     monorepo: options.monorepo === true,
     monorepoRoots,
     pathGiven: options.path !== undefined,
@@ -162,25 +137,8 @@ async function onboard(
   if (outcome.kind === 'complete') {
     warnIgnoredIntent(intent, console);
   }
-  const declined = outcome.kind === 'declined' || outcome.kind === 'no-organization';
   if (outcome.kind === 'declined') {
     telemetry.stopAtDeclined();
-  }
-  // A dry run that would create the project uses these options just as the real run does.
-  const createsUnbound =
-    outcome.kind === 'unbound' || (outcome.kind === 'dry-run' && outcome.action.type === 'create');
-  if (!createsUnbound && !declined) {
-    warnIgnoredUnboundNewOptions(unboundNewOptions, console);
-  }
-  const scan = await scanCreatedProject(
-    outcome,
-    projectRoot,
-    deps,
-    scanOptions,
-    telemetry.project(0),
-  );
-  if (scan.status === 'not-run') {
-    warnIgnoredScanOptions(scanOptions, console);
   }
   renderInitOutcome(outcome, auth, console, dryRun);
   if (dryRun) {
@@ -207,30 +165,6 @@ async function offerIntegrateStep(
   }
   telemetry.begin('integrate');
   telemetry.record('integrate', await offerIntegrate(ctx, auth));
-}
-
-/** Only a project this run created gets a first analysis; a linked or bound one already has results. */
-async function scanCreatedProject(
-  outcome: InitOutcome,
-  projectRoot: string,
-  deps: DetectDeps | undefined,
-  options: ScanOptions,
-  project: ProjectInitRecorder | undefined,
-): Promise<ScanResult> {
-  if (outcome.kind !== 'unbound' || !deps) {
-    return NOT_RUN;
-  }
-  project?.begin('first_analysis');
-  const startedAt = performance.now();
-  const scan = await runFirstScan(projectRoot, outcome.projectKey, deps, options);
-  if (scan.status === 'started' || scan.status === 'completed') {
-    project?.record('first_analysis', 'success');
-    project?.setFirstAnalysisDuration(performance.now() - startedAt);
-  } else {
-    project?.record('first_analysis', 'skipped');
-  }
-  reportScan(scan, outcome.projectKey, deps.console);
-  return scan;
 }
 
 /** The repository facts the run event carries; any lookup failure leaves them out. */
@@ -260,7 +194,6 @@ interface RunSettings {
   interactive: boolean;
   dryRun: boolean;
   intent: InitIntent | undefined;
-  unboundNewOptions: UnboundNewOptions;
   monorepo: boolean;
   monorepoRoots: readonly MonorepoRootOption[];
   /** `--path` fixed the directory, so there is no folder to choose. */
@@ -272,7 +205,6 @@ interface RunSettings {
 interface RunResult {
   outcome: InitOutcome;
   auth?: ResolvedAuth;
-  deps?: DetectDeps;
 }
 
 async function run(
@@ -281,8 +213,7 @@ async function run(
   console: Console,
   settings: RunSettings,
 ): Promise<RunResult> {
-  const { interactive, dryRun, intent, unboundNewOptions, monorepo, monorepoRoots, telemetry } =
-    settings;
+  const { interactive, dryRun, intent, monorepo, monorepoRoots, telemetry } = settings;
   let auth: ResolvedAuth;
   try {
     auth = await resolveInitAuth(ctx, interactive, dryRun, telemetry);
@@ -302,7 +233,6 @@ async function run(
     interactive,
     dryRun,
     intent,
-    allowUnbound: ctx.isAlphaEnabled(),
     telemetry,
   };
   telemetry.begin('detect');
@@ -316,7 +246,7 @@ async function run(
       telemetry.record('detect', 'failed');
       telemetry.stopAt('detect', 'unknown');
     }
-    return { outcome, auth, deps };
+    return { outcome, auth };
   }
   // The folders are asked about only once the user agrees to link, so the steps do the asking.
   const pickingDeps: DetectDeps = askFolders(settings, intent)
@@ -324,14 +254,10 @@ async function run(
     : deps;
   const detected = await detectInitPath(projectRoot, pickingDeps);
   const project = telemetry.detected(initPathIdOf(detected));
-  if (detected.path === 'unbound-new' && !project.has('project_bind')) {
+  if (detected.path === 'no-project' && !project.has('project_bind')) {
     project.record('project_bind', 'skipped');
   }
-  return {
-    outcome: await runDetectedPath(detected, pickingDeps, unboundNewOptions, project),
-    auth,
-    deps,
-  };
+  return { outcome: await runDetectedPath(detected, pickingDeps, project), auth };
 }
 
 function initPathIdOf(detected: InitPath): InitPathId {
@@ -342,7 +268,8 @@ function initPathIdOf(detected: InitPath): InitPathId {
       return 'link_existing';
     case 'bound-new':
       return 'bound_new';
-    case 'unbound-new':
+    // The telemetry id predates the removal of unbound creation, and names the same path.
+    case 'no-project':
       return 'unbound_new';
   }
 }
@@ -387,36 +314,30 @@ async function monorepoRootsToOnboard(
 
 /** Interactive, and neither `--path`, a project key nor `--root` already says which folder to link. */
 function askFolders(
-  { interactive, pathGiven, unboundNewOptions }: RunSettings,
+  { interactive, pathGiven }: RunSettings,
   intent: InitIntent | undefined,
 ): boolean {
-  const keyGiven =
-    unboundNewOptions.projectKey !== undefined ||
-    (intent?.kind === 'link' && intent.projectKey !== undefined);
+  const keyGiven = intent?.kind === 'link' && intent.projectKey !== undefined;
   return interactive && !pathGiven && !keyGiven;
 }
 
-/**
- * `bound-new` and `link-existing` hand back `unbound-new` only when the user declined binding or
- * linking, so it continues into the project creation.
- */
+/** `bound-new` hands back `no-project` only when the user declined the DevOps platform authorization. */
 async function runDetectedPath(
   detected: InitPath,
   deps: DetectDeps,
-  unboundNewOptions: UnboundNewOptions,
   project: ProjectInitRecorder,
 ): Promise<InitOutcome> {
   switch (detected.path) {
     case 'bound-new':
-      return fallBack(await runBoundNew(detected, deps), deps, unboundNewOptions, project);
+      return fallBack(await runBoundNew(detected, deps), deps, project);
     case 'link-existing': {
       project.begin('link');
       const result = await runLinkExisting(detected, deps);
       recordLinkResult(result, project);
-      return fallBack(result, deps, unboundNewOptions, project);
+      return result;
     }
-    case 'unbound-new':
-      return createUnbound(detected, deps, unboundNewOptions, project);
+    case 'no-project':
+      return noProject(detected, deps, project);
     case 'complete': {
       const outcome = await checkCompleteLinks(detected, deps);
       project.record('link', 'already_done');
@@ -429,11 +350,8 @@ async function runDetectedPath(
   }
 }
 
-function recordLinkResult(
-  result: InitOutcome | UnboundNewPath,
-  project: ProjectInitRecorder,
-): void {
-  if (!('kind' in result) || result.kind === 'declined') {
+function recordLinkResult(result: InitOutcome, project: ProjectInitRecorder): void {
+  if (result.kind === 'declined') {
     project.record('link', 'declined');
   } else if (result.kind === 'linked') {
     project.record('link', 'success');
@@ -441,27 +359,28 @@ function recordLinkResult(
   }
 }
 
-async function createUnbound(
-  path: UnboundNewPath,
+/** Nothing is created here, so the creation step is always skipped, as no one declined it. */
+async function noProject(
+  path: NoProjectPath,
   deps: DetectDeps,
-  unboundNewOptions: UnboundNewOptions,
   project: ProjectInitRecorder,
 ): Promise<InitOutcome> {
   project.setPath('unbound_new');
   project.begin('create_project');
-  const outcome = await runUnboundNew(path, deps, unboundNewOptions);
-  if (outcome.kind === 'unbound') {
-    project.record('create_project', 'success');
-    project.setProjectKey(outcome.projectKey);
-  } else if (outcome.kind === 'linked') {
-    // The proposed key was taken, and the user linked its project instead.
+  const { outcome, offeredLink } = await runNoProject(path, deps);
+  if (outcome.kind === 'linked') {
+    // The generated key named a project, and the user linked it.
     project.record('create_project', 'skipped');
     project.setPath('link_existing');
     project.record('link', 'success');
     project.setProjectKey(outcome.projectKey);
   } else if (outcome.kind === 'declined') {
-    // Without alpha nothing is asked: creating the project is not available, which no one declined.
-    project.record('create_project', deps.allowUnbound ? 'declined' : 'skipped');
+    project.record('create_project', 'skipped');
+    if (offeredLink) {
+      // The generated key named a project, and the user turned the link down.
+      project.setPath('link_existing');
+      project.record('link', 'declined');
+    }
   }
   return outcome;
 }
@@ -486,10 +405,9 @@ async function checkCompleteLinks(
 }
 
 function fallBack(
-  result: InitOutcome | UnboundNewPath,
+  result: InitOutcome | NoProjectPath,
   deps: DetectDeps,
-  unboundNewOptions: UnboundNewOptions,
   project: ProjectInitRecorder,
 ): InitOutcome | Promise<InitOutcome> {
-  return 'kind' in result ? result : createUnbound(result, deps, unboundNewOptions, project);
+  return 'kind' in result ? result : noProject(result, deps, project);
 }

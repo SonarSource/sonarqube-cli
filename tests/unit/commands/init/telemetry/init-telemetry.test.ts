@@ -43,7 +43,7 @@ const AUTH = new ResolvedAuth({
 describe('encodeStep()', () => {
   it('joins the step and its outcome', () => {
     expect(encodeStep('login', 'success')).toBe('login:success');
-    expect(encodeStep('first_analysis', 'skipped')).toBe('first_analysis:skipped');
+    expect(encodeStep('create_project', 'skipped')).toBe('create_project:skipped');
   });
 });
 
@@ -82,12 +82,11 @@ describe('fact builders', () => {
   it('builds a CliProjectInitCreationAttempted fact', () => {
     const payload: ProjectInitPayload = {
       init_path: 'unbound_new',
-      steps: ['create_project:success', 'first_analysis:skipped'],
+      steps: ['create_project:success'],
       stopped_at: null,
       failure_reason: null,
       project_index: 0,
       project_uuid: 'uuid-1',
-      first_analysis_duration_ms: null,
     };
 
     const fact = buildProjectInitFact(payload, undefined);
