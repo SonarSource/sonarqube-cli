@@ -21,6 +21,9 @@
 import type { ChildProcess } from 'node:child_process';
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
@@ -312,6 +315,184 @@ describe('spawnProcess stdin, against a mocked child', () => {
     expect(Buffer.concat(written).toString()).toBe('hello');
     expect(stream.writableEnded).toBe(true);
   });
+
+  it('kills the child when options.signal aborts after spawn', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+    const controller = new AbortController();
+
+    const running = spawnProcess('child', [], { signal: controller.signal });
+    expect(proc.killed).toBe(false);
+
+    controller.abort();
+    expect(proc.killed).toBe(true);
+
+    proc.emit('close', null, 'SIGTERM');
+    const result = await running;
+    expect(result.signal).toBe('SIGTERM');
+  });
+
+  it('kills the child immediately when options.signal is already aborted', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+    const controller = new AbortController();
+    controller.abort();
+
+    const running = spawnProcess('child', [], { signal: controller.signal });
+    expect(proc.killed).toBe(true);
+
+    proc.emit('close', null, 'SIGTERM');
+    await running;
+  });
+
+  it('removes the abort listener when the child closes normally', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+    const controller = new AbortController();
+    const removeListener = spyOn(controller.signal, 'removeEventListener');
+
+    const running = spawnProcess('child', [], { signal: controller.signal });
+    proc.emit('close', 0);
+    await running;
+
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  it('falls back to proc.kill() when process-group termination fails on stdin error', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream) as ReturnType<typeof mockChild> & { pid?: number };
+    proc.pid = 999_999_999;
+    const spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(proc as unknown as ChildProcess);
+    // eslint-disable-next-line @typescript-eslint/require-await -- a generator with nothing to await is still the shape under test
+    async function* failing(): AsyncGenerator<Buffer> {
+      yield Buffer.from('first');
+      throw new Error('stdin source failed');
+    }
+
+    const failure = await spawnProcess('child', [], {
+      stdin: 'pipe',
+      stdinData: failing(),
+      killProcessTree: true,
+    }).catch((err: Error) => err);
+
+    expect((failure as Error).message).toBe('stdin source failed');
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'child',
+      [],
+      expect.objectContaining({ detached: process.platform !== 'win32' }),
+    );
+    expect(proc.killed).toBe(true);
+  });
+});
+
+const GRANDCHILD_SPAWNER = [
+  "const { spawn } = require('node:child_process');",
+  "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60_000)'], { stdio: 'inherit' });",
+  "process.stdout.write(String(child.pid) + '\\n');",
+  'setInterval(() => {}, 60_000);',
+].join(' ');
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+async function waitForProcessExit(pid: number, timeoutMs = 5000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) return true;
+    await Bun.sleep(20);
+  }
+  return !isProcessAlive(pid);
+}
+
+describe('spawnProcessWithTimeout killProcessTree', () => {
+  const spawnedPids: number[] = [];
+
+  afterEach(() => {
+    for (const pid of spawnedPids.splice(0)) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        // Process already exited.
+      }
+    }
+  });
+
+  function spawnGrandchildTracker(
+    options: Pick<SpawnOptions, 'signal'> & { timeoutMs?: number } = {},
+  ) {
+    let stdoutBuffer = '';
+    let reported = false;
+    let resolvePid!: (pid: number) => void;
+    const grandchildPid = new Promise<number>((resolve) => {
+      resolvePid = resolve;
+    });
+    const running = spawnProcessWithTimeout(
+      process.execPath,
+      ['-e', GRANDCHILD_SPAWNER],
+      {
+        stdout: 'pipe',
+        killProcessTree: true,
+        signal: options.signal,
+        onStdout: (chunk) => {
+          if (reported) return;
+          stdoutBuffer += chunk;
+          const newlineIndex = stdoutBuffer.indexOf('\n');
+          if (newlineIndex !== -1) {
+            const pid = Number.parseInt(stdoutBuffer.slice(0, newlineIndex).trim(), 10);
+            if (!Number.isNaN(pid)) {
+              reported = true;
+              spawnedPids.push(pid);
+              resolvePid(pid);
+            }
+          }
+        },
+      },
+      options.timeoutMs ?? TEST_TIMEOUT_MS,
+      TEST_TIMEOUT_MESSAGE,
+    );
+    return { grandchildPid, running };
+  }
+
+  it('terminates descendant processes on signal abort', async () => {
+    const controller = new AbortController();
+    const { grandchildPid, running } = spawnGrandchildTracker({ signal: controller.signal });
+
+    const pid = await grandchildPid;
+    expect(isProcessAlive(pid)).toBe(true);
+
+    controller.abort();
+    const result = await running;
+
+    if (process.platform !== 'win32') {
+      expect(result.signal).toBe('SIGTERM');
+    }
+    expect(await waitForProcessExit(pid)).toBe(true);
+  });
+
+  it('terminates descendant processes on timeout', async () => {
+    const { grandchildPid, running } = spawnGrandchildTracker({ timeoutMs: 1000 });
+    const settled = running.catch((err: unknown) => err);
+
+    const pid = await Promise.race([
+      grandchildPid,
+      settled.then((outcome) => {
+        throw new Error(`Process settled before reporting grandchild pid: ${String(outcome)}`);
+      }),
+    ]);
+    expect(isProcessAlive(pid)).toBe(true);
+
+    const failure = await settled;
+
+    expect(failure).toBeInstanceOf(ProcessTimedOutError);
+    expect((failure as Error).message).toBe(TEST_TIMEOUT_MESSAGE);
+    expect(await waitForProcessExit(pid)).toBe(true);
+  });
 });
 
 describe('spawnProcessCapturingBytes', () => {
@@ -325,5 +506,51 @@ describe('spawnProcessCapturingBytes', () => {
     );
 
     expect(result.stderr).toBe(EXPECTED);
+  });
+
+  it('terminates descendant processes on signal abort when killProcessTree is true', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'process-bytes-tree-test-'));
+    const pidFile = join(tempDir, 'grandchild.pid');
+    let grandchildPid: number | undefined;
+    try {
+      const controller = new AbortController();
+      const running = spawnProcessCapturingBytes(
+        process.execPath,
+        [
+          '-e',
+          [
+            "const { spawn } = require('node:child_process');",
+            "const { writeFileSync } = require('node:fs');",
+            "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60_000)'], { stdio: 'inherit' });",
+            'writeFileSync(process.argv[1], String(child.pid));',
+            'setInterval(() => {}, 60_000);',
+          ].join(' '),
+          pidFile,
+        ],
+        { stderr: 'pipe', killProcessTree: true, signal: controller.signal },
+        TEST_TIMEOUT_MS,
+        TEST_TIMEOUT_MESSAGE,
+      );
+
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline && !existsSync(pidFile)) {
+        await Bun.sleep(20);
+      }
+      grandchildPid = Number.parseInt(readFileSync(pidFile, 'utf-8').trim(), 10);
+      expect(isProcessAlive(grandchildPid)).toBe(true);
+
+      controller.abort();
+      await running;
+      expect(await waitForProcessExit(grandchildPid)).toBe(true);
+    } finally {
+      if (grandchildPid !== undefined) {
+        try {
+          process.kill(grandchildPid, 'SIGKILL');
+        } catch {
+          // Process already exited.
+        }
+      }
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

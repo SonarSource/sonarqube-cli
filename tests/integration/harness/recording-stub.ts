@@ -26,14 +26,17 @@ import { IS_WINDOWS } from './platform';
 
 export const SECRETS_INVOCATIONS_FILE = 'secrets-invocations.jsonl';
 export const SCA_SCANNER_INVOCATIONS_FILE = 'sca-scanner-invocations.jsonl';
+export const CONTAINER_SCANNER_INVOCATIONS_FILE = 'container-scanner-invocations.jsonl';
 
 export interface StubResponse {
   stdout?: string;
+  stderr?: string;
   exitCode?: number;
 }
 
 export interface RecordingStubConfig {
   invocationsFile: string;
+  captureEnv?: string[];
   /** Real binary run with the recorded argv and stdio. When absent, the stub answers from `responses`. */
   delegate?: string;
   /** Keyed by the first argument (the subcommand). */
@@ -43,6 +46,7 @@ export interface RecordingStubConfig {
 
 export interface RecordedInvocation {
   argv: string[];
+  env?: Partial<Record<string, string>>;
 }
 
 const STUB_SOURCE_DIR = join(import.meta.dir, '..', 'resources');
@@ -77,6 +81,10 @@ export function readSecretsScanArgvs(harness: TestHarness): string[][] {
 
 export function readScaScannerInvocations(harness: TestHarness): RecordedInvocation[] {
   return readInvocations(harness, SCA_SCANNER_INVOCATIONS_FILE);
+}
+
+export function readContainerScannerInvocations(harness: TestHarness): RecordedInvocation[] {
+  return readInvocations(harness, CONTAINER_SCANNER_INVOCATIONS_FILE);
 }
 
 function readInvocations(harness: TestHarness, fileName: string): RecordedInvocation[] {
