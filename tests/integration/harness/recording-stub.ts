@@ -46,7 +46,7 @@ export interface RecordingStubConfig {
 
 export interface RecordedInvocation {
   argv: string[];
-  env?: Record<string, string>;
+  env?: Partial<Record<string, string>>;
 }
 
 const STUB_SOURCE_DIR = join(import.meta.dir, '..', 'resources');

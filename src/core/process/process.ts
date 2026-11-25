@@ -44,12 +44,17 @@ export interface SpawnOptions {
    * Vortex Context deletes inherited `SONAR_CONTEXT_*` keys, which a merge would put back.
    */
   isolateEnv?: boolean;
-  /** Called immediately after the child process spawns, with a function to kill it. */
-  onSpawn?: (kill: () => void) => void;
+  /** Kills the direct child when aborted (including if already aborted on spawn). */
+  signal?: AbortSignal;
   /** Receives each decoded stdout chunk as it arrives, in addition to the captured `stdout`. */
   onStdout?: (text: string) => void;
   /** Receives each decoded stderr chunk as it arrives, in addition to the captured `stderr`. */
   onStderr?: (text: string) => void;
+}
+
+interface InternalSpawnOptions extends SpawnOptions {
+  /** Internal hook used by {@link raceWithTimeout} to kill the child on deadline. */
+  onSpawn?: (kill: () => void) => void;
 }
 
 /** A child did not finish before its deadline. Distinct from "the program is not installed". */
@@ -71,13 +76,19 @@ async function raceWithTimeout<T>(
   run: (registerKill: (kill: () => void) => void) => Promise<T>,
   timeoutMs: number,
   timeoutMessage: string,
+  signal?: AbortSignal,
 ): Promise<T> {
   let killChild: (() => void) | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const onAbort = (): void => {
+    killChild?.();
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
   try {
     return await Promise.race([
       run((kill) => {
         killChild = kill;
+        if (signal?.aborted) kill();
       }),
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
@@ -88,6 +99,7 @@ async function raceWithTimeout<T>(
     ]);
   } finally {
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -127,7 +139,7 @@ function feedStdin(
 async function spawnProcess(
   command: string,
   args: string[],
-  options: SpawnOptions = {},
+  options: InternalSpawnOptions = {},
 ): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
@@ -199,16 +211,10 @@ export async function spawnProcessWithTimeout(
   timeoutMessage: string,
 ): Promise<SpawnResult> {
   return raceWithTimeout(
-    (registerKill) =>
-      spawnProcess(command, args, {
-        ...options,
-        onSpawn: (kill) => {
-          registerKill(kill);
-          options.onSpawn?.(kill);
-        },
-      }),
+    (registerKill) => spawnProcess(command, args, { ...options, onSpawn: registerKill }),
     timeoutMs,
     timeoutMessage,
+    options.signal,
   );
 }
 export interface BytesSpawnResult {
@@ -227,23 +233,17 @@ export async function spawnProcessCapturingBytes(
   timeoutMessage: string,
 ): Promise<BytesSpawnResult> {
   return raceWithTimeout(
-    (registerKill) =>
-      captureProcessBytes(command, args, {
-        ...options,
-        onSpawn: (kill) => {
-          registerKill(kill);
-          options.onSpawn?.(kill);
-        },
-      }),
+    (registerKill) => captureProcessBytes(command, args, { ...options, onSpawn: registerKill }),
     timeoutMs,
     timeoutMessage,
+    options.signal,
   );
 }
 
 async function captureProcessBytes(
   command: string,
   args: string[],
-  options: SpawnOptions,
+  options: InternalSpawnOptions,
 ): Promise<BytesSpawnResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {

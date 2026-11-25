@@ -29,9 +29,12 @@ import {
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import {
   buildSubprocessNetworkEnv,
-  getNetworkConfigOrThrow,
+  SUBPROCESS_NETWORK_ENV_NAMES,
 } from '@/core/host/connectivity/network-config.ts';
 import { spawnProcessWithTimeout, type SpawnResult } from '@/core/process/process.ts';
+
+export const CONTAINER_SCAN_ENGINES = ['docker', 'podman'] as const;
+export type ContainerScanEngine = (typeof CONTAINER_SCAN_ENGINES)[number];
 
 export const CONTAINER_SCAN_SEVERITIES = [
   'none',
@@ -47,7 +50,7 @@ export const DEFAULT_CONTAINER_FAIL_ON = 'high';
 export const DEFAULT_CONTAINER_TIMEOUT_SECS = 300;
 
 export interface ContainerScanOptions {
-  containerEngine?: string;
+  containerEngine?: ContainerScanEngine;
   registry?: string;
   repository?: string;
   tag?: string;
@@ -64,24 +67,49 @@ const MANAGED_ENV_NAMES = new Set([
   'SONAR_CONTAINER_SCANNER_SKIP_UPDATE_CHECK',
   'SONAR_HOST_URL',
   'SONAR_SCANNER_API_BASE_URL',
+  ...SUBPROCESS_NETWORK_ENV_NAMES,
 ]);
 const MAX_TIMER_MS = 2_147_483_647;
 const TIMED_SCANNER_PHASES = 3;
 const WATCHDOG_GRACE_SECS = 30;
+const INTERRUPTED_EXIT_CODE = 130;
+const TERMINATED_EXIT_CODE = 143;
 
-export async function prepareContainerScannerEnv(auth: ResolvedAuth): Promise<NodeJS.ProcessEnv> {
+type CancellationSignal = 'SIGINT' | 'SIGTERM';
+
+function signalExitCode(signal: CancellationSignal): number {
+  switch (signal) {
+    case 'SIGINT':
+      return INTERRUPTED_EXIT_CODE;
+    case 'SIGTERM':
+      return TERMINATED_EXIT_CODE;
+    default: {
+      const exhaustive: never = signal;
+      throw new Error(`Unexpected signal: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function cancelledScanError(signal: CancellationSignal): CommandFailedError {
+  return new CommandFailedError('Container scan cancelled.', {
+    exitCode: signalExitCode(signal),
+  });
+}
+
+export async function prepareContainerScannerEnv(
+  auth: ResolvedAuth,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): Promise<NodeJS.ProcessEnv> {
+  // Let a Cloud URL resolved as `on-premise` (missing SONARQUBE_CLI_ORG) fall through to requireCloudOrganization.
   if (auth.connectionType !== 'cloud' && !isSonarQubeCloud(auth.serverUrl)) {
     throw new CommandFailedError('Container scanning is available only on SonarQube Cloud.', {
       remediationHint: "Run 'sonar auth login' to connect to SonarQube Cloud.",
     });
   }
   const organization = requireCloudOrganization(auth);
-  const network = await buildSubprocessNetworkEnv(await getNetworkConfigOrThrow());
+  const network = await buildSubprocessNetworkEnv(undefined, { includeClientCert: false });
   const env = Object.fromEntries(
-    Object.entries(process.env).filter(([name]) => {
-      const key = name.toUpperCase();
-      return !MANAGED_ENV_NAMES.has(key) && !Object.hasOwn(network, key);
-    }),
+    Object.entries(baseEnv).filter(([name]) => !MANAGED_ENV_NAMES.has(name.toUpperCase())),
   );
   return {
     ...env,
@@ -119,34 +147,43 @@ export async function runContainerScanner(
     MAX_TIMER_MS,
     (TIMED_SCANNER_PHASES * options.timeoutSecs + WATCHDOG_GRACE_SECS) * 1000,
   );
-  let killScanner: (() => void) | undefined;
   const cancellation = new AbortController();
-  function cancel(): void {
+  let cancelledBy: CancellationSignal | undefined;
+  function cancel(signal: CancellationSignal): void {
+    cancelledBy ??= signal;
     cancellation.abort();
-    killScanner?.();
   }
+  const onSigint = (): void => {
+    cancel('SIGINT');
+  };
+  const onSigterm = (): void => {
+    cancel('SIGTERM');
+  };
 
-  process.on('SIGINT', cancel);
-  process.on('SIGTERM', cancel);
+  process.on('SIGINT', onSigint);
+  process.on('SIGTERM', onSigterm);
   try {
-    const result = await spawnProcessWithTimeout(
-      binaryPath,
-      scanArguments(image, options),
-      {
-        env,
-        isolateEnv: true,
-        onSpawn: (kill) => {
-          killScanner = kill;
-          if (cancellation.signal.aborted) kill();
+    let result: SpawnResult;
+    try {
+      result = await spawnProcessWithTimeout(
+        binaryPath,
+        scanArguments(image, options),
+        {
+          env,
+          isolateEnv: true,
+          signal: cancellation.signal,
         },
-      },
-      watchdogMs,
-      'The container scanner did not exit after its scan timeout.',
-    );
-    if (cancellation.signal.aborted) throw new CommandFailedError('Container scan cancelled.');
+        watchdogMs,
+        'The container scanner did not exit after its scan timeout.',
+      );
+    } catch (error) {
+      if (cancelledBy) throw cancelledScanError(cancelledBy);
+      throw error;
+    }
+    if (cancelledBy) throw cancelledScanError(cancelledBy);
     return result;
   } finally {
-    process.off('SIGINT', cancel);
-    process.off('SIGTERM', cancel);
+    process.off('SIGINT', onSigint);
+    process.off('SIGTERM', onSigterm);
   }
 }
