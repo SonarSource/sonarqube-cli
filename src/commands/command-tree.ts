@@ -65,7 +65,6 @@ import {
   addOnboardCiOptions,
   assertOnPremiseConnection,
   assertProvisionProjectsPermission,
-  collectScannerProperty,
 } from './admin/onboard-ci/shared.ts';
 import { allowlistSecretsAdd } from './allowlist/secrets/add.ts';
 import {
