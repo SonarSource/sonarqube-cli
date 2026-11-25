@@ -29,6 +29,8 @@ import { ProjectsClient } from '@/core/server/projects.ts';
 
 import { requireAnswer } from '../answer.ts';
 import { missingDecision } from '../decision.ts';
+import { declined, skipped, type StepResult, success } from '../flow/step-result.ts';
+import type { InitStep, StepRef } from '../flow/step-runner.ts';
 import type { InitOutcome, LinkExistingPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import { chooseLinkFolder } from './folder-selection.ts';
@@ -44,117 +46,144 @@ import { showAnalysisResults, writeMapping } from './mapping.ts';
  * question, and `--link <key>` names the project instead. `--bind`, or no answer to ask, fail
  * instead, so no second project is created for a repository that already has one.
  */
-export async function runLinkExisting(
-  { projectRoot, projectKey: foundKey, requested }: LinkExistingPath,
-  deps: DetectDeps,
-): Promise<InitOutcome> {
-  const { auth, http, console, interactive, intent } = deps;
-  if (requested) {
-    await assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey);
-    return linkProject(foundKey, projectRoot, deps);
-  }
-  const situation = `A Sonar project already exists for this repository: '${foundKey}'.`;
-  if (intent?.kind === 'link') {
-    const linked = await linkInChosenFolder(foundKey, projectRoot, deps);
-    if (linked === null) {
-      throw new FolderSelectionCancelledError();
+export class ExistingProjectLinker {
+  constructor(
+    private readonly path: LinkExistingPath,
+    private readonly deps: DetectDeps,
+  ) {}
+
+  async link(): Promise<InitOutcome> {
+    const { projectRoot, projectKey: foundKey, requested } = this.path;
+    const { deps } = this;
+
+    const { auth, http, console, interactive, intent } = deps;
+    if (requested) {
+      await this.assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey);
+      return this.linkProject(foundKey, projectRoot, deps);
     }
-    return linked;
+    const situation = `A Sonar project already exists for this repository: '${foundKey}'.`;
+    if (intent?.kind === 'link') {
+      const linked = await this.linkInChosenFolder(foundKey, projectRoot, deps);
+      if (linked === null) {
+        throw new FolderSelectionCancelledError();
+      }
+      return linked;
+    }
+    if (intent) {
+      throw new InvalidOptionError(
+        `${situation} --${intent.kind} would create a second project for it.`,
+        "Run 'sonar init' again with --link to link it.",
+      );
+    }
+    if (!interactive) {
+      throw missingDecision(situation, ['--link']);
+    }
+
+    const nothingLinked: InitOutcome = { kind: 'declined' };
+    const link = requireAnswer(
+      await console.confirmPrompt(`${situation} Link this directory to it?`, true),
+    );
+    if (!link && !(await this.confirmAnotherProject(console))) {
+      return nothingLinked;
+    }
+
+    const projectKey = link
+      ? foundKey
+      : await this.pickProject(new ProjectsClient(http), { auth, console });
+    if (projectKey === null) {
+      return nothingLinked;
+    }
+    // Leaving the folder prompts takes back the agreement to link, like declining it.
+    return (await this.linkInChosenFolder(projectKey, projectRoot, deps)) ?? nothingLinked;
   }
-  if (intent) {
-    throw new InvalidOptionError(
-      `${situation} --${intent.kind} would create a second project for it.`,
-      "Run 'sonar init' again with --link to link it.",
+
+  /** The user has agreed to link, so this is when they say which folder to link. */
+  private async linkInChosenFolder(
+    projectKey: string,
+    projectRoot: string,
+    deps: DetectDeps,
+  ): Promise<InitOutcome | null> {
+    const target = await chooseLinkFolder(projectRoot, deps);
+    return 'cancelled' in target ? null : this.linkProject(projectKey, target.projectRoot, deps);
+  }
+
+  /** `--link <key>` is checked before it is written, since nothing found it on the server. */
+  private async assertProjectExists(
+    projects: ProjectsClient,
+    projectKey: string,
+    organization: string | undefined,
+  ): Promise<void> {
+    if (!(await projects.findProject(projectKey, organization).orThrow())) {
+      const where = organization ? ` in organization '${organization}'` : '';
+      throw new InvalidOptionError(
+        `--link names project '${projectKey}', which does not exist${where}.`,
+        'Check the key.',
+      );
+    }
+  }
+
+  private async linkProject(
+    projectKey: string,
+    projectRoot: string,
+    { auth, http, console, dryRun }: DetectDeps,
+  ): Promise<InitOutcome> {
+    if (dryRun) {
+      return { kind: 'dry-run', action: { type: 'link', projectKey } };
+    }
+    await writeMapping(auth, projectKey, projectRoot, console, 'found');
+
+    console.success(
+      `Linked this directory to project '${projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
+    );
+    await showAnalysisResults(http, projectKey, console);
+    return { kind: 'linked', projectKey };
+  }
+
+  private async confirmAnotherProject(console: DetectDeps['console']): Promise<boolean> {
+    return requireAnswer(
+      await console.confirmPrompt('Link this directory to another existing project instead?', true),
     );
   }
-  if (!interactive) {
-    throw missingDecision(situation, ['--link']);
-  }
 
-  const declined: InitOutcome = { kind: 'declined' };
-  const link = requireAnswer(
-    await console.confirmPrompt(`${situation} Link this directory to it?`, true),
-  );
-  if (!link && !(await confirmAnotherProject(console))) {
-    return declined;
-  }
-
-  const projectKey = link
-    ? foundKey
-    : await pickProject(new ProjectsClient(http), { auth, console });
-  if (projectKey === null) {
-    return declined;
-  }
-  // Leaving the folder prompts takes back the agreement to link, like declining it.
-  return (await linkInChosenFolder(projectKey, projectRoot, deps)) ?? declined;
-}
-
-/** The user has agreed to link, so this is when they say which folder to link. */
-async function linkInChosenFolder(
-  projectKey: string,
-  projectRoot: string,
-  deps: DetectDeps,
-): Promise<InitOutcome | null> {
-  const target = await chooseLinkFolder(projectRoot, deps);
-  return 'cancelled' in target ? null : linkProject(projectKey, target.projectRoot, deps);
-}
-
-/** `--link <key>` is checked before it is written, since nothing found it on the server. */
-async function assertProjectExists(
-  projects: ProjectsClient,
-  projectKey: string,
-  organization: string | undefined,
-): Promise<void> {
-  if (!(await projects.findProject(projectKey, organization).orThrow())) {
-    const where = organization ? ` in organization '${organization}'` : '';
-    throw new InvalidOptionError(
-      `--link names project '${projectKey}', which does not exist${where}.`,
-      'Check the key.',
-    );
-  }
-}
-
-async function linkProject(
-  projectKey: string,
-  projectRoot: string,
-  { auth, http, console, dryRun }: DetectDeps,
-): Promise<InitOutcome> {
-  if (dryRun) {
-    return { kind: 'dry-run', action: { type: 'link', projectKey } };
-  }
-  await writeMapping(auth, projectKey, projectRoot, console, 'found');
-
-  console.success(
-    `Linked this directory to project '${projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
-  );
-  await showAnalysisResults(http, projectKey, console);
-  return { kind: 'linked', projectKey };
-}
-
-async function confirmAnotherProject(console: DetectDeps['console']): Promise<boolean> {
-  return requireAnswer(
-    await console.confirmPrompt('Link this directory to another existing project instead?', true),
-  );
-}
-
-/** Leaving the picker asks whether to give up linking; declining reopens it. */
-async function pickProject(
-  projects: ProjectsClient,
-  ctx: Pick<DetectDeps, 'auth' | 'console'>,
-): Promise<string | null> {
-  for (;;) {
-    try {
-      return await searchForProject(projects, ctx);
-    } catch (error) {
-      if (!(error instanceof ProjectSelectionCancelledError)) {
-        throw error;
+  /** Leaving the picker asks whether to give up linking; declining reopens it. */
+  private async pickProject(
+    projects: ProjectsClient,
+    ctx: Pick<DetectDeps, 'auth' | 'console'>,
+  ): Promise<string | null> {
+    for (;;) {
+      try {
+        return await searchForProject(projects, ctx);
+      } catch (error) {
+        if (!(error instanceof ProjectSelectionCancelledError)) {
+          throw error;
+        }
+      }
+      const abandon = requireAnswer(
+        await ctx.console.confirmPrompt('Abandon linking a project?', false),
+      );
+      if (abandon) {
+        return null;
       }
     }
-    const abandon = requireAnswer(
-      await ctx.console.confirmPrompt('Abandon linking a project?', false),
-    );
-    if (abandon) {
-      return null;
+  }
+}
+
+/** The `link` step of a directory whose project already exists: the linker asks, and maps it. */
+export class LinkExistingStep implements InitStep<InitOutcome> {
+  readonly ref: StepRef;
+  readonly initPath = 'link_existing';
+  private readonly linker: ExistingProjectLinker;
+
+  constructor(path: LinkExistingPath, deps: DetectDeps) {
+    this.ref = { step: 'link', root: deps.root };
+    this.linker = new ExistingProjectLinker(path, deps);
+  }
+
+  async run(): Promise<StepResult<InitOutcome>> {
+    const outcome = await this.linker.link();
+    if (outcome.kind === 'linked') {
+      return success(outcome, { projectKey: outcome.projectKey });
     }
+    return outcome.kind === 'dry-run' ? skipped(outcome) : declined(outcome, 'cancelled');
   }
 }

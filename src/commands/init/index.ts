@@ -20,7 +20,6 @@
 
 import { resolve } from 'node:path';
 
-import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
 import {
   chooseProjectKey,
@@ -30,13 +29,13 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
-import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
 import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { OnboardingCancelledError } from './answer.ts';
-import type { InitOutcome, InitPath, NoProjectPath } from './init-outcome.ts';
+import { singleRoot, StepRunner } from './flow/step-runner.ts';
+import type { InitOutcome } from './init-outcome.ts';
 import {
   type InitIntent,
   type MonorepoRootOption,
@@ -46,22 +45,12 @@ import {
 } from './options.ts';
 import { renderInitOutcome } from './output.ts';
 import { classifyRemoteHost } from './remote-host.ts';
-import { resolveInitAuth } from './steps/auth.ts';
-import { runBoundNew } from './steps/bind.ts';
-import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
+import { LoginStep } from './steps/auth.ts';
+import { type DetectDeps, DetectStep, resolveProjectRoot } from './steps/detect.ts';
 import { pickFolders } from './steps/folder-selection.ts';
-import { offerIntegrate } from './steps/integrate.ts';
-import { runLinkExisting } from './steps/link-existing.ts';
-import { findLinkedProjectIssues, isUnavailable } from './steps/linked-projects.ts';
+import { IntegrateStep } from './steps/integrate.ts';
 import { runMonorepo } from './steps/monorepo.ts';
-import { runNoProject } from './steps/no-project.ts';
-import { OrganizationCreationDeclined } from './steps/organization.ts';
-import type { InitPathId } from './telemetry/init-telemetry.ts';
-import {
-  type InitRunContext,
-  InitTelemetryRecorder,
-  type ProjectInitRecorder,
-} from './telemetry/init-telemetry-recorder.ts';
+import { type InitRunContext, InitTelemetryRecorder } from './telemetry/init-telemetry-recorder.ts';
 
 export interface InitOptions {
   path?: string;
@@ -83,11 +72,12 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
   const dryRun = options.dryRun === true;
   const telemetry = new InitTelemetryRecorder(options.monorepo === true);
+  const steps = new StepRunner(telemetry);
   const session: { auth?: ResolvedAuth } = {};
   try {
-    await onboard(options, ctx, { interactive, dryRun, telemetry, session });
+    await onboard(options, ctx, { interactive, dryRun, steps, session });
   } catch (error) {
-    telemetry.fail(error);
+    telemetry.failRun(error);
     throw error;
   } finally {
     // A preview changes nothing, so it would only blur what onboarding runs reach.
@@ -101,7 +91,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
 interface OnboardSettings {
   interactive: boolean;
   dryRun: boolean;
-  telemetry: InitTelemetryRecorder;
+  steps: StepRunner;
   /** Filled once signed in, so the telemetry of a failed run still carries the connection. */
   session: { auth?: ResolvedAuth };
 }
@@ -109,7 +99,7 @@ interface OnboardSettings {
 async function onboard(
   options: InitOptions,
   ctx: CommandInvocationContext,
-  { interactive, dryRun, telemetry, session }: OnboardSettings,
+  { interactive, dryRun, steps, session }: OnboardSettings,
 ): Promise<void> {
   const { console } = ctx;
 
@@ -131,40 +121,18 @@ async function onboard(
     monorepo: options.monorepo === true,
     monorepoRoots,
     pathGiven: options.path !== undefined,
-    telemetry,
+    steps,
     session,
   });
   if (outcome.kind === 'complete') {
     warnIgnoredIntent(intent, console);
-  }
-  if (outcome.kind === 'declined') {
-    telemetry.stopAtDeclined();
   }
   renderInitOutcome(outcome, auth, console, dryRun);
   if (dryRun) {
     console.info('Dry run: nothing was written. Run without --dry-run to apply.');
     return;
   }
-  await offerIntegrateStep(ctx, auth, interactive, telemetry);
-}
-
-/** Without a session (the user declined to create an organization) there is nothing to integrate with. */
-async function offerIntegrateStep(
-  ctx: CommandInvocationContext,
-  auth: ResolvedAuth | undefined,
-  interactive: boolean,
-  telemetry: InitTelemetryRecorder,
-): Promise<void> {
-  if (!interactive || !auth) {
-    telemetry.record('integrate', 'skipped');
-    return;
-  }
-  if (findInstalledIntegrationIds().length > 0) {
-    telemetry.record('integrate', 'already_done');
-    return;
-  }
-  telemetry.begin('integrate');
-  telemetry.record('integrate', await offerIntegrate(ctx, auth));
+  await steps.run(new IntegrateStep(ctx, auth, interactive));
 }
 
 /** The repository facts the run event carries; any lookup failure leaves them out. */
@@ -198,13 +166,14 @@ interface RunSettings {
   monorepoRoots: readonly MonorepoRootOption[];
   /** `--path` fixed the directory, so there is no folder to choose. */
   pathGiven: boolean;
-  telemetry: InitTelemetryRecorder;
+  steps: StepRunner;
   session: { auth?: ResolvedAuth };
 }
 
 interface RunResult {
   outcome: InitOutcome;
   auth?: ResolvedAuth;
+  deps?: DetectDeps;
 }
 
 async function run(
@@ -213,16 +182,10 @@ async function run(
   console: Console,
   settings: RunSettings,
 ): Promise<RunResult> {
-  const { interactive, dryRun, intent, monorepo, monorepoRoots, telemetry } = settings;
-  let auth: ResolvedAuth;
-  try {
-    auth = await resolveInitAuth(ctx, interactive, dryRun, telemetry);
-  } catch (error) {
-    if (error instanceof OrganizationCreationDeclined) {
-      telemetry.stopAt('create_org', 'no_org');
-      return { outcome: { kind: 'no-organization' } };
-    }
-    throw error;
+  const { interactive, dryRun, intent, monorepo, monorepoRoots, steps } = settings;
+  const auth = await steps.run(new LoginStep(ctx, interactive, dryRun, steps));
+  if (!auth) {
+    return { outcome: { kind: 'no-organization' } };
   }
   settings.session.auth = auth;
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
@@ -233,45 +196,22 @@ async function run(
     interactive,
     dryRun,
     intent,
-    telemetry,
+    steps,
+    root: singleRoot(projectRoot),
   };
-  telemetry.begin('detect');
   if (monorepo) {
     const roots = await monorepoRootsToOnboard(projectRoot, monorepoRoots, deps, interactive);
     const linkOnly = intent?.kind === 'link';
     const monorepoDeps: DetectDeps =
       linkOnly && interactive ? { ...deps, chooseProject: projectChooser(ctx, auth) } : deps;
-    const outcome = await runMonorepo(projectRoot, monorepoDeps, roots, linkOnly);
-    if (outcome.kind === 'no-monorepo-roots') {
-      telemetry.record('detect', 'failed');
-      telemetry.stopAt('detect', 'unknown');
-    }
-    return { outcome, auth };
+    return { outcome: await runMonorepo(projectRoot, monorepoDeps, roots, linkOnly), auth };
   }
   // The folders are asked about only once the user agrees to link, so the steps do the asking.
   const pickingDeps: DetectDeps = askFolders(settings, intent)
     ? { ...deps, pickLinkFolder: true }
     : deps;
-  const detected = await detectInitPath(projectRoot, pickingDeps);
-  const project = telemetry.detected(initPathIdOf(detected));
-  if (detected.path === 'no-project' && !project.has('project_bind')) {
-    project.record('project_bind', 'skipped');
-  }
-  return { outcome: await runDetectedPath(detected, pickingDeps, project), auth };
-}
-
-function initPathIdOf(detected: InitPath): InitPathId {
-  switch (detected.path) {
-    case 'complete':
-      return 'already_done';
-    case 'link-existing':
-      return 'link_existing';
-    case 'bound-new':
-      return 'bound_new';
-    // The telemetry id predates the removal of unbound creation, and names the same path.
-    case 'no-project':
-      return 'unbound_new';
-  }
+  const [detected] = await steps.run(new DetectStep(projectRoot, pickingDeps));
+  return { outcome: await steps.run(detected.target), auth, deps };
 }
 
 /** The project prompts of `sonar link`, with leaving them ending the onboarding. */
@@ -319,95 +259,4 @@ function askFolders(
 ): boolean {
   const keyGiven = intent?.kind === 'link' && intent.projectKey !== undefined;
   return interactive && !pathGiven && !keyGiven;
-}
-
-/** `bound-new` hands back `no-project` only when the user declined the DevOps platform authorization. */
-async function runDetectedPath(
-  detected: InitPath,
-  deps: DetectDeps,
-  project: ProjectInitRecorder,
-): Promise<InitOutcome> {
-  switch (detected.path) {
-    case 'bound-new':
-      return fallBack(await runBoundNew(detected, deps), deps, project);
-    case 'link-existing': {
-      project.begin('link');
-      const result = await runLinkExisting(detected, deps);
-      recordLinkResult(result, project);
-      return result;
-    }
-    case 'no-project':
-      return noProject(detected, deps, project);
-    case 'complete': {
-      const outcome = await checkCompleteLinks(detected, deps);
-      project.record('link', 'already_done');
-      const [projectKey] = outcome.projectKeys;
-      if (projectKey) {
-        project.setProjectKey(projectKey);
-      }
-      return outcome;
-    }
-  }
-}
-
-function recordLinkResult(result: InitOutcome, project: ProjectInitRecorder): void {
-  if (result.kind === 'declined') {
-    project.record('link', 'declined');
-  } else if (result.kind === 'linked') {
-    project.record('link', 'success');
-    project.setProjectKey(result.projectKey);
-  }
-}
-
-/** Nothing is created here, so the creation step is always skipped, as no one declined it. */
-async function noProject(
-  path: NoProjectPath,
-  deps: DetectDeps,
-  project: ProjectInitRecorder,
-): Promise<InitOutcome> {
-  project.setPath('unbound_new');
-  project.begin('create_project');
-  const { outcome, offeredLink } = await runNoProject(path, deps);
-  if (outcome.kind === 'linked') {
-    // The generated key named a project, and the user linked it.
-    project.record('create_project', 'skipped');
-    project.setPath('link_existing');
-    project.record('link', 'success');
-    project.setProjectKey(outcome.projectKey);
-  } else if (outcome.kind === 'declined') {
-    project.record('create_project', 'skipped');
-    if (offeredLink) {
-      // The generated key named a project, and the user turned the link down.
-      project.setPath('link_existing');
-      project.record('link', 'declined');
-    }
-  }
-  return outcome;
-}
-
-/** The file says the directory is set up; the remote may disagree, which is reported but never repaired. */
-async function checkCompleteLinks(
-  { projectRoot, projects }: Extract<InitPath, { path: 'complete' }>,
-  deps: DetectDeps,
-): Promise<Extract<InitOutcome, { kind: 'complete' }>> {
-  const issues = await findLinkedProjectIssues(
-    projects.map((project) => ({
-      projectKey: project.projectKey,
-      path: relativeProjectPath(projectRoot, project.projectRoot),
-    })),
-    deps,
-  );
-  const unavailable = new Set(issues.filter(isUnavailable).map(({ projectKey }) => projectKey));
-  const projectKeys = projects
-    .map(({ projectKey }) => projectKey)
-    .filter((projectKey) => !unavailable.has(projectKey));
-  return { kind: 'complete', projectKeys, issues };
-}
-
-function fallBack(
-  result: InitOutcome | NoProjectPath,
-  deps: DetectDeps,
-  project: ProjectInitRecorder,
-): InitOutcome | Promise<InitOutcome> {
-  return 'kind' in result ? result : noProject(result, deps, project);
 }

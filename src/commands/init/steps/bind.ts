@@ -28,8 +28,9 @@ import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { BoundNewPath, InitOutcome, NoProjectPath } from '../init-outcome.ts';
-import { classifyInitFailure } from '../telemetry/failure-reason.ts';
+import { alreadyDone, declined, skipped, type StepResult, success } from '../flow/step-result.ts';
+import type { InitStep, StepRef } from '../flow/step-runner.ts';
+import type { BoundNewPath, InitOutcome } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import {
   reportProjectCreated,
@@ -37,6 +38,7 @@ import {
   showAnalysisResults,
   writeMapping,
 } from './mapping.ts';
+import { NoProjectStep } from './no-project.ts';
 
 const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
 const AUTHORIZATION_TIMEOUT_MS = 300_000;
@@ -54,171 +56,178 @@ function notLinkedError(auth: ResolvedAuth, orgKey: string): CommandFailedError 
   );
 }
 
-function pause(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+/** The run-level `org_bind` step: already done when linked, or the authorization it takes. */
+export class OrgBindStep implements InitStep<string | undefined> {
+  readonly ref = { step: 'org_bind' } as const;
 
-/**
- * Asks for consent, then sends the user to the browser to link the organization to its DevOps
- * platform and waits until the server reports the link. Resolves to the platform key, or
- * undefined when consent is declined. Without a terminal it fails, since `--bind` cannot stand in
- * for a browser authorization.
- */
-export async function authorizeOrganization(
-  api: ImportApiClient,
-  auth: ResolvedAuth,
-  orgKey: string,
-  { console, interactive }: Pick<DetectDeps, 'console' | 'interactive'>,
-): Promise<string | undefined> {
-  if (!interactive) {
-    throw notLinkedError(auth, orgKey);
-  }
-  const consent = requireAnswer(
-    await console.confirmPrompt(
-      `Organization '${orgKey}' is not linked to your DevOps platform. Authorize it in the browser now?`,
-      true,
-    ),
-  );
-  if (!consent) {
-    return undefined;
+  constructor(
+    private readonly linkedAlmKey: string | undefined,
+    private readonly api: ImportApiClient,
+    private readonly auth: ResolvedAuth,
+    private readonly orgKey: string,
+    private readonly deps: Pick<DetectDeps, 'console' | 'interactive'>,
+  ) {}
+
+  async run(): Promise<StepResult<string | undefined>> {
+    if (this.linkedAlmKey) {
+      return alreadyDone(this.linkedAlmKey);
+    }
+    const almKey = await this.authorizeOrganization(this.api, this.auth, this.orgKey, this.deps);
+    return almKey ? success(almKey) : declined(undefined);
   }
 
-  const url = devOpsBindingUrl(auth, orgKey);
-  console.print(`Link the organization to your DevOps platform: ${url}`);
-  return waitInBrowser(url, console, (stepConsole) =>
-    stepConsole.withSpinner('Waiting for the authorization', () =>
-      waitForAlmKey(api, orgKey, Date.now() + AUTHORIZATION_TIMEOUT_MS),
-    ),
-  );
-}
+  private pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
-/** Records the run-level `org_bind` step around the authorization it may take. */
-export async function authorizeUnlessLinked(
-  linkedAlmKey: string | undefined,
-  api: ImportApiClient,
-  auth: ResolvedAuth,
-  orgKey: string,
-  deps: Pick<DetectDeps, 'console' | 'interactive' | 'telemetry'>,
-): Promise<string | undefined> {
-  const { telemetry } = deps;
-  if (linkedAlmKey) {
-    telemetry?.record('org_bind', 'already_done');
-    return linkedAlmKey;
-  }
-  telemetry?.begin('org_bind');
-  const almKey = await authorizeOrganization(api, auth, orgKey, deps);
-  telemetry?.record('org_bind', almKey ? 'success' : 'declined');
-  return almKey;
-}
+  /**
+   * Asks for consent, then sends the user to the browser to link the organization to its DevOps
+   * platform and waits until the server reports the link. Resolves to the platform key, or
+   * undefined when consent is declined. Without a terminal it fails, since `--bind` cannot stand in
+   * for a browser authorization.
+   */
+  private async authorizeOrganization(
+    api: ImportApiClient,
+    auth: ResolvedAuth,
+    orgKey: string,
+    { console, interactive }: Pick<DetectDeps, 'console' | 'interactive'>,
+  ): Promise<string | undefined> {
+    if (!interactive) {
+      throw notLinkedError(auth, orgKey);
+    }
+    const consent = requireAnswer(
+      await console.confirmPrompt(
+        `Organization '${orgKey}' is not linked to your DevOps platform. Authorize it in the browser now?`,
+        true,
+      ),
+    );
+    if (!consent) {
+      return undefined;
+    }
 
-/** Each check starts only after the previous one answered and the interval has passed. */
-async function waitForAlmKey(
-  api: ImportApiClient,
-  orgKey: string,
-  deadline: number,
-): Promise<string> {
-  const almKey = await resolveAlmKey(api, orgKey, undefined);
-  if (almKey) {
-    return almKey;
-  }
-  if (Date.now() >= deadline) {
-    throw new CommandFailedError('Timed out waiting for the DevOps platform authorization.', {
-      remediationHint: "Finish the authorization in the browser, then run 'sonar init' again.",
-    });
-  }
-  await pause(AUTHORIZATION_POLL_INTERVAL_MS);
-  return waitForAlmKey(api, orgKey, deadline);
-}
-
-/** Provisions the project for one repository through `sonar import`'s plan, and returns its key. */
-async function importRepository(
-  api: ImportApiClient,
-  auth: ResolvedAuth,
-  slug: string,
-  org: ResolvedOrg,
-  console: Console,
-): Promise<string> {
-  const plan = await new CloudBackend(api, auth.orgKey, auth.serverUrl, org).plan(
-    { repo: [slug], nonInteractive: true },
-    console,
-  );
-  if (plan.selection.kind !== 'batch' || plan.selection.repos.length !== 1) {
-    const reason = plan.selection.kind === 'batch' ? plan.selection.skipped[0]?.reason : undefined;
-    const detail = reason ? `: ${reason}` : '.';
-    throw new CommandFailedError(`Repository '${slug}' cannot be imported${detail}`);
-  }
-  const projectKey = (await plan.importRepo(plan.selection.repos[0]))?.projectKey;
-  if (!projectKey) {
-    throw new CommandFailedError(
-      `Repository '${slug}' was imported, but no project key came back.`,
+    const url = devOpsBindingUrl(auth, orgKey);
+    console.print(`Link the organization to your DevOps platform: ${url}`);
+    return waitInBrowser(url, console, (stepConsole) =>
+      stepConsole.withSpinner('Waiting for the authorization', () =>
+        this.waitForAlmKey(api, orgKey, Date.now() + AUTHORIZATION_TIMEOUT_MS),
+      ),
     );
   }
-  return projectKey;
+
+  /** Each check starts only after the previous one answered and the interval has passed. */
+  private async waitForAlmKey(
+    api: ImportApiClient,
+    orgKey: string,
+    deadline: number,
+  ): Promise<string> {
+    const almKey = await resolveAlmKey(api, orgKey, undefined);
+    if (almKey) {
+      return almKey;
+    }
+    if (Date.now() >= deadline) {
+      throw new CommandFailedError('Timed out waiting for the DevOps platform authorization.', {
+        remediationHint: "Finish the authorization in the browser, then run 'sonar init' again.",
+      });
+    }
+    await this.pause(AUTHORIZATION_POLL_INTERVAL_MS);
+    return this.waitForAlmKey(api, orgKey, deadline);
+  }
 }
 
 /**
  * Creates the project bound to the repository with the `sonar import --repo` logic and maps it in
  * `.sonar-config.json`. When the user declines the DevOps platform authorization, nothing is
- * created: `--bind` ends as declined, and otherwise the no-project step says how to go on.
+ * created: `--bind` ends as declined, and otherwise the root falls back to the no-project path.
  */
-export async function runBoundNew(
-  { projectRoot, remote, repositorySlug }: BoundNewPath,
-  deps: DetectDeps,
-): Promise<InitOutcome | NoProjectPath> {
-  const { auth, http, console, intent, telemetry } = deps;
-  const project = telemetry?.project(0);
-  project?.begin('create_project');
-  const api = new ImportApiClient(http);
-  const org = await resolveOrg(api, auth.orgKey);
-  const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
-  // The browser authorization and the import both change things, so a preview stops short of them.
-  if (deps.dryRun) {
-    // A real run without a terminal fails here, so its preview must fail too.
-    if (!linkedAlmKey && !deps.interactive) {
-      throw notLinkedError(auth, org.key);
-    }
-    return {
-      kind: 'dry-run',
-      action: {
-        type: 'bind',
-        repositorySlug,
-        organization: org.key,
-        authorizationNeeded: !linkedAlmKey,
-      },
-    };
-  }
-  let almKey: string | undefined;
-  try {
-    almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
-  } catch (error) {
-    project?.record('create_project', 'failed');
-    project?.stopAt('create_project', classifyInitFailure(error));
-    throw error;
-  }
-  if (!almKey) {
-    if (intent?.kind === 'bind') {
-      // `--bind` asked for this project only, so declining ends the attempt.
-      project?.record('create_project', 'declined');
-      project?.stopAt('create_project', 'cancelled');
-      return { kind: 'declined' };
-    }
-    return { path: 'no-project', projectRoot, remote };
+export class BoundNewStep implements InitStep<InitOutcome> {
+  readonly ref: StepRef;
+  readonly initPath = 'bound_new';
+
+  constructor(
+    private readonly path: BoundNewPath,
+    private readonly deps: DetectDeps,
+  ) {
+    this.ref = { step: 'create_project', root: deps.root };
   }
 
-  console.info(`Organization: ${org.key}`);
-  const projectKey = await console.withSpinner('Creating the project', () =>
-    importRepository(api, auth, repositorySlug, { ...org, almKey }, new QuietConsole(console)),
-  );
+  async run(): Promise<StepResult<InitOutcome>> {
+    const { repositorySlug } = this.path;
+    const { auth, http, dryRun, interactive, intent, steps } = this.deps;
+    const api = new ImportApiClient(http);
+    const org = await resolveOrg(api, auth.orgKey);
+    const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
+    // The browser authorization and the import both change things, so a preview stops short of them.
+    if (dryRun) {
+      // A real run without a terminal fails here, so its preview must fail too.
+      if (!linkedAlmKey && !interactive) {
+        throw notLinkedError(auth, org.key);
+      }
+      return skipped({
+        kind: 'dry-run',
+        action: {
+          type: 'bind',
+          repositorySlug,
+          organization: org.key,
+          authorizationNeeded: !linkedAlmKey,
+        },
+      });
+    }
+    const almKey = await steps.run(new OrgBindStep(linkedAlmKey, api, auth, org.key, this.deps));
+    if (almKey) {
+      return this.create(api, { ...org, almKey });
+    }
+    return intent?.kind === 'bind' ? declined({ kind: 'declined' }, 'cancelled') : this.fallBack();
+  }
 
-  await writeMapping(auth, projectKey, projectRoot, console, 'created');
-  project?.record('create_project', 'success');
-  project?.setProjectKey(projectKey);
-  reportProjectCreated(console, projectKey);
-  await showAnalysisResults(
-    http,
-    projectKey,
-    console,
-    'No analysis results yet: the first analysis of the new project is pending.',
-  );
-  return { kind: 'bound', projectKey };
+  /** The no-project path settles this same `create_project` step, so it runs inside this one. */
+  private async fallBack(): Promise<StepResult<InitOutcome>> {
+    const { projectRoot, remote } = this.path;
+    const noProject = new NoProjectStep({ path: 'no-project', projectRoot, remote }, this.deps);
+    return { ...(await noProject.run()), initPath: noProject.initPath };
+  }
+
+  private async create(api: ImportApiClient, org: ResolvedOrg): Promise<StepResult<InitOutcome>> {
+    const { projectRoot, repositorySlug } = this.path;
+    const { auth, http, console } = this.deps;
+    console.info(`Organization: ${org.key}`);
+    const projectKey = await console.withSpinner('Creating the project', () =>
+      this.importRepository(api, auth, repositorySlug, org, new QuietConsole(console)),
+    );
+    await writeMapping(auth, projectKey, projectRoot, console, 'created');
+    reportProjectCreated(console, projectKey);
+    await showAnalysisResults(
+      http,
+      projectKey,
+      console,
+      'No analysis results yet: the first analysis of the new project is pending.',
+    );
+    return success({ kind: 'bound', projectKey }, { projectKey });
+  }
+
+  /** Provisions the project for one repository through `sonar import`'s plan, and returns its key. */
+  private async importRepository(
+    api: ImportApiClient,
+    auth: ResolvedAuth,
+    slug: string,
+    org: ResolvedOrg,
+    console: Console,
+  ): Promise<string> {
+    const plan = await new CloudBackend(api, auth.orgKey, auth.serverUrl, org).plan(
+      { repo: [slug], nonInteractive: true },
+      console,
+    );
+    if (plan.selection.kind !== 'batch' || plan.selection.repos.length !== 1) {
+      const reason =
+        plan.selection.kind === 'batch' ? plan.selection.skipped[0]?.reason : undefined;
+      const detail = reason ? `: ${reason}` : '.';
+      throw new CommandFailedError(`Repository '${slug}' cannot be imported${detail}`);
+    }
+    const projectKey = (await plan.importRepo(plan.selection.repos[0]))?.projectKey;
+    if (!projectKey) {
+      throw new CommandFailedError(
+        `Repository '${slug}' was imported, but no project key came back.`,
+      );
+    }
+    return projectKey;
+  }
 }

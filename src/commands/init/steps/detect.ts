@@ -39,10 +39,12 @@ import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/proj
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
+import { alreadyDone, declined, skipped, type StepResult, success } from '../flow/step-result.ts';
+import type { Detected, InitRoot, InitStep, StepRef, StepRunner } from '../flow/step-runner.ts';
 import type { InitPath } from '../init-outcome.ts';
 import type { InitIntent } from '../options.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
-import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
+import { type PathOnboarding, planPath } from './plan-path.ts';
 
 export interface DetectDeps {
   auth: ResolvedAuth;
@@ -61,7 +63,10 @@ export interface DetectDeps {
   chooseProject?: (projectRoot: string, items: readonly ConfigItem[]) => Promise<string | null>;
   /** Set only while the user may still be asked which single folder to link. */
   pickLinkFolder?: boolean;
-  telemetry?: InitTelemetryRecorder;
+  /** Runs the onboarding steps and records in telemetry how each went. */
+  steps: StepRunner;
+  /** The project root the steps run for. */
+  root: InitRoot;
 }
 
 export function resolveProjectRoot(pathOption: string): string {
@@ -83,103 +88,217 @@ export function resolveProjectRoot(pathOption: string): string {
 // A committed config is untrusted and the name ends up in a command the user is told to run.
 const ORGANIZATION_KEY = /^[A-Za-z0-9_.-]+$/;
 
-/** Organization that a mapping on the same server records, when it differs from the active one. */
-function recordedOtherOrganization(
-  mappings: CompleteProjectMapping[],
-  auth: ResolvedAuth,
-): string | undefined {
-  return mappings.find(
-    (mapping) =>
-      authMatchesRecordedServer(auth, mapping.serverUrl) &&
-      mapping.organization !== undefined &&
-      ORGANIZATION_KEY.test(mapping.organization) &&
-      mapping.organization !== auth.orgKey,
-  )?.organization;
-}
+/** Inspects the directory and its git remote, then plans the onboarding path without running it. */
+export class DetectStep implements InitStep<Detected<PathOnboarding>[]> {
+  readonly ref = { step: 'detect' } as const;
 
-/** Inspects the directory and its git remote, then picks the onboarding path without running it. */
-export async function detectInitPath(projectRoot: string, deps: DetectDeps): Promise<InitPath> {
-  const { auth } = deps;
-  const { gitRoot, isGit } = findGitRoot(projectRoot);
+  constructor(
+    private readonly projectRoot: string,
+    private readonly deps: DetectDeps,
+  ) {}
 
-  // Local config and known mappings prove no server project exists, so only `.sonar-config.json` counts.
-  const discovered = await discoverProjects(projectRoot, {
-    auth,
-    console: deps.console,
-    silent: true,
-    useKnownMappings: false,
-    useGitRemoteBinding: false,
-  });
-  const onPath = discovered.fromSharedConfig ? discovered.scope(projectRoot) : [];
-  const connected = onPath.filter((mapping) => authMatchesRecordedConnection(auth, mapping));
-  const enclosing = connected.filter((mapping) => mapping.contains);
-  // A lone project below the root leaves the rest of it unlinked, but several of them are a monorepo.
-  const linked = enclosing.length > 0 || connected.length < 2 ? enclosing : connected;
-  if (linked.length > 0) {
-    return {
-      path: 'complete',
-      projectRoot,
-      projects: linked.map(({ projectKey, projectRoot: root }) => ({
-        projectKey,
-        projectRoot: root,
-      })),
-    };
+  async run(): Promise<StepResult<Detected<PathOnboarding>[]>> {
+    const path = await this.findPath();
+    const onboarding = planPath(path, this.deps);
+    const roots = [{ root: this.deps.root, initPath: onboarding.initPath, target: onboarding }];
+    return path.path === 'complete' ? alreadyDone(roots, { roots }) : success(roots, { roots });
   }
 
-  const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
-  const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
-  const { intent } = deps;
-  if (intent?.kind === 'link' && intent.projectKey) {
-    return {
-      path: 'link-existing',
-      projectRoot,
-      remote,
-      projectKey: intent.projectKey,
-      requested: true,
-    };
-  }
-  if (!remote) {
-    if (intent?.kind === 'bind') {
-      throw bindingUnavailable('this directory has no git remote.');
+  private async findPath(): Promise<InitPath> {
+    const { projectRoot, deps } = this;
+
+    const { auth } = deps;
+    const { gitRoot, isGit } = findGitRoot(projectRoot);
+
+    // Local config and known mappings prove no server project exists, so only `.sonar-config.json` counts.
+    const discovered = await discoverProjects(projectRoot, {
+      auth,
+      console: deps.console,
+      silent: true,
+      useKnownMappings: false,
+      useGitRemoteBinding: false,
+    });
+    const onPath = discovered.fromSharedConfig ? discovered.scope(projectRoot) : [];
+    const connected = onPath.filter((mapping) => authMatchesRecordedConnection(auth, mapping));
+    const enclosing = connected.filter((mapping) => mapping.contains);
+    // A lone project below the root leaves the rest of it unlinked, but several of them are a monorepo.
+    const linked = enclosing.length > 0 || connected.length < 2 ? enclosing : connected;
+    if (linked.length > 0) {
+      return {
+        path: 'complete',
+        projectRoot,
+        projects: linked.map(({ projectKey, projectRoot: root }) => ({
+          projectKey,
+          projectRoot: root,
+        })),
+      };
     }
-    return { path: 'no-project', projectRoot };
-  }
 
-  // Only the server binding proves the project exists; a key in local config may name none.
-  const binding = await lookupRemoteBinding(deps, remote);
-  switch (binding.kind) {
-    case 'in-org':
+    const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
+    const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
+    const { intent } = deps;
+    if (intent?.kind === 'link' && intent.projectKey) {
       return {
         path: 'link-existing',
         projectRoot,
         remote,
-        projectKey: binding.projectKey,
+        projectKey: intent.projectKey,
+        requested: true,
       };
-    case 'other-org':
-      throw otherOrganizationError(auth, recordedOtherOrganization(onPath, auth));
-    case 'unknown':
-      deps.console.info(
-        'Could not check whether this repository is already bound; continuing without that check.',
-        'stderr',
-      );
-      break;
-    case 'unbound':
-      break;
+    }
+    if (!remote) {
+      return this.chooseNewProjectPath(undefined);
+    }
+
+    // Only the server binding proves the project exists; a key in local config may name none.
+    const binding = await this.lookupRemoteBinding(deps, remote);
+    switch (binding.kind) {
+      case 'in-org':
+        return {
+          path: 'link-existing',
+          projectRoot,
+          remote,
+          projectKey: binding.projectKey,
+        };
+      case 'other-org':
+        throw this.otherOrganizationError(auth, this.recordedOtherOrganization(onPath, auth));
+      case 'unknown':
+        deps.console.info(
+          'Could not check whether this repository is already bound; continuing without that check.',
+          'stderr',
+        );
+        break;
+      case 'unbound':
+        break;
+    }
+    return this.chooseNewProjectPath(remote);
   }
-  return chooseNewProjectPath(projectRoot, remote, deps);
+
+  /** Picks the path of a new project. Only the binding decision is a step; the check before it is not. */
+  private chooseNewProjectPath(remote: string | undefined): Promise<InitPath> {
+    this.assertBindingPossible(remote, this.deps);
+    return this.deps.steps.run(new ProjectBindStep(this.projectRoot, remote, this.deps));
+  }
+
+  /** Organization that a mapping on the same server records, when it differs from the active one. */
+  private recordedOtherOrganization(
+    mappings: CompleteProjectMapping[],
+    auth: ResolvedAuth,
+  ): string | undefined {
+    return mappings.find(
+      (mapping) =>
+        authMatchesRecordedServer(auth, mapping.serverUrl) &&
+        mapping.organization !== undefined &&
+        ORGANIZATION_KEY.test(mapping.organization) &&
+        mapping.organization !== auth.orgKey,
+    )?.organization;
+  }
+
+  private lookupRemoteBinding(
+    { auth, http }: DetectDeps,
+    remote: string,
+  ): Promise<GitRemoteBinding> {
+    return new ProjectBindingsClient(http).resolveGitRemoteBinding(remote, auth.orgKey).match(
+      (binding) => binding,
+      (error): GitRemoteBinding => {
+        logger.debug(`Git remote project binding lookup failed: ${error.message}`);
+        return { kind: 'unknown' };
+      },
+    );
+  }
+
+  private otherOrganizationError(
+    auth: ResolvedAuth,
+    boundOrganization: string | undefined,
+  ): RepositoryInOtherOrganizationError {
+    const active = auth.orgKey ?? 'the active one';
+    if (boundOrganization) {
+      return new RepositoryInOtherOrganizationError(
+        `This repository is bound to a project in organization '${boundOrganization}', but you are connected to '${active}'.`,
+        `Run 'sonar auth org ${boundOrganization}' to switch to it.`,
+      );
+    }
+    return new RepositoryInOtherOrganizationError(
+      `This repository is bound to a project in another organization than ${active}, so it cannot be bound from here.`,
+      "Run 'sonar auth org' to switch to the organization that owns it.",
+    );
+  }
+
+  private bindingUnavailable(reason: string): InvalidOptionError {
+    return new InvalidOptionError(
+      `--bind is unavailable: ${reason}`,
+      "Run 'sonar init' again with --link <key> to link an existing project.",
+    );
+  }
+
+  /** `--bind` that cannot be honoured fails before the step, so such a run reports no project. */
+  private assertBindingPossible(remote: string | undefined, { auth, intent }: DetectDeps): void {
+    if (intent?.kind !== 'bind') {
+      return;
+    }
+    if (!remote) {
+      throw this.bindingUnavailable('this directory has no git remote.');
+    }
+    if (remoteRepositorySlug(remote) === null) {
+      throw this.bindingUnavailable('the git remote is not a GitHub or Azure DevOps repository.');
+    }
+    if (auth.connectionType !== 'cloud') {
+      throw this.bindingUnavailable(
+        'creating a bound project is only available on SonarQube Cloud.',
+      );
+    }
+  }
 }
 
-function lookupRemoteBinding(
-  { auth, http }: DetectDeps,
-  remote: string,
-): Promise<GitRemoteBinding> {
-  return new ProjectBindingsClient(http).resolveGitRemoteBinding(remote, auth.orgKey).match(
-    (binding) => binding,
-    (error): GitRemoteBinding => {
-      logger.debug(`Git remote project binding lookup failed: ${error.message}`);
-      return { kind: 'unknown' };
-    },
-  );
+/** Whether a new project is bound to the repository: `--bind`, the user's answer, or what the remote allows. */
+class ProjectBindStep implements InitStep<InitPath> {
+  readonly ref: StepRef;
+  readonly initPath = 'bound_new';
+
+  constructor(
+    private readonly projectRoot: string,
+    private readonly remote: string | undefined,
+    private readonly deps: DetectDeps,
+  ) {
+    this.ref = { step: 'project_bind', root: deps.root };
+  }
+
+  async run(): Promise<StepResult<InitPath>> {
+    const { projectRoot, remote } = this;
+    const { auth, console, interactive, intent } = this.deps;
+
+    if (!remote) {
+      return skipped({ path: 'no-project', projectRoot });
+    }
+    // The import needs the repository slug, so a remote without one is never offered for binding.
+    const repositorySlug = remoteRepositorySlug(remote);
+    if (repositorySlug === null) {
+      return skipped({ path: 'no-project', projectRoot, remote });
+    }
+    if (auth.connectionType !== 'cloud') {
+      if (!intent) {
+        console.info(
+          'Creating a bound project is only available on SonarQube Cloud for now.',
+          'stderr',
+        );
+      }
+      return skipped({ path: 'no-project', projectRoot, remote });
+    }
+    if (intent?.kind === 'bind') {
+      return success({ path: 'bound-new', projectRoot, remote, repositorySlug });
+    }
+    if (intent || !interactive) {
+      // Without an intent, the no-project step names the options that would answer it.
+      return skipped({ path: 'no-project', projectRoot, remote, repositorySlug });
+    }
+
+    const bind = requireAnswer(
+      await console.confirmPrompt('Bind this repository to a new SonarQube project?', true),
+    );
+    return bind
+      ? success({ path: 'bound-new', projectRoot, remote, repositorySlug })
+      : declined({ path: 'no-project', projectRoot, remote });
+  }
 }
 
 /** The repository's project belongs to another organization than the active one. */
@@ -188,73 +307,4 @@ export class RepositoryInOtherOrganizationError extends CommandFailedError {
     super(message, { remediationHint });
     this.name = 'RepositoryInOtherOrganizationError';
   }
-}
-
-function otherOrganizationError(
-  auth: ResolvedAuth,
-  boundOrganization: string | undefined,
-): RepositoryInOtherOrganizationError {
-  const active = auth.orgKey ?? 'the active one';
-  if (boundOrganization) {
-    return new RepositoryInOtherOrganizationError(
-      `This repository is bound to a project in organization '${boundOrganization}', but you are connected to '${active}'.`,
-      `Run 'sonar auth org ${boundOrganization}' to switch to it.`,
-    );
-  }
-  return new RepositoryInOtherOrganizationError(
-    `This repository is bound to a project in another organization than ${active}, so it cannot be bound from here.`,
-    "Run 'sonar auth org' to switch to the organization that owns it.",
-  );
-}
-
-function bindingUnavailable(reason: string): InvalidOptionError {
-  return new InvalidOptionError(
-    `--bind is unavailable: ${reason}`,
-    "Run 'sonar init' again with --link <key> to link an existing project.",
-  );
-}
-
-async function chooseNewProjectPath(
-  projectRoot: string,
-  remote: string,
-  { auth, console, interactive, intent, telemetry }: DetectDeps,
-): Promise<InitPath> {
-  // The import needs the repository slug, so a remote without one is never offered for binding.
-  const repositorySlug = remoteRepositorySlug(remote);
-  if (repositorySlug === null) {
-    if (intent?.kind === 'bind') {
-      throw bindingUnavailable('the git remote is not a GitHub or Azure DevOps repository.');
-    }
-    return { path: 'no-project', projectRoot, remote };
-  }
-  if (auth.connectionType !== 'cloud') {
-    if (intent?.kind === 'bind') {
-      throw bindingUnavailable('creating a bound project is only available on SonarQube Cloud.');
-    }
-    if (!intent) {
-      console.info(
-        'Creating a bound project is only available on SonarQube Cloud for now.',
-        'stderr',
-      );
-    }
-    return { path: 'no-project', projectRoot, remote };
-  }
-  if (intent?.kind === 'bind') {
-    telemetry?.detected('bound_new').record('project_bind', 'success');
-    return { path: 'bound-new', projectRoot, remote, repositorySlug };
-  }
-  if (intent || !interactive) {
-    // Without an intent, the no-project step names the options that would answer it.
-    return { path: 'no-project', projectRoot, remote, repositorySlug };
-  }
-
-  const project = telemetry?.detected('bound_new');
-  project?.begin('project_bind');
-  const bind = requireAnswer(
-    await console.confirmPrompt('Bind this repository to a new SonarQube project?', true),
-  );
-  project?.record('project_bind', bind ? 'success' : 'declined');
-  return bind
-    ? { path: 'bound-new', projectRoot, remote, repositorySlug }
-    : { path: 'no-project', projectRoot, remote };
 }

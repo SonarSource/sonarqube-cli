@@ -23,19 +23,24 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { resolveProjectUuids } from '@/core/telemetry/project-uuid.ts';
 import { hashRepoRoot } from '@/core/telemetry/repo-id.ts';
 
+import type {
+  InitPathId,
+  InitStepId,
+  InitStepOutcome,
+  InitStopReason,
+  ProjectStepId,
+  RunStepId,
+} from '../flow/step-ids.ts';
+import type { StepReport } from '../flow/step-result.ts';
+import type { DetectedRoot, InitRoot, ProjectStepRef, StepRef } from '../flow/step-runner.ts';
 import { classifyInitFailure } from './failure-reason.ts';
 import {
   buildInitExecutedFact,
   buildProjectInitFact,
   encodeStep,
   type InitFailureReason,
-  type InitPathId,
   type InitRemoteHost,
-  type InitStepId,
-  type InitStepOutcome,
   type ProjectInitPayload,
-  type ProjectStepId,
-  type RunStepId,
   toProjectFailureReason,
 } from './init-telemetry.ts';
 
@@ -47,48 +52,32 @@ interface Stop<S extends InitStepId> {
   reason: InitFailureReason;
 }
 
-/** Steps reached in order, with the one in progress, so a thrown error lands on the right step. */
+/** The steps reached, in the order they started; a step nested in another one comes after it. */
 class StepLog<S extends InitStepId> {
-  private readonly steps: { step: S; outcome: InitStepOutcome }[] = [];
-  private pending: S | undefined;
+  private readonly entries: { step: S; outcome?: InitStepOutcome }[] = [];
   private declined: S | undefined;
   stop: Stop<S> | undefined;
 
-  begin(step: S): void {
-    this.pending = step;
+  start(step: S): void {
+    this.entries.push({ step });
   }
 
-  record(step: S, outcome: InitStepOutcome): void {
-    this.steps.push({ step, outcome });
+  finish(step: S, outcome: InitStepOutcome): void {
+    const open = this.entries.filter((entry) => entry.step === step && !entry.outcome).at(-1);
+    if (open) {
+      open.outcome = outcome;
+    } else {
+      this.entries.push({ step, outcome });
+    }
     if (outcome === 'declined') {
       this.declined = step;
     }
-    if (this.pending === step) {
-      this.pending = undefined;
-    }
   }
 
-  inProgress(): S | undefined {
-    return this.pending;
-  }
-
-  has(step: S): boolean {
-    return this.steps.some((entry) => entry.step === step);
-  }
-
-  /** Marks the step in progress, if any, as failed; the first stop recorded wins. */
-  fail(error: unknown): Stop<S> {
-    if (this.stop) {
-      return this.stop;
-    }
-    const step = this.pending ?? null;
-    if (step) {
-      this.record(step, 'failed');
-    }
-    this.stop = {
-      step,
-      reason: classifyInitFailure(error, step ? FALLBACK_REASONS[step] : undefined),
-    };
+  /** The first stop wins: an inner step's failure also ends the outer step it ran in. */
+  fail(step: S, error: unknown): Stop<S> {
+    this.finish(step, 'failed');
+    this.stop ??= { step, reason: classifyInitFailure(error, FALLBACK_REASONS[step]) };
     return this.stop;
   }
 
@@ -101,59 +90,32 @@ class StepLog<S extends InitStepId> {
   }
 
   encoded(): `${S}:${InitStepOutcome}`[] {
-    return this.steps.map(({ step, outcome }) => encodeStep(step, outcome));
+    return this.entries.flatMap(({ step, outcome }) =>
+      outcome ? [encodeStep(step, outcome)] : [],
+    );
   }
 }
 
 /** One project root of the run: the path it took, its steps and where it stopped. */
-export class ProjectInitRecorder {
-  private readonly log = new StepLog<ProjectStepId>();
+class ProjectInitRecorder extends StepLog<ProjectStepId> {
   private projectKey: string | undefined;
 
   constructor(
     readonly index: number,
-    private path: InitPathId,
-    readonly label?: string,
-  ) {}
-
-  initPath(): InitPathId {
-    return this.path;
+    private initPath: InitPathId,
+  ) {
+    super();
   }
 
-  setPath(path: InitPathId): void {
-    this.path = path;
+  setPath(initPath: InitPathId): void {
+    this.initPath = initPath;
   }
 
-  setProjectKey(projectKey: string): void {
-    this.projectKey = projectKey;
-  }
-
-  begin(step: ProjectStepId): void {
-    this.log.begin(step);
-  }
-
-  record(step: ProjectStepId, outcome: InitStepOutcome): void {
-    this.log.record(step, outcome);
-  }
-
-  inProgress(): ProjectStepId | undefined {
-    return this.log.inProgress();
-  }
-
-  has(step: ProjectStepId): boolean {
-    return this.log.has(step);
-  }
-
-  fail(error: unknown): Stop<ProjectStepId> {
-    return this.log.fail(error);
-  }
-
-  stopAt(step: ProjectStepId, reason: InitFailureReason): void {
-    this.log.stopAt(step, reason);
-  }
-
-  lastDeclined(): ProjectStepId | undefined {
-    return this.log.lastDeclined();
+  settle(step: ProjectStepId, { outcome, projectKey }: StepReport): void {
+    this.finish(step, outcome);
+    if (projectKey) {
+      this.projectKey = projectKey;
+    }
   }
 
   key(): string | undefined {
@@ -161,10 +123,10 @@ export class ProjectInitRecorder {
   }
 
   payload(projectUuid: string | null): ProjectInitPayload {
-    const { stop } = this.log;
+    const { stop } = this;
     return {
-      init_path: this.path,
-      steps: this.log.encoded(),
+      init_path: this.initPath,
+      steps: this.encoded(),
       stopped_at: stop?.step ?? null,
       failure_reason: stop ? toProjectFailureReason(stop.reason) : null,
       project_index: this.index,
@@ -181,99 +143,110 @@ export interface InitRunContext {
 }
 
 /**
- * Collects what one `sonar init` run reached, then records one CliInitExecuted fact and one
+ * Follows the steps of one `sonar init` run, then records one CliInitExecuted fact and one
  * CliProjectInitCreationAttempted fact per project root, or none when the roots were never known.
+ * A single-project run ends with its project; a monorepo run carries on past a failed root.
  */
 export class InitTelemetryRecorder {
   private readonly log = new StepLog<RunStepId>();
   private projects: ProjectInitRecorder[] | undefined;
-  private active: ProjectInitRecorder | undefined;
   private runStop: Stop<InitStepId> | undefined;
 
   constructor(private readonly isMonorepo: boolean) {}
 
-  begin(step: RunStepId): void {
-    this.log.begin(step);
-  }
-
-  record(step: RunStepId, outcome: InitStepOutcome): void {
-    this.log.record(step, outcome);
-  }
-
-  has(step: RunStepId): boolean {
-    return this.log.has(step);
+  started(ref: StepRef): void {
+    if (ref.root) {
+      this.project(ref.root)?.start(ref.step);
+    } else {
+      this.log.start(ref.step);
+    }
   }
 
   /**
-   * The roots are known: the run reports one project event per path, in this order. `labels`
-   * name the roots, so a step that handles several of them can find each one.
+   * A root that ends `failed` stops there; the run carries on past a run-level step that did,
+   * unless the step says it stops the run.
    */
-  setProjects(paths: readonly InitPathId[], labels?: readonly string[]): ProjectInitRecorder[] {
-    this.projects = paths.map(
-      (path, index) => new ProjectInitRecorder(index, path, labels?.[index]),
+  finished(ref: StepRef, report: StepReport): void {
+    if (report.roots) {
+      this.rootsDetected(report.roots);
+    }
+    if (ref.root) {
+      this.settleProject(ref, report);
+    } else {
+      this.log.finish(ref.step, report.outcome);
+    }
+    if (report.stop) {
+      this.stopWith(ref, report.stop);
+    }
+  }
+
+  private settleProject(ref: ProjectStepRef, report: StepReport): void {
+    const project = this.project(ref.root);
+    if (report.initPath) {
+      project?.setPath(report.initPath);
+    }
+    if (report.outcome === 'failed') {
+      this.failed(ref, report.cause);
+    } else {
+      project?.settle(ref.step, report);
+    }
+  }
+
+  failed(ref: StepRef, error: unknown): void {
+    if (!ref.root) {
+      const stop = this.log.fail(ref.step, error);
+      this.runStop ??= stop;
+      return;
+    }
+    const stop = this.project(ref.root)?.fail(ref.step, error);
+    if (stop && !this.isMonorepo) {
+      this.runStop ??= stop;
+    }
+  }
+
+  /** Detection may name a root before it settles; naming it again only updates its path. */
+  rootsDetected(roots: readonly DetectedRoot[]): void {
+    if (this.projects) {
+      roots.forEach(({ root, initPath }) => this.project(root)?.setPath(initPath));
+      return;
+    }
+    this.projects = roots.map(
+      ({ root, initPath }) => new ProjectInitRecorder(root.index, initPath),
     );
-    this.active = this.projects.length === 1 ? this.projects[0] : undefined;
-    return this.projects;
   }
 
-  /** A single-project run knows its directory's path once detection settles; later calls update it. */
-  detected(path: InitPathId): ProjectInitRecorder {
-    if (!this.projects) {
-      this.log.record('detect', path === 'already_done' ? 'already_done' : 'success');
-      this.setProjects([path]);
-    }
-    const [project] = this.projects ?? [];
-    project.setPath(path);
-    return project;
+  /** The run ended on an error no step reported, such as an invalid option. */
+  failRun(error: unknown): void {
+    this.runStop ??= { step: null, reason: classifyInitFailure(error) };
   }
 
-  project(index: number): ProjectInitRecorder | undefined {
-    return this.projects?.[index];
-  }
-
-  projectLabelled(label: string): ProjectInitRecorder | undefined {
-    return this.projects?.find((project) => project.label === label);
-  }
-
-  /** The root a thrown error is attributed to while it is being onboarded. */
-  setActiveProject(project: ProjectInitRecorder | undefined): void {
-    this.active = project;
-  }
-
-  /**
-   * Attributes the error to the step in progress. A single-project run ends with its project, so
-   * the run stops at the project's step; a monorepo run only names its own steps.
-   */
-  fail(error: unknown): void {
-    if (this.runStop) {
+  private stopWith(ref: StepRef, reason: InitStopReason): void {
+    if (reason !== 'cancelled') {
+      this.stopAt(ref, reason);
       return;
     }
-    const project = this.active?.inProgress() ? this.active : undefined;
-    if (!this.log.inProgress() && project) {
-      const stop = project.fail(error);
-      this.runStop = this.isMonorepo ? { step: null, reason: stop.reason } : stop;
-      return;
-    }
-    this.runStop = this.log.fail(error);
-  }
-
-  stopAt(step: RunStepId, reason: InitFailureReason): void {
-    this.runStop ??= { step, reason };
-  }
-
-  /** The user declined every option, which the run reports as a cancellation at the last refusal. */
-  stopAtDeclined(): void {
-    const project = this.isMonorepo ? undefined : this.active;
-    const projectStep = project?.lastDeclined();
-    if (project && projectStep) {
-      project.stopAt(projectStep, 'cancelled');
-      this.runStop ??= { step: projectStep, reason: 'cancelled' };
-      return;
+    if (ref.root) {
+      const projectStep = this.project(ref.root)?.lastDeclined();
+      if (projectStep) {
+        this.stopAt({ step: projectStep, root: ref.root }, reason);
+        return;
+      }
     }
     const runStep = this.log.lastDeclined();
     // A run that ends with nothing created, but where nothing was declined, was not cancelled.
     if (runStep) {
-      this.runStop ??= { step: runStep, reason: 'cancelled' };
+      this.stopAt({ step: runStep }, reason);
+    }
+  }
+
+  private stopAt(ref: StepRef, reason: InitFailureReason): void {
+    if (!ref.root) {
+      this.runStop ??= { step: ref.step, reason };
+      return;
+    }
+    this.project(ref.root)?.stopAt(ref.step, reason);
+    if (!this.isMonorepo) {
+      this.runStop ??= { step: ref.step, reason };
     }
   }
 
@@ -299,6 +272,10 @@ export class InitTelemetryRecorder {
         buildProjectInitFact(project.payload(uuids[index]), run.auth),
       ),
     );
+  }
+
+  private project(root: InitRoot): ProjectInitRecorder | undefined {
+    return this.projects?.[root.index];
   }
 }
 

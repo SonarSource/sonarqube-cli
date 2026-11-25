@@ -21,21 +21,21 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { TelemetryFact } from '@/core/commands/invocation-context.ts';
 
+import type {
+  InitPathId,
+  InitStepId,
+  InitStepOutcome,
+  ProjectStepId,
+  RunStepId,
+} from '../flow/step-ids.ts';
+
 export const CLI_INIT_EXECUTED = 'CliInitExecuted';
 export const CLI_PROJECT_INIT_CREATION_ATTEMPTED = 'CliProjectInitCreationAttempted';
-
-export type RunStepId = 'login' | 'create_org' | 'detect' | 'org_bind' | 'integrate';
-export type ProjectStepId = 'project_bind' | 'create_project' | 'link';
-export type InitStepId = RunStepId | ProjectStepId;
-
-export type InitStepOutcome = 'success' | 'already_done' | 'skipped' | 'declined' | 'failed';
 
 export type InitFailureReason =
   'auth' | 'no_org' | 'other_org' | 'network' | 'permission' | 'cancelled' | 'unknown';
 /** Organization problems end the run before any project is attempted. */
 export type ProjectFailureReason = Exclude<InitFailureReason, 'no_org' | 'other_org'>;
-
-export type InitPathId = 'already_done' | 'link_existing' | 'bound_new' | 'unbound_new';
 
 export type InitRemoteHost = 'github' | 'gitlab' | 'azure_devops' | 'bitbucket' | 'other';
 

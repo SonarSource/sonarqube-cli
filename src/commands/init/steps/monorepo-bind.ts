@@ -27,97 +27,138 @@ import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/r
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { MonorepoRootResult } from '../init-outcome.ts';
+import { declined, failed, skipped, type StepResult, success } from '../flow/step-result.ts';
+import type { InitRoot, InitStep, StepRef } from '../flow/step-runner.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
-import { classifyInitFailure } from '../telemetry/failure-reason.ts';
-import type { InitFailureReason, InitStepOutcome } from '../telemetry/init-telemetry.ts';
-import { authorizeUnlessLinked } from './bind.ts';
+import { OrgBindStep } from './bind.ts';
 import type { DetectDeps } from './detect.ts';
 import { describeFailure, isRunFatal } from './linked-projects.ts';
-import { writeMapping } from './mapping.ts';
 
 /** A root whose project does not exist yet, with the project to create for it. */
 export interface BindableRoot {
-  /** Relative to the repository root, for display and the summary. */
-  path: string;
-  projectRoot: string;
+  root: InitRoot;
   projectKey: string;
   projectName: string;
 }
 
-/**
- * The repository slug the new roots can be bound through, or null when they cannot be: binding
- * needs SonarQube Cloud, a GitHub or Azure DevOps remote, and a terminal to ask on, unless
- * `--bind` already gave the consent.
- */
-function bindableSlug(
-  remote: string | undefined,
-  { auth, interactive, intent }: DetectDeps,
-): string | null {
-  if (!remote || (!interactive && intent?.kind !== 'bind') || auth.connectionType !== 'cloud') {
-    return null;
-  }
-  return remoteRepositorySlug(remote);
+/** What the one question settled for every new root. */
+type BindDecision =
+  { kind: 'unbindable' } | { kind: 'declined' } | { kind: 'consented'; slug: string };
+
+/** What the import reported for one project. */
+export interface ImportVerdict {
+  done: boolean;
+  detail?: string;
 }
 
-function allFailed(
-  roots: readonly BindableRoot[],
-  reason: string,
-  failure?: InitFailureReason,
-): MonorepoRootResult[] {
-  return roots.map(({ path }) => ({ path, kind: 'failed', reason, failure }));
-}
+/** What the batched import did for every new root; each root's creation step reads its part. */
+export type BatchImport =
+  /** Nothing was created, for a reason every root shares. */
+  | { kind: 'failed'; reason: string; cause?: unknown }
+  /** `--dry-run`: the projects would be created bound to the repository. */
+  | { kind: 'previewed' }
+  | { kind: 'imported'; slug: string; verdicts: ReadonlyMap<string, ImportVerdict> };
 
-function recordBindDecision(
-  roots: readonly BindableRoot[],
-  { telemetry }: DetectDeps,
-  outcome: InitStepOutcome,
-): void {
-  for (const { path } of roots) {
-    telemetry?.projectLabelled(path)?.record('project_bind', outcome);
-  }
-}
+const BIND_UNAVAILABLE =
+  '--bind is unavailable: it needs SonarQube Cloud and a GitHub or Azure DevOps git remote. Nothing was created.';
 
 /**
- * Provisions every root through one batched import. A repository takes its monorepo binding once,
- * so this never runs per root. Resolves to each root's result, or to undefined when the roots are
- * not bound: the user declined, or the repository cannot be bound.
+ * Asks once whether to bind every new root, records each root's `project_bind`, then provisions
+ * them through one batched import. A repository takes its monorepo binding once, so this never
+ * runs per root. Resolves to undefined when the roots are not bound: the user declined, or the
+ * repository cannot be bound and `--bind` did not require it.
  */
 export async function bindNewRoots(
   roots: readonly BindableRoot[],
   remote: string | undefined,
   deps: DetectDeps,
-): Promise<MonorepoRootResult[] | undefined> {
+): Promise<BatchImport | undefined> {
   if (roots.length === 0) {
     return undefined;
   }
   // `--bind` is the consent to bind, so what it cannot do is reported as a failure.
   const required = deps.intent?.kind === 'bind';
-  const slug = bindableSlug(remote, deps);
-  if (slug === null) {
-    recordBindDecision(roots, deps, required ? 'failed' : 'skipped');
-    return required
-      ? allFailed(
-          roots,
-          '--bind is unavailable: it needs SonarQube Cloud and a GitHub or Azure DevOps git remote. Nothing was created.',
-        )
-      : undefined;
+  const decision = await decideBinding(roots.length, remote, deps);
+  for (const { root } of roots) {
+    await deps.steps.run(new RootBindStep(root, decision, required));
   }
-  const { auth, http, console, dryRun } = deps;
-  const noun = roots.length === 1 ? 'project' : 'projects';
+  switch (decision.kind) {
+    case 'unbindable':
+      return required ? { kind: 'failed', reason: BIND_UNAVAILABLE } : undefined;
+    case 'declined':
+      return undefined;
+    case 'consented':
+      return importRoots(roots, decision.slug, required, deps);
+  }
+}
+
+/**
+ * Binding needs SonarQube Cloud, a GitHub or Azure DevOps remote, and a terminal to ask on,
+ * unless `--bind` already gave the consent.
+ */
+async function decideBinding(
+  count: number,
+  remote: string | undefined,
+  { auth, console, interactive, intent }: DetectDeps,
+): Promise<BindDecision> {
+  const required = intent?.kind === 'bind';
+  const slug =
+    remote && (interactive || required) && auth.connectionType === 'cloud'
+      ? remoteRepositorySlug(remote)
+      : null;
+  if (slug === null) {
+    return { kind: 'unbindable' };
+  }
   const consent =
     required ||
     requireAnswer(
       await console.confirmPrompt(
-        `Bind the ${roots.length} new ${noun} to the repository '${slug}'?`,
+        `Bind the ${count} new ${projectNoun(count)} to the repository '${slug}'?`,
         true,
       ),
     );
-  recordBindDecision(roots, deps, consent ? 'success' : 'declined');
-  if (!consent) {
-    return undefined;
+  return consent ? { kind: 'consented', slug } : { kind: 'declined' };
+}
+
+function projectNoun(count: number): string {
+  return count === 1 ? 'project' : 'projects';
+}
+
+/** A root's `project_bind` ends with the answer given for every root. */
+class RootBindStep implements InitStep<undefined> {
+  readonly ref: StepRef;
+
+  constructor(
+    root: InitRoot,
+    private readonly decision: BindDecision,
+    private readonly required: boolean,
+  ) {
+    this.ref = { step: 'project_bind', root };
   }
 
+  run(): Promise<StepResult<undefined>> {
+    return Promise.resolve(this.result());
+  }
+
+  private result(): StepResult<undefined> {
+    switch (this.decision.kind) {
+      case 'unbindable':
+        return this.required ? failed(undefined) : skipped(undefined);
+      case 'declined':
+        return declined(undefined);
+      case 'consented':
+        return success(undefined);
+    }
+  }
+}
+
+async function importRoots(
+  roots: readonly BindableRoot[],
+  slug: string,
+  required: boolean,
+  deps: DetectDeps,
+): Promise<BatchImport | undefined> {
+  const { auth, http, console, dryRun } = deps;
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
@@ -128,27 +169,28 @@ export async function bindNewRoots(
         `Organization '${org.key}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
       );
     }
-    return roots.map(({ path, projectKey }) => ({ path, kind: 'would-bind', projectKey }));
+    return { kind: 'previewed' };
   }
   // One authorization serves every root: the batch below reuses the key it returns.
-  const almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
+  const almKey = await deps.steps.run(new OrgBindStep(linkedAlmKey, api, auth, org.key, deps));
   if (!almKey) {
     return required
-      ? allFailed(roots, 'The organization authorization was declined. Nothing was created.')
+      ? {
+          kind: 'failed',
+          reason: 'The organization authorization was declined. Nothing was created.',
+        }
       : undefined;
   }
-  return importBatch(roots, slug, noun, { ...org, almKey }, api, deps);
+  return importBatch(roots, slug, { ...org, almKey }, api, deps);
 }
 
 async function importBatch(
   roots: readonly BindableRoot[],
   slug: string,
-  noun: string,
   org: ResolvedOrg,
   api: ImportApiClient,
-  deps: DetectDeps,
-): Promise<MonorepoRootResult[]> {
-  const { auth, console } = deps;
+  { auth, console }: DetectDeps,
+): Promise<BatchImport> {
   let plan: ImportPlan;
   try {
     // A repository that already has bound projects may take more: that is what `import --monorepo` does.
@@ -161,16 +203,20 @@ async function importBatch(
       throw error;
     }
     // The repository cannot be imported at all, which every root shares; the summary says so per root.
-    return allFailed(roots, describeFailure(error), classifyInitFailure(error));
+    return { kind: 'failed', reason: describeFailure(error), cause: error };
   }
   const { selection } = plan;
   if (selection.kind !== 'batch' || selection.repos.length !== 1) {
     const reason = selection.kind === 'batch' ? selection.skipped[0]?.reason : undefined;
     const detail = reason ? `: ${reason}` : '.';
-    return allFailed(roots, `Repository '${slug}' cannot be bound${detail} Nothing was created.`);
+    return {
+      kind: 'failed',
+      reason: `Repository '${slug}' cannot be bound${detail} Nothing was created.`,
+    };
   }
 
-  const verdicts = new Map<string, { done: boolean; detail?: string }>();
+  const verdicts = new Map<string, ImportVerdict>();
+  const noun = projectNoun(roots.length);
   await console.withSpinner(`Binding ${roots.length} ${noun} to '${slug}'`, () =>
     plan.importMonorepo(
       selection.repos[0],
@@ -182,36 +228,5 @@ async function importBatch(
       },
     ),
   );
-
-  // Mappings are merged one at a time: each is a read-modify-write of the same file.
-  return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
-    const results = await previous;
-    results.push(await mapCreatedRoot(root, slug, verdicts.get(root.projectKey), deps));
-    return results;
-  }, Promise.resolve([]));
-}
-
-async function mapCreatedRoot(
-  { path, projectRoot, projectKey }: BindableRoot,
-  slug: string,
-  verdict: { done: boolean; detail?: string } | undefined,
-  { auth, console }: DetectDeps,
-): Promise<MonorepoRootResult> {
-  if (!verdict?.done) {
-    return {
-      path,
-      kind: 'failed',
-      reason: verdict?.detail ?? `The import did not report project '${projectKey}'.`,
-    };
-  }
-  try {
-    await writeMapping(auth, projectKey, projectRoot, console, 'created', true);
-    console.success(`Created project '${projectKey}' bound to '${slug}' for ${path}.`);
-    return { path, kind: 'bound', projectKey };
-  } catch (error) {
-    if (isRunFatal(error)) {
-      throw error;
-    }
-    return { path, kind: 'failed', reason: describeFailure(error) };
-  }
+  return { kind: 'imported', slug, verdicts };
 }

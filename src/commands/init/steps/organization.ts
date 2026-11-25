@@ -43,8 +43,9 @@ import type {
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
+import { declined, type StepResult, success } from '../flow/step-result.ts';
+import type { InitStep, StepRunner } from '../flow/step-runner.ts';
 import { validateProjectName } from '../options.ts';
-import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
 
 const MAX_KEY_LENGTH = 40;
 const MIN_KEY_LENGTH = 3;
@@ -72,13 +73,6 @@ export class OrganizationCreationDeclined extends Error {
   }
 }
 
-function creationUnavailable(cause: Error): CommandFailedError {
-  return new CommandFailedError('Organization creation is not available for this account.', {
-    cause,
-    remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
-  });
-}
-
 /** A key SonarQube Cloud accepts, derived from the display name. */
 export function deriveOrganizationKey(name: string): string {
   const slug = trimChars(
@@ -99,69 +93,9 @@ export function deriveOrganizationKey(name: string): string {
   return slug.length < MIN_KEY_LENGTH ? `${slug}-org` : slug;
 }
 
-function withRandomSuffix(base: string): string {
-  const trimmed = trimChars(base.slice(0, MAX_KEY_LENGTH - KEY_SUFFIX_BYTES * 2 - 1), '-');
-  return `${trimmed}-${randomBytes(KEY_SUFFIX_BYTES).toString('hex')}`;
-}
-
-async function askOrganizationName(console: Console): Promise<string> {
-  for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {
-    const answer = requireAnswer(
-      await console.textPrompt('Organization name (for example your team or company)'),
-    );
-    try {
-      return validateProjectName(answer, 'Organization name');
-    } catch (error) {
-      console.warn(error instanceof Error ? error.message : String(error));
-    }
-  }
-  throw new CommandFailedError('No valid organization name was entered.');
-}
-
 interface CreatedOrganization {
   key: string;
   name: string;
-}
-
-/**
- * Create the organization under the first free key: the slug of the name, then random suffixes.
- * Availability is checked first, and a 409 from the create call still retries, since a key can be
- * taken between the two requests (or by an organization the lookup cannot see).
- */
-async function createWithAvailableKey(
-  client: OrganizationsClient,
-  name: string,
-): Promise<CreatedOrganization> {
-  const base = deriveOrganizationKey(name);
-  for (let attempt = 0; attempt < MAX_KEY_ATTEMPTS; attempt++) {
-    const key = attempt === 0 ? base : withRandomSuffix(base);
-    const existing = await client.fetchOrganizationByKey(key);
-    if (existing.isOk() && existing.value) {
-      continue;
-    }
-
-    const created = await client.createOrganization(key, name);
-    if (created.isOk()) {
-      return created.value.organization;
-    }
-    const { error } = created;
-    if (error instanceof UnexpectedApiError && error.status === HTTP_CONFLICT) {
-      continue;
-    }
-    if (
-      error instanceof ForbiddenApiError ||
-      (error instanceof UnexpectedApiError && error.status === HTTP_NOT_FOUND)
-    ) {
-      logger.debug(`Organization creation unavailable: ${error.name}: ${error.message}`);
-      throw creationUnavailable(error);
-    }
-    throw new CommandFailedError(`Could not create organization '${key}': ${error.message}`, {
-      cause: error,
-    });
-  }
-  throw new CommandFailedError(`Could not find a free organization key for '${name}'.`, {
-    remediationHint: 'Try again with a different organization name.',
-  });
 }
 
 export interface PollOptions {
@@ -348,8 +282,111 @@ async function subscribeToFree(
   );
 }
 
-function billingUrl(baseUrl: string, organizationKey: string): string {
-  return `${baseUrl}/organizations/${encodeURIComponent(organizationKey)}/billing`;
+/** Asks, then creates the organization and subscribes it to the Free plan; declining creates nothing. */
+class CreateOrganizationStep implements InitStep<string | undefined> {
+  readonly ref = { step: 'create_org' } as const;
+
+  constructor(
+    private readonly console: Console,
+    private readonly client: Parameters<OnNoMemberships>[0],
+  ) {}
+
+  async run(): Promise<StepResult<string | undefined>> {
+    const { console, client } = this;
+
+    console.info("You're not in a SonarQube Cloud organization yet.");
+    console.print(
+      "An organization holds your projects and the people you work with. Most teams have one, and it's free.",
+    );
+    const accepted = requireAnswer(
+      await console.confirmPrompt('Create an organization now?', true),
+    );
+    if (!accepted) {
+      return declined(undefined, 'no_org');
+    }
+
+    const name = await this.askOrganizationName(console);
+    const organization = await console.withSpinner('Creating the organization', () =>
+      this.createWithAvailableKey(client, name),
+    );
+    await ensureFreeSubscription(client, organization, console);
+    console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
+    console.info(
+      `It's on the Free plan: up to 50,000 lines of private code, main branch only.\n     → What's included: ${this.billingUrl(client.baseUrl, organization.key)}`,
+    );
+    return success(organization.key);
+  }
+
+  private creationUnavailable(cause: Error): CommandFailedError {
+    return new CommandFailedError('Organization creation is not available for this account.', {
+      cause,
+      remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
+    });
+  }
+
+  private withRandomSuffix(base: string): string {
+    const trimmed = trimChars(base.slice(0, MAX_KEY_LENGTH - KEY_SUFFIX_BYTES * 2 - 1), '-');
+    return `${trimmed}-${randomBytes(KEY_SUFFIX_BYTES).toString('hex')}`;
+  }
+
+  private async askOrganizationName(console: Console): Promise<string> {
+    for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {
+      const answer = requireAnswer(
+        await console.textPrompt('Organization name (for example your team or company)'),
+      );
+      try {
+        return validateProjectName(answer, 'Organization name');
+      } catch (error) {
+        console.warn(error instanceof Error ? error.message : String(error));
+      }
+    }
+    throw new CommandFailedError('No valid organization name was entered.');
+  }
+
+  /**
+   * Create the organization under the first free key: the slug of the name, then random suffixes.
+   * Availability is checked first, and a 409 from the create call still retries, since a key can be
+   * taken between the two requests (or by an organization the lookup cannot see).
+   */
+  private async createWithAvailableKey(
+    client: OrganizationsClient,
+    name: string,
+  ): Promise<CreatedOrganization> {
+    const base = deriveOrganizationKey(name);
+    for (let attempt = 0; attempt < MAX_KEY_ATTEMPTS; attempt++) {
+      const key = attempt === 0 ? base : this.withRandomSuffix(base);
+      const existing = await client.fetchOrganizationByKey(key);
+      if (existing.isOk() && existing.value) {
+        continue;
+      }
+
+      const created = await client.createOrganization(key, name);
+      if (created.isOk()) {
+        return created.value.organization;
+      }
+      const { error } = created;
+      if (error instanceof UnexpectedApiError && error.status === HTTP_CONFLICT) {
+        continue;
+      }
+      if (
+        error instanceof ForbiddenApiError ||
+        (error instanceof UnexpectedApiError && error.status === HTTP_NOT_FOUND)
+      ) {
+        logger.debug(`Organization creation unavailable: ${error.name}: ${error.message}`);
+        throw this.creationUnavailable(error);
+      }
+      throw new CommandFailedError(`Could not create organization '${key}': ${error.message}`, {
+        cause: error,
+      });
+    }
+    throw new CommandFailedError(`Could not find a free organization key for '${name}'.`, {
+      remediationHint: 'Try again with a different organization name.',
+    });
+  }
+
+  private billingUrl(baseUrl: string, organizationKey: string): string {
+    return `${baseUrl}/organizations/${encodeURIComponent(organizationKey)}/billing`;
+  }
 }
 
 /**
@@ -360,38 +397,13 @@ function billingUrl(baseUrl: string, organizationKey: string): string {
  * that cannot prompt before the login). A decline throws `OrganizationCreationDeclined`. Anything
  * it throws ends the login, which revokes the token the login just minted.
  */
-export function createOrganizationHook(
-  console: Console,
-  telemetry?: InitTelemetryRecorder,
-): OnNoMemberships {
+export function createOrganizationHook(console: Console, steps: StepRunner): OnNoMemberships {
   return async (client) => {
-    // The sign-in itself succeeded: the account only lacks an organization.
-    if (telemetry && !telemetry.has('login')) {
-      telemetry.record('login', 'success');
-    }
-    telemetry?.begin('create_org');
-    console.info("You're not in a SonarQube Cloud organization yet.");
-    console.print(
-      "An organization holds your projects and the people you work with. Most teams have one, and it's free.",
-    );
-    const accepted = requireAnswer(
-      await console.confirmPrompt('Create an organization now?', true),
-    );
-    if (!accepted) {
-      telemetry?.record('create_org', 'declined');
+    const key = await steps.run(new CreateOrganizationStep(console, client));
+    // todo strange throw
+    if (key === undefined) {
       throw new OrganizationCreationDeclined();
     }
-
-    const name = await askOrganizationName(console);
-    const organization = await console.withSpinner('Creating the organization', () =>
-      createWithAvailableKey(client, name),
-    );
-    await ensureFreeSubscription(client, organization, console);
-    telemetry?.record('create_org', 'success');
-    console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
-    console.info(
-      `It's on the Free plan: up to 50,000 lines of private code, main branch only.\n     → What's included: ${billingUrl(client.baseUrl, organization.key)}`,
-    );
-    return organization.key;
+    return key;
   };
 }
