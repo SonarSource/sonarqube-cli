@@ -42,6 +42,7 @@ async function startServers(
     bindings?: Array<{ projectKey: string; repository: string; dopSettingId: string }>;
     hasProvisionProjects?: boolean;
     analyzedProjectKeys?: string[];
+    componentShowStatus?: number;
     branchFailureProjectIds?: number[];
   } = {},
 ): Promise<{ sqsServer: FakeSonarQubeServer; gitlabServer: FakeGitLabServer }> {
@@ -51,14 +52,17 @@ async function startServers(
   }
   const gitlabServer = await gitlabBuilder.start();
 
-  const sqsServer = await harness
+  const sqsBuilder = harness
     .newFakeServer()
     .withAuthToken('test-token')
     .withDopSettings(dopSettings(gitlabServer.baseUrl()))
     .withProjectBindings(opts.bindings ?? [])
     .withProvisionProjectsPermission(opts.hasProvisionProjects ?? true)
-    .withAnalyzedProjects(opts.analyzedProjectKeys ?? [])
-    .start();
+    .withAnalyzedProjects(opts.analyzedProjectKeys ?? []);
+  if (opts.componentShowStatus !== undefined) {
+    sqsBuilder.withComponentShowStatus(opts.componentShowStatus);
+  }
+  const sqsServer = await sqsBuilder.start();
 
   harness.withAuth(sqsServer.baseUrl(), 'test-token');
   return { sqsServer, gitlabServer };
@@ -285,6 +289,44 @@ describe('sonar admin onboard-ci gitlab', () => {
     });
   });
 
+  it.each([false, true])(
+    'skips repositories with multiple project keys (dry run: %s)',
+    async (dryRun) => {
+      const { gitlabServer } = await startServers(harness, {
+        gitlabProjects: [
+          {
+            id: 1,
+            name: 'sample',
+            path_with_namespace: `${GROUP}/sample`,
+            default_branch: 'main',
+            rootFiles: [],
+          },
+        ],
+        bindings: ['first', 'second'].map((projectKey) => ({
+          projectKey,
+          repository: '1',
+          dopSettingId: DOP_SETTING_ID,
+        })),
+      });
+      const result = await harness.run(
+        `admin onboard-ci gitlab --group ${GROUP}${dryRun ? ' --dry-run' : ''}`,
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('multiple SonarQube project keys');
+      const report = harness.cwd
+        .file(dryRun ? 'sonar-onboard-ci-report-dry.json' : 'sonar-onboard-ci-report.json')
+        .asJson();
+      expect(report[dryRun ? 'wouldSkip' : 'skipped']).toEqual([
+        { repo: `${GROUP}/sample`, reason: 'MULTIPLE_PROJECT_KEYS' },
+      ]);
+      expect(report[dryRun ? 'wouldOpenMr' : 'opened']).toEqual([]);
+      expect(report.failed).toEqual([]);
+      expect(gitlabServer.getRecordedRequests().every((request) => request.method === 'GET')).toBe(
+        true,
+      );
+    },
+  );
+
   describe('skip conditions', () => {
     it('skips repo when Jenkinsfile is present (OTHER_CI_DETECTED)', async () => {
       const { gitlabServer } = await startServers(harness, {
@@ -447,6 +489,13 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('MR already open');
       expect(gitlabServer.createdMrs).toHaveLength(0);
+      expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson().skipped).toEqual([
+        {
+          repo: `${GROUP}/open-mr-repo`,
+          reason: 'MR_ALREADY_OPEN',
+          mrUrl: 'http://localhost/mr/1',
+        },
+      ]);
     });
 
     it('preserves the branch when an MR opens after assessment', async () => {
@@ -477,6 +526,31 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(gitlabServer.createdBranches).toHaveLength(0);
       expect(gitlabServer.committedFiles).toHaveLength(0);
       expect(gitlabServer.createdMrs).toHaveLength(0);
+    });
+
+    it('fails without writes when a bound SonarQube project is missing', async () => {
+      const { gitlabServer } = await startServers(harness, {
+        gitlabProjects: [
+          {
+            id: 6,
+            name: 'missing-project',
+            path_with_namespace: `${GROUP}/missing-project`,
+            default_branch: 'main',
+          },
+        ],
+        bindings: [{ projectKey: 'missing-key', repository: '6', dopSettingId: DOP_SETTING_ID }],
+        componentShowStatus: 404,
+      });
+
+      const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "Bound SonarQube project 'missing-key' is missing or inaccessible.",
+      );
+      expect(gitlabServer.getRecordedRequests().every((request) => request.method === 'GET')).toBe(
+        true,
+      );
     });
 
     it('skips repo whose SonarQube project already has analyses (ALREADY_CONFIGURED)', async () => {
@@ -744,6 +818,7 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('DRY RUN');
       expect(result.stdout).toContain('would open MR');
+      expect(result.stdout).toContain('Would open 1 MRs · skip 1 · fail 0');
       expect(result.stdout).toContain('No changes were made');
       expect(gitlabServer.createdMrs).toHaveLength(0);
       expect(gitlabServer.committedFiles).toHaveLength(0);
@@ -1158,7 +1233,7 @@ describe('sonar admin onboard-ci gitlab', () => {
   });
 
   describe('happy path', () => {
-    it('opens an MR for a repo bound in SonarQube', async () => {
+    it('opens an MR when repeated bindings contain only one distinct project key', async () => {
       const { gitlabServer } = await startServers(harness, {
         gitlabProjects: [
           {
@@ -1170,6 +1245,7 @@ describe('sonar admin onboard-ci gitlab', () => {
           },
         ],
         bindings: [
+          { projectKey: 'mycompany_my-repo', repository: '60', dopSettingId: DOP_SETTING_ID },
           { projectKey: 'mycompany_my-repo', repository: '60', dopSettingId: DOP_SETTING_ID },
         ],
       });
@@ -1216,6 +1292,19 @@ describe('sonar admin onboard-ci gitlab', () => {
         branch: 'sonar/add-sonar-analysis-job',
       });
       expect(gitlabServer.createdMrs).toHaveLength(1);
+
+      const requestCount = gitlabServer.getRecordedRequests().length;
+      const rerun = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
+
+      expect(rerun.exitCode).toBe(0);
+      expect(rerun.stdout).toContain('MR already open');
+      expect(gitlabServer.createdMrs).toHaveLength(1);
+      expect(
+        gitlabServer
+          .getRecordedRequests()
+          .slice(requestCount)
+          .every((request) => request.method === 'GET'),
+      ).toBe(true);
     });
 
     it('handles a mix of repos: opens MRs, skips others, and prints summary', async () => {
@@ -1258,7 +1347,7 @@ describe('sonar admin onboard-ci gitlab', () => {
     });
 
     it('writes a report file', async () => {
-      await startServers(harness, {
+      const { gitlabServer } = await startServers(harness, {
         gitlabProjects: [
           {
             id: 64,
@@ -1281,8 +1370,13 @@ describe('sonar admin onboard-ci gitlab', () => {
       const report = harness.cwd.file('sonar-onboard-ci-report.json').asJson() as {
         opened: Array<{ repo: string; projectKey: string; mrUrl: string }>;
       };
-      expect(report.opened).toHaveLength(1);
-      expect(report.opened[0].repo).toBe(`${GROUP}/my-repo`);
+      expect(report.opened).toEqual([
+        {
+          repo: `${GROUP}/my-repo`,
+          projectKey: 'mycompany_my-repo',
+          mrUrl: gitlabServer.createdMrs[0].webUrl,
+        },
+      ]);
     });
 
     it('injects --scanner-property values into the generated CI script', async () => {

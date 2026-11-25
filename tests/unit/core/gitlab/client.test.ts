@@ -45,9 +45,13 @@ const TOKEN = 'glpat-test-token';
 describe('GitLabClient', () => {
   let client: GitLabClient;
   let fetchSpy: ReturnType<typeof spyOn>;
+  let retryNotices: string[];
 
   beforeEach(() => {
-    client = new GitLabClient(BASE_URL, TOKEN);
+    retryNotices = [];
+    client = new GitLabClient(BASE_URL, TOKEN, {
+      onRetry: (message) => retryNotices.push(message),
+    });
   });
 
   afterEach(() => {
@@ -345,7 +349,26 @@ describe('GitLabClient', () => {
       );
       const result = await client.getProjectCiConfigPath(1);
       expect(result).toBeNull();
+      expect(retryNotices).toEqual([
+        'GitLab rate limit reached.\nRetrying in 2 seconds (retry 1 of 5).',
+      ]);
       expect(fetchSpy.mock.calls).toHaveLength(2);
+    });
+
+    it('routes retries to the repository handler without replacing the default handler', async () => {
+      const scopedNotices: string[] = [];
+      const scopedClient = client.withRetryHandler((message) => scopedNotices.push(message));
+      fetchSpy = mockFetchSeq(
+        fakeResponse({}, { ok: false, status: 503 }),
+        fakeResponse({ ci_config_path: null }),
+        fakeResponse({}, { ok: false, status: 503 }),
+        fakeResponse({ ci_config_path: null }),
+      );
+      await scopedClient.getProjectCiConfigPath(1);
+      expect(scopedNotices).toHaveLength(1);
+      expect(retryNotices).toEqual([]);
+      await client.getProjectCiConfigPath(2);
+      expect(retryNotices).toEqual(scopedNotices);
     });
 
     it('uses DEFAULT_RETRY_AFTER_S when Retry-After is an HTTP-date (NaN)', async () => {
@@ -380,6 +403,9 @@ describe('GitLabClient', () => {
       );
       const result = await client.getProjectCiConfigPath(1);
       expect(result).toBeNull();
+      expect(retryNotices).toEqual([
+        'GitLab request failed with HTTP 503.\nRetrying in 2 seconds (retry 1 of 5).',
+      ]);
       expect(fetchSpy.mock.calls).toHaveLength(2);
     });
 
@@ -388,6 +414,7 @@ describe('GitLabClient', () => {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(client.createBranch(1, 'branch')).rejects.toThrow('GitLab API error 503');
       expect(fetchSpy.mock.calls).toHaveLength(1);
+      expect(retryNotices).toEqual([]);
     });
 
     it('does NOT retry createMergeRequest on 5xx', async () => {

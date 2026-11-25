@@ -288,7 +288,11 @@ export class FakeGitLabServerBuilder {
           if (project?.hasOpenSonarMr && sourceBranch === 'sonar/add-sonar-analysis-job') {
             return json([{ iid: 1, web_url: `http://localhost/mr/1`, state: 'opened' }]);
           }
-          return json([]);
+          return json(
+            createdMrs
+              .filter((mr) => mr.projectId === projectId && mr.sourceBranch === sourceBranch)
+              .map((mr) => ({ web_url: mr.webUrl, state: 'opened' })),
+          );
         }
 
         // POST /api/v4/projects/{id}/merge_requests

@@ -56,6 +56,17 @@ function newImportProgress(repos: string[], opts: { isTTY?: boolean; maxVisible?
 }
 
 describe('ConcurrentProgress — non-TTY', () => {
+  it('prints warnings immediately without rendering progress', () => {
+    const warnSpy = spyOn(term, 'warn').mockImplementation(() => {});
+    try {
+      const progress = newBaseProgress(ITEMS, { isTTY: false });
+      expect(captureStdout(() => progress.warn('Retrying in 60 seconds'))).toBe('');
+      expect(warnSpy).toHaveBeenCalledWith('Retrying in 60 seconds');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('writes nothing on start or during updates', () => {
     const progress = newBaseProgress(ITEMS, { isTTY: false });
     expect(captureStdout(() => progress.start())).toBe('');
@@ -98,6 +109,24 @@ describe('ConcurrentProgress — non-TTY', () => {
 });
 
 describe('ConcurrentProgress — TTY', () => {
+  it('keeps retry warnings above the redrawn progress block', () => {
+    const message = 'GitHub rate limit reached.\nRetrying in 60 seconds.';
+    const warnSpy = spyOn(term, 'warn').mockImplementation((message) => {
+      process.stdout.write(`${message}\n`);
+    });
+    try {
+      const progress = newBaseProgress(ITEMS, { isTTY: true });
+      const output = captureStdout(() => progress.warn(message));
+      const [beforeWarning, afterWarning] = output.split(message);
+      expect(beforeWarning).toContain('\u001b[0J');
+      expect(afterWarning).not.toContain('\u001b[0J');
+      expect(afterWarning).toContain('alpha');
+      expect(captureStdout(() => progress.update('alpha', 'done'))).toContain('\u001b[5A');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('renders one row per item plus a progress bar, updating in place', () => {
     const progress = newBaseProgress(ITEMS, { isTTY: true });
     const start = captureStdout(() => progress.start());

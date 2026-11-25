@@ -102,8 +102,8 @@ describe('CI onboarding Server bindings', () => {
     expect(setting).toEqual(GITHUB);
     expect(await bindings.getAllProjectBindings(setting.id).orThrow()).toEqual(
       new Map([
-        ['first-org/shared', 'First-Project'],
-        ['second-org/shared', 'second-project'],
+        ['first-org/shared', new Set(['First-Project'])],
+        ['second-org/shared', new Set(['second-project'])],
       ]),
     );
     expect(server.getRecordedRequests().every((request) => request.method === 'GET')).toBe(true);
