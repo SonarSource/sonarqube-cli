@@ -3,15 +3,6 @@ name: Harbor Benchmark
 on:
   workflow_dispatch:
     inputs:
-      agent:
-        description: Agent and model
-        type: choice
-        default: "claude-code : claude-sonnet-5-5"
-        options:
-          - "claude-code : claude-sonnet-5-5"
-          - "claude-code : claude-haiku-5-5"
-          - "codex : gpt-6.1-terra"
-          - all agents and models
       task_integrate_happy:
         description: "Task: integrate--happy"
         type: boolean
@@ -31,15 +22,16 @@ on:
       attempts:
         description: Attempts per task
         type: choice
-        default: "1"
+        default: "5"
         options:
-          - "1"
-          - "2"
-          - "3"
           - "5"
+          - "6"
+          - "7"
+          - "8"
+          - "9"
           - "10"
-      store-report:
-        description: Publish the release report and its dashboard on SIP (needs all the tasks, a run without this box only benchmarks)
+      reference:
+        description: Make this run the new reference run (CLI stable)
         type: boolean
         default: false
 
@@ -225,12 +217,16 @@ jobs:
         id: release-report
         if: ${{ !cancelled() && hashFiles('harbor-jobs/**') != '' }}
         shell: bash
+        env:
+          ATTEMPTS: ${{ inputs.attempts }}
+          REFERENCE: ${{ inputs.reference }}
         run: |
-          mkdir release-report
-          bun benchmarks/harbor/report/to-json.ts \
-            --cli-version "$(sonar --version)" --run-id "${GITHUB_RUN_ID}" --commit "${GITHUB_SHA}" \
-            --date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            harbor-jobs > "release-report/${GITHUB_RUN_ID}.json"
+          reference=()
+          if [ "${REFERENCE}" = "true" ]; then reference=(--reference); fi
+          bun benchmarks/harbor/report/run-json.ts \
+            --cli-version "$(sonar --version)" --run-id "${GITHUB_RUN_ID}" \
+            --date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --attempts "${ATTEMPTS}" "${reference[@]}" \
+            --out release-report harbor-jobs
 
       - name: Upload the release report
         id: release-report-upload
@@ -254,7 +250,7 @@ jobs:
     name: Publish the release report
     runs-on: sonar-xs
     needs: report
-    if: ${{ !cancelled() && inputs.store-report && needs.report.outputs.release-report == 'true' }}
+    if: ${{ !cancelled() && needs.report.outputs.release-report == 'true' }}
     permissions:
       id-token: write
       contents: read

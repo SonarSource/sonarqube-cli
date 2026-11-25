@@ -55,6 +55,7 @@ interface RunInfo {
   cliVersion: string;
   runId: string;
   date: string;
+  attempts: number;
   isReference: boolean;
 }
 
@@ -266,15 +267,19 @@ function writeRun(outDir: string, runDir: string, run: RunInfo): void {
 }
 
 function parseRun(values: Record<string, string | boolean | undefined>): RunInfo {
-  for (const flag of ['cli-version', 'run-id', 'date', 'out']) {
+  for (const flag of ['cli-version', 'run-id', 'date', 'attempts', 'out']) {
     if (!values[flag]) throw new Error(`Missing --${flag}`);
   }
   const date = values.date as string;
   if (Number.isNaN(Date.parse(date))) throw new Error(`--date is not a date: '${date}'`);
+  const attempts = Number(values.attempts);
+  if (!/^\d+$/.test(values.attempts as string) || attempts < 1)
+    throw new Error(`--attempts is not a positive integer: '${values.attempts}'`);
   return {
     cliVersion: values['cli-version'] as string,
     runId: values['run-id'] as string,
     date,
+    attempts,
     isReference: values.reference === true,
   };
 }
@@ -287,6 +292,7 @@ function main(): void {
       'cli-version': { type: 'string' },
       'run-id': { type: 'string' },
       date: { type: 'string' },
+      attempts: { type: 'string' },
       reference: { type: 'boolean' },
       out: { type: 'string' },
     },
