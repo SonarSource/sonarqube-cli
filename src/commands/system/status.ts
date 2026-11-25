@@ -593,7 +593,10 @@ interface StatusData {
 function runtimeRecommendations(
   containerRuntime: ContainerRuntimeHealth | null,
   startupError: string | null,
+  mcpConfigured: boolean,
+  tokenStatus: TokenCheckResult | null,
 ): string[] {
+  if (!mcpConfigured || tokenStatus === null || tokenStatus.status === 'invalid') return [];
   if (startupError) return [startupError];
   const message = runtimeHealthMessage(containerRuntime);
   return message ? [message] : [];
@@ -645,9 +648,9 @@ function buildRecommendations(
     recommendations.push(`Run '${integrateCmd}' to reinstall MCP configuration`);
   }
 
-  if (mcp.mcpConfigured && tokenStatus !== null && tokenStatus.status !== 'invalid') {
-    recommendations.push(...runtimeRecommendations(containerRuntime, startupError));
-  }
+  recommendations.push(
+    ...runtimeRecommendations(containerRuntime, startupError, mcp.mcpConfigured, tokenStatus),
+  );
 
   const seenHooksIntegrations = new Set<string>();
   for (const integration of integrations) {
