@@ -329,7 +329,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '-s, --server <server>',
-      'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
+      'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), SonarQube Cloud US (https://sonarqube.us), or SonarQube Cloud AU (https://sonarqube.au). Defaults to SonarQube Cloud EU.',
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
     .option('--with-token', 'Read an existing token from standard input')
