@@ -51,6 +51,12 @@ import type { ContainerRuntime, ContainerRuntimeDetection } from '../environment
 import type { RedactedUrl } from '../redacted-url.ts';
 import { removeJvmSecretsFile, writeJvmSecretsFile } from './mcp-jvm-secrets.ts';
 
+export function hostedMcpSetupHint(auth: ResolvedAuth): string {
+  return auth.connectionType === 'on-premise'
+    ? ' For SonarQube Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
+    : '';
+}
+
 export interface McpServerConfig {
   command: string;
   args: string[];

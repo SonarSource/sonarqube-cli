@@ -600,23 +600,40 @@ describe('run mcp transport selection', () => {
     await fixture.server.stop(true);
   });
 
-  it('forces the container without checking hosted health', async () => {
-    const result = await harness.run('run mcp --transport stdio');
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toBe('fallback-container\n');
-    expect(fixture.healthRequests).toBe(0);
-    expect(fixture.requests).toHaveLength(0);
-    expect(harness.cwd.file('docker.jsonl').asText()).toContain('run');
-  });
+  it.each(['flag', 'config'])(
+    'forces the container via %s without checking hosted health',
+    async (source) => {
+      if (source === 'config')
+        expect((await harness.run('config set mcp.transport stdio')).exitCode).toBe(0);
+      const result = await harness.run(source === 'flag' ? 'run mcp --transport stdio' : 'run mcp');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('fallback-container\n');
+      expect(fixture.healthRequests).toBe(0);
+      expect(fixture.requests).toHaveLength(0);
+      expect(harness.cwd.file('docker.jsonl').asText()).toContain('run');
+    },
+    15000,
+  );
 
-  it('fails without a container when forced HTTP is unavailable', async () => {
-    fixture.healthStatus = 404;
-    const result = await harness.runWithStdin('run mcp --transport http', line(INITIALIZE));
-    expect(result.exitCode).toBe(1);
-    expect(messages(result.stdout)[0]?.error?.message).toContain('health check returned HTTP 404');
-    expect(result.stdout).toContain('Hosted MCP unavailable');
-    expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
-  });
+  it.each(['flag', 'config'])(
+    'fails without a container when HTTP forced via %s is unavailable',
+    async (source) => {
+      if (source === 'config')
+        expect((await harness.run('config set mcp.transport http')).exitCode).toBe(0);
+      fixture.healthStatus = 404;
+      const result = await harness.runWithStdin(
+        source === 'flag' ? 'run mcp --transport http' : 'run mcp',
+        line(INITIALIZE),
+      );
+      expect(result.exitCode).toBe(1);
+      expect(messages(result.stdout)[0]?.error?.message).toContain(
+        'health check returned HTTP 404',
+      );
+      expect(result.stdout).toContain('Hosted MCP unavailable');
+      expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
+    },
+    15000,
+  );
 
   it('rejects an invalid transport before starting MCP', async () => {
     const result = await harness.run('run mcp --transport invalid');
@@ -625,6 +642,19 @@ describe('run mcp transport selection', () => {
     expect(fixture.healthRequests).toBe(0);
     expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
   });
+
+  it.each(['auto', 'http'])(
+    'explicit --transport %s overrides configured stdio',
+    async (transport) => {
+      expect((await harness.run('config set mcp.transport stdio')).exitCode).toBe(0);
+      const session = await fixture.connect(`run mcp --transport ${transport}`);
+      const result = await session.waitFinish();
+      expect(result.exitCode).toBe(0);
+      expect(fixture.healthRequests).toBe(1);
+      expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
+    },
+    15000,
+  );
 
   it.each([404, 503])('falls back on health HTTP %s', async (status) => {
     fixture.healthStatus = status;
