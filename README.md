@@ -148,24 +148,11 @@ sonar --version
 
 ### Step 2: Authenticate
 
-Connect to SonarQube Cloud EU (default):
-
 ```bash
 sonar auth login
+# Asks where to connect: SonarQube Cloud (EU, US or AU region) or a self-hosted SonarQube Server
 # Opens your browser to sign in to SonarQube and generates a user token
 # Returns to terminal when complete
-```
-
-For SonarQube Cloud US:
-
-```bash
-sonar auth login --server https://sonarqube.us
-```
-
-For self-hosted SonarQube Server:
-
-```bash
-sonar auth login --server https://sonarqube.mycompany.com
 ```
 
 **Verify authentication:**
@@ -186,7 +173,7 @@ Generate a token first: SonarQube → My Account → Security → Generate Token
 Then define the following environment variables before invoking `sonar` (use your runner's secret store in CI, or your preferred local mechanism — direnv, an untracked `.env` file,
 a password manager CLI, etc.):
 
-- SonarQube Cloud: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`
+- SonarQube Cloud: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_ORG`. These default to the EU region; for US or AU, also set `SONARQUBE_CLI_SERVER` to `https://sonarqube.us` or `https://sonarqube.au`
 - Self-hosted SonarQube Server: `SONARQUBE_CLI_TOKEN` + `SONARQUBE_CLI_SERVER`
 
 With those exported, any command works without further configuration:
@@ -456,6 +443,7 @@ For SonarQube Cloud, ensure you're using the correct region:
 
 - EU: `https://sonarcloud.io`
 - US: `https://sonarqube.us`
+- AU: `https://sonarqube.au`
 
 ---
 
