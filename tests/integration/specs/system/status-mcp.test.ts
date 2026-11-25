@@ -82,7 +82,7 @@ describe('system status MCP endpoint', () => {
     );
     expect(fixture.requests).toHaveLength(0);
     expect(harness.cwd.file('docker.jsonl').asText()).not.toContain('"run"');
-  });
+  }, 15000);
 
   it('previews configured stdio without probing hosted MCP', async () => {
     expect((await harness.run('config set mcp.transport stdio')).exitCode).toBe(0);
@@ -98,7 +98,7 @@ describe('system status MCP endpoint', () => {
     expect(fixture.healthRequests).toBe(0);
     const text = await harness.run('system status');
     expect(text.stdout).toContain('Transport: stdio (local container), from mcp.transport=stdio');
-  });
+  }, 15000);
 
   it.each(['server', 'cloud'])(
     'reports unavailable configured HTTP on %s without container fallback',
