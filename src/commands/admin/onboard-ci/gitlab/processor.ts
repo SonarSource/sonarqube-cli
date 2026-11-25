@@ -27,7 +27,8 @@ import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import { deleteBranchUnlessRequestOpen } from '../branch-guard.ts';
 import { hasSonarAnalysis } from '../ci-detection.ts';
-import type { OnboardCiSqsClient } from './sqs-api.ts';
+import { hasExistingProjectAnalysis } from '../shared.ts';
+import type { OnboardCiSqsClient } from '../sqs-api.ts';
 import {
   buildUpdatedCiYml,
   generateCiYml,
@@ -61,7 +62,7 @@ export interface ProcessRepoContext {
 }
 
 export type RepoClassification =
-  | { outcome: 'skip'; reason: SkipReason; message: string; mrUrl?: string }
+  | { outcome: 'skip'; reason: SkipReason; message: string; prUrl?: string }
   | {
       outcome: 'proceed';
       ciFilePath: string;
@@ -70,7 +71,7 @@ export type RepoClassification =
     };
 
 export type ExecuteResult =
-  | { outcome: 'opened'; projectKey: string; mrUrl: string }
+  | { outcome: 'opened'; projectKey: string; prUrl: string }
   | Extract<RepoClassification, { outcome: 'skip' }>;
 
 function isBranchAlreadyExistsError(err: unknown): boolean {
@@ -161,21 +162,29 @@ async function classifyNewRepo(
   return null;
 }
 
-export async function classifyRepo(
+export async function assessRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
-  bindingMap: Map<string, string>,
+  bindingMap: ReadonlyMap<string, ReadonlySet<string>>,
 ): Promise<RepoClassification> {
-  const existingProjectKey = bindingMap.get(String(repo.id));
-  if (!existingProjectKey) {
+  const projectKeys = bindingMap.get(String(repo.id));
+  if (!projectKeys?.size) {
     return {
       outcome: 'skip',
       reason: SkipReason.NotInSonarQube,
       message: 'skipped (not bound in SonarQube)',
     };
   }
+  if (projectKeys.size > 1) {
+    return {
+      outcome: 'skip',
+      reason: SkipReason.MultipleProjectKeys,
+      message: 'skipped (repository is bound to multiple SonarQube project keys)',
+    };
+  }
+  const [existingProjectKey] = projectKeys;
 
-  if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey).orThrow()) {
+  if (await hasExistingProjectAnalysis(ctx.sqs.components, existingProjectKey)) {
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,
@@ -210,7 +219,7 @@ export async function classifyRepo(
       outcome: 'skip',
       reason: SkipReason.MrAlreadyOpen,
       message: 'skipped (MR already open)',
-      mrUrl: openMrs[0].web_url,
+      prUrl: openMrs[0].web_url,
     };
   }
 
@@ -220,27 +229,31 @@ export async function classifyRepo(
 export async function executeRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
-  classification: Extract<RepoClassification, { outcome: 'proceed' }>,
+  bindingMap: ReadonlyMap<string, ReadonlySet<string>>,
 ): Promise<ExecuteResult> {
-  const { ciFilePath, existingCi, projectKey } = classification;
+  const assessment = await assessRepo(ctx, repo, bindingMap);
+  if (assessment.outcome !== 'proceed') {
+    return assessment;
+  }
+  const { ciFilePath, existingCi, projectKey } = assessment;
 
   try {
     await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
   } catch (err) {
     if (isBranchAlreadyExistsError(err)) {
-      const mrUrl = await deleteBranchUnlessRequestOpen({
+      const prUrl = await deleteBranchUnlessRequestOpen({
         getOpenRequestUrl: async () => {
           const openMrs = await ctx.gitlab.listOpenMergeRequests(repo.id, CI_BRANCH);
           return openMrs[0]?.web_url;
         },
         deleteBranch: () => ctx.gitlab.deleteBranch(repo.id, CI_BRANCH),
       });
-      if (mrUrl) {
+      if (prUrl) {
         return {
           outcome: 'skip',
           reason: SkipReason.MrAlreadyOpen,
           message: 'skipped (MR already open)',
-          mrUrl,
+          prUrl,
         };
       }
       await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
@@ -281,7 +294,7 @@ export async function executeRepo(
         ctx.options.triggerOn,
       );
 
-  const mrUrl = await ctx.gitlab.createMergeRequest(
+  const prUrl = await ctx.gitlab.createMergeRequest(
     repo.id,
     CI_BRANCH,
     repo.default_branch,
@@ -289,5 +302,5 @@ export async function executeRepo(
     mrDescription,
   );
 
-  return { outcome: 'opened', projectKey, mrUrl };
+  return { outcome: 'opened', projectKey, prUrl };
 }

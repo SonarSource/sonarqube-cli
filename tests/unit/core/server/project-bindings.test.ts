@@ -296,13 +296,13 @@ describe('ProjectBindingsClient', () => {
   });
 
   describe('getAllProjectBindings', () => {
-    it('returns a map of repository → projectKey for a single page', async () => {
+    it('returns project keys grouped by repository for a single page', async () => {
       fetchSpy = mockFetch({
         projectBindings: [{ projectKey: 'my-project', repository: '123' }],
         page: { total: 1, pageSize: 500, pageIndex: 1 },
       });
       const result = await client.getAllProjectBindings('dop-id').orThrow();
-      expect(result.get('123')).toBe('my-project');
+      expect(result.get('123')).toEqual(new Set(['my-project']));
       expect(result.size).toBe(1);
     });
 
@@ -334,7 +334,37 @@ describe('ProjectBindingsClient', () => {
         } as Response);
       const result = await client.getAllProjectBindings('dop-id').orThrow();
       expect(result.size).toBe(3);
-      expect(result.get('3')).toBe('p3');
+      expect(result.get('3')).toEqual(new Set(['p3']));
+    });
+
+    it('preserves distinct projects across pages and deduplicates repeated bindings', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          okJsonResponse({
+            projectBindings: [
+              { repository: 'Org/Repo', projectKey: 'first' },
+              { repository: 'org/other', projectKey: 'other' },
+            ],
+            page: { total: 4, pageSize: 2, pageIndex: 1 },
+          }),
+        )
+        .mockResolvedValueOnce(
+          okJsonResponse({
+            projectBindings: [
+              { repository: 'org/repo', projectKey: 'second' },
+              { repository: 'ORG/REPO', projectKey: 'first' },
+            ],
+            page: { total: 4, pageSize: 2, pageIndex: 2 },
+          }),
+        );
+      const result = await client.getAllProjectBindings('dop-id').orThrow();
+      expect(result).toEqual(
+        new Map([
+          ['org/repo', new Set(['first', 'second'])],
+          ['org/other', new Set(['other'])],
+        ]),
+      );
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
 
     it('passes dopSettingId as a query parameter', async () => {
