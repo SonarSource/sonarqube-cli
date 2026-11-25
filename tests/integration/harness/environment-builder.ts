@@ -76,8 +76,7 @@ import {
 } from './recording-stub.ts';
 
 export function resolveBinaryFixturePath(fixture: BinarySpec): string {
-  const { url } = resolveBinaryArtifact(fixture, detectPlatform());
-  const filename = url.split('/').at(-1)!;
+  const { filename } = resolveBinaryArtifact(fixture, detectPlatform());
   return join(DEPENDENCY_ARTIFACTS_DIR, filename);
 }
 

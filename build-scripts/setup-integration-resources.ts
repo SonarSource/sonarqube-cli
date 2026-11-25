@@ -61,10 +61,13 @@ for (const fixture of FIXTURES) {
 }
 
 async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
-  const { platform: artifactPlatform, url: downloadUrl } = resolveBinaryArtifact(fixture, platform);
+  const {
+    filename: downloadFilename,
+    platformKey,
+    url: downloadUrl,
+  } = resolveBinaryArtifact(fixture, platform);
   const signatureUrl = `${downloadUrl}.asc`;
   // Keep the original versioned filename so the fake binaries server can match requests exactly
-  const downloadFilename = downloadUrl.split('/').at(-1)!;
   const destPath = join(DEPENDENCY_ARTIFACTS_DIR, downloadFilename);
   const ascDestPath = join(DEPENDENCY_ARTIFACTS_DIR, `${downloadFilename}.asc`);
 
@@ -88,7 +91,7 @@ async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
     await verifyBinarySignature(
       fixture.name,
       destPath,
-      artifactPlatform,
+      platformKey,
       fixture.signatures,
       fixture.publicKey,
     );
