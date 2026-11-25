@@ -21,21 +21,16 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 
-interface StubResponse {
-  stdout?: string;
-  exitCode?: number;
-}
+import type { RecordingStubConfig } from '../harness/recording-stub.ts';
 
-interface StubConfig {
-  invocationsFile: string;
-  delegate?: string;
-  responses?: Record<string, StubResponse>;
-  fallback?: StubResponse;
-}
-
-const config = JSON.parse(readFileSync(`${process.execPath}.stub.json`, 'utf-8')) as StubConfig;
+const config = JSON.parse(
+  readFileSync(`${process.execPath}.stub.json`, 'utf-8'),
+) as RecordingStubConfig;
 const args = process.argv.slice(2);
-appendFileSync(config.invocationsFile, JSON.stringify({ argv: args }) + '\n');
+const env = config.captureEnv?.length
+  ? Object.fromEntries(config.captureEnv.map((key) => [key, process.env[key]]))
+  : undefined;
+appendFileSync(config.invocationsFile, JSON.stringify({ argv: args, env }) + '\n');
 
 if (config.delegate) {
   const result = spawnSync(config.delegate, args, { stdio: 'inherit' });
@@ -43,5 +38,7 @@ if (config.delegate) {
 }
 
 const response = config.responses?.[args[0] ?? ''] ?? config.fallback ?? {};
+if (response.delayMs) await Bun.sleep(response.delayMs);
 if (response.stdout) process.stdout.write(response.stdout);
+if (response.stderr) process.stderr.write(response.stderr);
 process.exit(response.exitCode ?? 0);
