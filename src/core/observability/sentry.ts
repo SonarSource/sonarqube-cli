@@ -30,6 +30,15 @@ import { getOrCreateUserId } from '@/core/telemetry/user.ts';
 
 import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from '../config-constants.ts';
 
+const UNSUPPORTED_BUN_CHANNEL_INTEGRATIONS = new Set([
+  'Express',
+  'Fastify',
+  'Hapi',
+  'Hono',
+  'Koa',
+  'Nitro',
+]);
+
 /**
  * Initialize Sentry if the user has opted in and egress is production.
  *
@@ -44,6 +53,9 @@ export function initSentry(): void {
     dsn: SENTRY_DSN,
     environment,
     release: process.env.SONARQUBE_CLI_VERSION,
+    // The CLI does not host web frameworks, and Bun cannot inject their diagnostics channels.
+    integrations: (integrations) =>
+      integrations.filter(({ name }) => !UNSUPPORTED_BUN_CHANNEL_INTEGRATIONS.has(name)),
     dataCollection: {
       userInfo: false,
       cookies: false,
