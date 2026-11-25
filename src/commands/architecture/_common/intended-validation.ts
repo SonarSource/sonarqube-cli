@@ -261,9 +261,11 @@ function parseConstraints(value: unknown, context: GroupContext): IntendedConstr
       return [];
     }
     const { from, to } = raw;
-    const endpointProblems = [from, to].flatMap((endpoint) => endpointProblem(endpoint, context));
-    problems.push(...endpointProblems);
-    if (endpointProblems.length === 0 && parentKey(from) !== parentKey(to))
+    const endpointReasons = [from, to]
+      .map((endpoint) => invalidEndpointReason(endpoint, context))
+      .filter((reason) => reason !== undefined);
+    problems.push(...endpointReasons);
+    if (endpointReasons.length === 0 && parentKey(from) !== parentKey(to))
       problems.push(`The ${language} constraint ${from} -> ${to} must link sibling groups.`);
     if (from === to) problems.push(`The ${language} constraint ${from} -> ${to} refers to itself.`);
     const pair = JSON.stringify([from, to]);
@@ -276,17 +278,15 @@ function parseConstraints(value: unknown, context: GroupContext): IntendedConstr
 }
 
 // The public API resolves endpoints as exact group keys and rejects children of imported patterns.
-function endpointProblem(endpoint: string, context: GroupContext): string[] {
+function invalidEndpointReason(endpoint: string, context: GroupContext): string | undefined {
   const { language } = context;
   const imported = context.importedKeys.find((key) =>
     endpoint.startsWith(`${key}${GROUP_KEY_SEPARATOR}`),
   );
   if (imported !== undefined)
-    return [
-      `The ${language} constraint endpoint "${endpoint}" is inside the imported pattern of "${imported}"; name "${imported}" instead.`,
-    ];
-  if (context.endpointCounts.get(endpoint) === 1) return [];
-  return [`The ${language} constraint endpoint "${endpoint}" does not name a unique group.`];
+    return `The ${language} constraint endpoint "${endpoint}" is inside the imported pattern of "${imported}"; name "${imported}" instead.`;
+  if (context.endpointCounts.get(endpoint) === 1) return undefined;
+  return `The ${language} constraint endpoint "${endpoint}" does not name a unique group.`;
 }
 
 function parentKey(key: string): string {
