@@ -190,7 +190,7 @@ import {
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
-import { runMcp } from './run/mcp.ts';
+import { type McpRunOptions, runMcp } from './run/mcp.ts';
 import { stats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import {
@@ -1136,24 +1136,27 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // Hidden command for running MCP server. Connects to hosted MCP or spawns an MCP Docker container and proxies stdio for MCP transport.
   runCommand
     .command('mcp')
-    .description('Run the SonarQube MCP server (stdio transport, for use in agent MCP configs)')
+    .description('Run the SonarQube MCP server for an agent (always connected over stdio)')
+    .addOption(
+      new SonarOption(
+        '--transport <transport>',
+        'MCP backend: stdio (container), http (hosted), or auto',
+      )
+        .choices(['stdio', 'http', 'auto'])
+        .default('auto'),
+    )
     .option('--debug', 'Enable debug logging in the MCP server container')
     .option('--read-only', 'Start the MCP server in read-only mode')
     .option(
       '--toolsets <toolsets>',
       'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,vortex,portfolios)',
     )
-    .option('-p, --project <project>', 'Container fallback project key (overrides auto-discovery)')
+    .option('-p, --project <project>', 'Container project key (overrides auto-discovery)')
     .addHelpText(
       `after`,
-      `Uses hosted MCP when available, otherwise a local container.\n--project applies only to the container fallback; hosted tools accept project keys per call.\n${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
+      `auto prefers hosted MCP with container fallback. stdio forces a container. http requires hosted MCP.\n--project applies only to container mode and is ignored in hosted mode. For hosted tools, supply the project key in tool call arguments.\n${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
     )
-    .anonymousAction(
-      (
-        ctx,
-        options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string },
-      ) => runMcp(ctx, options),
-    );
+    .anonymousAction((ctx, options: McpRunOptions) => runMcp(ctx, options));
 
   // Hidden callback command — internal handlers for agent and git hooks.
   // Shell hook scripts call `sonar hook <event>` to delegate all business logic to TypeScript.
