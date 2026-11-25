@@ -247,7 +247,7 @@ jobs:
           exit 1
 
   publish:
-    name: Publish the release report
+    name: Publish the Harbor site
     runs-on: sonar-xs
     needs: report
     if: ${{ !cancelled() && needs.report.outputs.release-report == 'true' }}
@@ -283,23 +283,20 @@ jobs:
           name: release-report
           path: release-report
 
-      - name: Build the page from the published releases and this one
+      - name: Build the site from the published runs and this one
         shell: bash
         env:
           SIP_PLATFORM_TOKEN: ${{ secrets.SIP_PLATFORM_TOKEN }}
         run: |
-          mkdir sip-page
-          bash benchmarks/harbor/report/sip.sh pull published.json
-          jq --slurpfile new "release-report/${GITHUB_RUN_ID}.json" \
-            '[.[] | select(.release.runId != $new[0].release.runId)] + $new' published.json > sip-page/data.json
-          bun benchmarks/harbor/report/dashboard.ts sip-page/data.json > sip-page/index.html
+          bash benchmarks/harbor/report/sip.sh pull published
+          bun benchmarks/harbor/report/build-site.ts published release-report sip-site
 
-      - name: Publish the page on SIP
+      - name: Publish the site on SIP
         shell: bash
         env:
           SIP_PLATFORM_TOKEN: ${{ secrets.SIP_PLATFORM_TOKEN }}
-        run: bash benchmarks/harbor/report/sip.sh push sip-page
+        run: bash benchmarks/harbor/report/sip.sh push sip-site
 
-      - name: Link the dashboard in the run summary
+      - name: Link the site in the run summary
         shell: bash
-        run: echo "[Release dashboard on SIP](https://internal.sip.sonarsource.io/apps/${SIP_APP_ID}/)" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "[Harbor site on SIP](https://internal.sip.sonarsource.io/apps/${SIP_APP_ID}/)" >> "$GITHUB_STEP_SUMMARY"
