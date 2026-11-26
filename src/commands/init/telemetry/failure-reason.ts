@@ -29,6 +29,7 @@ import {
 import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 
 import { RepositoryInOtherOrganizationError } from '../steps/detect.ts';
+import { NoProjectAvailableError } from '../steps/no-project.ts';
 import { OrganizationCreationDeclined } from '../steps/organization.ts';
 import type { InitFailureReason } from './init-telemetry.ts';
 
@@ -49,6 +50,7 @@ export function classifyInitFailure(
 function reasonOf(error: Error): InitFailureReason | undefined {
   if (error instanceof CancelledByUserError) return 'cancelled';
   if (error instanceof OrganizationCreationDeclined) return 'no_org';
+  if (error instanceof NoProjectAvailableError) return 'no_project_available';
   if (
     error instanceof RepositoryInOtherOrganizationError ||
     error instanceof ProjectOrganizationError

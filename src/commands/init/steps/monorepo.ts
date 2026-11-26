@@ -201,11 +201,16 @@ async function mapExistingRoot(
  * Nothing creates a project without binding, so a root left without one fails with how to map one.
  * `--bind` is suggested only when it could create the root's project.
  */
-function noProjectForRoot(path: string, bindable: boolean): MonorepoRootResult {
+function noProjectForRoot(
+  path: string,
+  bindable: boolean,
+  failure: InitFailureReason = bindable ? 'cancelled' : 'no_project_available',
+): MonorepoRootResult {
   const bind = bindable ? ', or use --bind' : '';
   return {
     path,
     kind: 'failed',
+    failure,
     reason: `No project was linked or created: creating one without repository binding is not supported. Name an existing project with --root ${path}=<project key>${bind}.`,
   };
 }
@@ -246,7 +251,7 @@ async function offerGeneratedProject(
     };
   }
   // The project exists, which `--bind` refuses to touch.
-  return noProjectForRoot(path, false);
+  return noProjectForRoot(path, false, 'cancelled');
 }
 
 function onboardSelectedRoot(
@@ -275,6 +280,7 @@ function onboardSelectedRoot(
             path: root.path,
             kind: 'failed',
             reason: `Project '${root.mapping.projectKey}' does not exist in ${deps.auth.orgKey ?? 'the active organization'}, and --link never creates one.`,
+            failure: 'no_project_available',
           })
         : Promise.resolve(noProjectForRoot(root.path, canBind(root, deps)));
     case 'other-org': {

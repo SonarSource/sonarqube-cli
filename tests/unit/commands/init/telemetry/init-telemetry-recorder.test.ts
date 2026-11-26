@@ -206,7 +206,7 @@ describe('InitTelemetryRecorder', () => {
     const [project] = recorder.setProjects(['bound_new']);
     project.record('project_bind', 'declined');
     project.record('create_project', 'declined');
-    recorder.stopAtDeclined();
+    expect(recorder.stopAtDeclined()).toBe(true);
 
     const { run, projects } = await emit(recorder);
 
@@ -224,7 +224,7 @@ describe('InitTelemetryRecorder', () => {
     const [project] = recorder.setProjects(['no_project']);
     project.record('project_bind', 'skipped');
     project.record('link', 'skipped');
-    recorder.stopAtDeclined();
+    expect(recorder.stopAtDeclined()).toBe(false);
 
     const { run, projects } = await emit(recorder);
 

@@ -31,10 +31,18 @@ export type InitStepId = RunStepId | ProjectStepId;
 export type InitStepOutcome = 'success' | 'already_done' | 'skipped' | 'declined' | 'failed';
 
 export type InitFailureReason =
-  'auth' | 'no_org' | 'other_org' | 'network' | 'permission' | 'cancelled' | 'unknown';
+  | 'auth'
+  | 'no_org'
+  | 'other_org'
+  | 'network'
+  | 'permission'
+  | 'cancelled'
+  | 'unknown'
+  | 'no_project_available';
 /** Organization problems end the run before any project is attempted. */
 export type ProjectFailureReason = Exclude<InitFailureReason, 'no_org' | 'other_org'>;
 
+/** `no_project` means no project was linked or created for this root, not that discovery succeeded. */
 export type InitPathId = 'already_done' | 'link_existing' | 'bound_new' | 'no_project';
 
 export type InitRemoteHost = 'github' | 'gitlab' | 'azure_devops' | 'bitbucket' | 'other';

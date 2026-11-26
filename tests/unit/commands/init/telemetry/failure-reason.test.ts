@@ -22,11 +22,16 @@ import { describe, expect, it } from 'bun:test';
 
 import { OnboardingCancelledError } from '@/commands/init/answer.ts';
 import { RepositoryInOtherOrganizationError } from '@/commands/init/steps/detect.ts';
+import { NoProjectAvailableError } from '@/commands/init/steps/no-project.ts';
 import { OrganizationCreationDeclined } from '@/commands/init/steps/organization.ts';
 import { classifyInitFailure } from '@/commands/init/telemetry/failure-reason.ts';
 import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
 import { ProjectSelectionCancelledError } from '@/commands/link/choose-project.ts';
-import { CancelledByUserError, CommandFailedError } from '@/core/commands/command-error.ts';
+import {
+  CancelledByUserError,
+  CommandFailedError,
+  InvalidOptionError,
+} from '@/core/commands/command-error.ts';
 import { NetworkConfigError, ProjectOrganizationError } from '@/core/errors.ts';
 import {
   AccessDeniedError,
@@ -80,6 +85,15 @@ describe('classifyInitFailure()', () => {
 
   it('classifies a declined organization creation as no_org', () => {
     expect(classifyInitFailure(new OrganizationCreationDeclined())).toBe('no_org');
+  });
+
+  it('classifies confirmed absence of a usable project as no_project_available', () => {
+    const error = new NoProjectAvailableError(
+      new InvalidOptionError('No project', 'Pass --link <key>.'),
+    );
+    expect(classifyInitFailure(error)).toBe('no_project_available');
+    expect(error.exitCode).toBe(2);
+    expect(error.remediationHint).toBe('Pass --link <key>.');
   });
 
   it('follows the cause chain of a wrapping error', () => {
