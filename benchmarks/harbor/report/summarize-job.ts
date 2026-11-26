@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { TASKS_PAGE_URL, taskTitle } from './tasks.ts';
 import { lastSegment, readJson } from './read-json.ts';
+import { trialPlugin } from './agent-plugin.ts';
 
 interface TrialResult {
   task_name: string;
@@ -24,15 +25,6 @@ interface FinalMetrics {
 type Status = 'PASS' | 'FAIL' | 'ERROR' | 'LEAK';
 
 const LEAK_MARKER_FILE = 'secrets-leak.json';
-const PLUGIN_MARKER_FILE = join('agent', 'sonarqube-agent-plugin.json');
-const CLAUDE_OUTPUT_FILE = join('agent', 'claude-code.txt');
-const PLUGIN_NAME = 'sonarqube';
-
-interface PluginMarker {
-  installed?: boolean;
-  ref?: string;
-  version?: string;
-}
 
 interface Row {
   label: string;
@@ -63,39 +55,6 @@ function statusOf(trial: TrialResult): Status {
   const reward = trial.verifier_result?.rewards?.reward;
   if (trial.exception_info || reward === undefined) return 'ERROR';
   return reward >= 1 ? 'PASS' : 'FAIL';
-}
-
-function claudeInitPlugins(trialDir: string): string[] | null {
-  const outputPath = join(trialDir, CLAUDE_OUTPUT_FILE);
-  if (!existsSync(outputPath)) return null;
-  for (const line of readFileSync(outputPath, 'utf8').split('\n')) {
-    if (!line.startsWith('{')) continue;
-    try {
-      const event = JSON.parse(line) as {
-        type?: string;
-        subtype?: string;
-        plugins?: { name?: string }[];
-      };
-      if (event.type === 'system' && event.subtype === 'init')
-        return (event.plugins ?? []).map((plugin) => plugin.name ?? '');
-    } catch {
-      // Claude Code also writes plain text lines to this file.
-    }
-  }
-  return null;
-}
-
-function pluginOf(
-  trialDir: string,
-  agent: string | null,
-): { plugin: string | null; loaded: boolean } {
-  const marker = readJson<PluginMarker>(join(trialDir, PLUGIN_MARKER_FILE));
-  if (!marker) return { plugin: null, loaded: true };
-  if (!marker.installed) return { plugin: 'without', loaded: true };
-  // The ref is written before the install, so a failed install groups with its variant.
-  const plugin = `with ${marker.ref || marker.version || ''}`.trim();
-  const plugins = agent === 'claude-code' ? claudeInitPlugins(trialDir) : null;
-  return { plugin, loaded: plugins === null || plugins.includes(PLUGIN_NAME) };
 }
 
 function errorRow(
@@ -135,7 +94,7 @@ function crashedTrialRow(label: string, trialDir: string, trialName: string): Ro
     suffixStart > 0 ? trialName.slice(0, suffixStart) : trialName,
     agent,
     modelName ? lastSegment(modelName) : null,
-    pluginOf(trialDir, agent).plugin,
+    trialPlugin(trialDir, agent).plugin,
   );
 }
 
@@ -147,7 +106,7 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   );
   const metrics = trajectory?.final_metrics;
   const agent = trial.agent_info?.name ?? null;
-  const { plugin, loaded } = pluginOf(trialDir, agent);
+  const { plugin, loaded } = trialPlugin(trialDir, agent);
   return {
     label,
     trialName,
