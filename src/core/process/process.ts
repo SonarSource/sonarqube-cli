@@ -49,6 +49,10 @@ export interface SpawnOptions {
    * (process group via `detached: true` on Unix; `taskkill /T /F` on Windows).
    */
   killProcessTree?: boolean;
+  /** Receives each decoded stdout chunk as it arrives, in addition to the captured `stdout`. */
+  onStdout?: (text: string) => void;
+  /** Receives each decoded stderr chunk as it arrives, in addition to the captured `stderr`. */
+  onStderr?: (text: string) => void;
 }
 
 type KillFn = (signal?: NodeJS.Signals) => void;
@@ -384,6 +388,7 @@ async function spawnProcess(
       proc.stdout.on('data', (data: Buffer) => {
         const text = stdoutDecoder.write(data);
         stdout += text;
+        options.onStdout?.(text);
       });
     }
 
@@ -391,6 +396,7 @@ async function spawnProcess(
       proc.stderr.on('data', (data: Buffer) => {
         const text = stderrDecoder.write(data);
         stderr += text;
+        options.onStderr?.(text);
       });
     }
 
