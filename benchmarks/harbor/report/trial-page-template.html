@@ -125,7 +125,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
 <div class="top-bar"><b>Harbor benchmark</b><a href="./">Home</a><a href="evolution.html">Evolution</a><a href="task.html">Tasks</a></div>
 <div class="wrap"><main id="main"><h1>Loading</h1></main></div>
 <script>
-const META = JSON.parse(decodeURIComponent('__TRIAL_META__'));
+const TASKS = new Map();
 const SAFE = /^[\w.-]+$/;
 const PREVIEW_LENGTH = 140;
 const SECONDS_PER_MINUTE = 60;
@@ -240,10 +240,10 @@ function stepNode(step, id, number, tag) {
   return el('li', { class: 'step', id: 'step-' + id }, [el('span', { class: 'n' + (tag === 'Task' ? ' small' : ''), text: String(number) }), body]);
 }
 
-function checkItem(check) {
+function checkItem(trial, check) {
   return el('li', { class: check.passed ? 'ok' : 'ko' }, [
     check.passed ? icon('good') : null,
-    el('span', { text: META.checks[check.name] || check.name }),
+    el('span', { text: TASKS.get(trial.task)?.checks.find((item) => item.key === check.name)?.text || check.name }),
     el('span', { class: 'lab', text: check.passed ? 'Met' : 'Not met' }),
   ]);
 }
@@ -256,10 +256,10 @@ function checksNode(trial) {
       el('span', { class: 'eyebrow', text: missed.length ? 'What failed' : 'What was checked' }),
       el('span', { class: 'pill', text: met.length + ' of ' + trial.checks.length + ' met' }),
     ]),
-    missed.length ? el('ul', { class: 'check-list' }, missed.map(checkItem)) : null,
+    missed.length ? el('ul', { class: 'check-list' }, missed.map((check) => checkItem(trial, check))) : null,
     met.length ? el('details', { class: 'met-fold' }, [
       el('summary', { text: missed.length ? 'Show the ' + plural(met.length, 'check') + ' that passed' : 'Show the ' + plural(met.length, 'check') }),
-      el('ul', { class: 'check-list' }, met.map(checkItem)),
+      el('ul', { class: 'check-list' }, met.map((check) => checkItem(trial, check))),
     ]) : null,
   ]);
 }
@@ -332,7 +332,7 @@ function technicalDetails(trial, summary, run) {
 function page(trial, summary, run, runId) {
   const siblings = run.trials.filter((item) => item.task === trial.task);
   const position = siblings.findIndex((item) => item.id === trial.id) + 1;
-  const title = META.titles[trial.task];
+  const title = TASKS.get(trial.task)?.question;
   const runLink = (extra) => el('a', { class: 'back' + extra, href: 'run.html?run=' + encodeURIComponent(runId), text: '← Back to the run (CLI ' + run.run.cliVersion + ')' });
   return [
     runLink(''),
@@ -357,7 +357,8 @@ async function main() {
   const runId = params.get('run') ?? '';
   const trialId = params.get('trial') ?? '';
   if (!SAFE.test(runId) || !SAFE.test(trialId)) throw new Error('This page needs ?run=<run id>&trial=<trial id>.');
-  const [run, trial] = await Promise.all([fetchJson(`runs/${runId}/run.json`), fetchJson(`runs/${runId}/trials/${trialId}.json`)]);
+  const [run, trial, tasks] = await Promise.all([fetchJson(`runs/${runId}/run.json`), fetchJson(`runs/${runId}/trials/${trialId}.json`), fetchJson('tasks.json')]);
+  tasks.tasks.forEach((task) => TASKS.set(task.id, task));
   const summary = run.trials.find((item) => item.id === trialId);
   if (!summary) throw new Error(`Trial ${trialId} is not listed in runs/${runId}/run.json`);
   document.getElementById('main').replaceChildren(...page(trial, summary, run, runId).filter(Boolean));

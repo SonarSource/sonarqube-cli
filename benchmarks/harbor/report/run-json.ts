@@ -161,14 +161,14 @@ function checksOf(result: TrialResult): TrialDetail['checks'] {
     .map(([name, value]) => ({ name, passed: value >= 1 }));
 }
 
-function stoppedTrial(id: string, config: TrialConfig | null): Trial {
+function stoppedTrialTask(id: string, path: string | null | undefined): string {
+  if (path) return lastSegment(path.replace(/\/+$/, ''));
   const suffixStart = id.lastIndexOf('__');
-  const path = config?.task?.path;
-  const task = path
-    ? lastSegment(path.replace(/\/+$/, ''))
-    : suffixStart > 0
-      ? id.slice(0, suffixStart)
-      : id;
+  return suffixStart > 0 ? id.slice(0, suffixStart) : id;
+}
+
+function stoppedTrial(id: string, config: TrialConfig | null): Trial {
+  const task = stoppedTrialTask(id, config?.task?.path);
   const model = config?.agent?.model_name;
   return {
     summary: {

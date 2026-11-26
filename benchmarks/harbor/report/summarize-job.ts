@@ -1,13 +1,15 @@
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { taskTitle } from './tasks.ts';
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { lastSegment, readJson } from './read-json.ts';
+import { readTaskDescriptions } from './task-descriptions.ts';
+
+const TASKS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'tasks');
+const QUESTIONS = new Map(readTaskDescriptions(TASKS_DIR).map((task) => [task.id, task.question]));
 
 interface TrialResult {
   task_name: string;
   agent_info: { name?: string; model_info?: { name?: string } } | null;
-  started_at: string | null;
-  finished_at: string | null;
   exception_info: { exception_type?: string } | null;
   verifier_result: { rewards?: { reward?: number } } | null;
   agent_execution: { started_at: string | null; finished_at: string | null } | null;
@@ -21,13 +23,10 @@ interface FinalMetrics {
   total_steps?: number;
 }
 
-type Status = 'PASS' | 'FAIL' | 'ERROR' | 'LEAK';
-
-const LEAK_MARKER_FILE = 'secrets-leak.json';
+type Status = 'PASS' | 'FAIL' | 'ERROR';
 
 interface Row {
   label: string;
-  trialName: string | null;
   task: string;
   agent: string | null;
   model: string | null;
@@ -57,7 +56,6 @@ function statusOf(trial: TrialResult): Status {
 function errorRow(label: string, task: string, agent: string | null, model: string | null): Row {
   return {
     label,
-    trialName: null,
     task,
     agent,
     model,
@@ -94,7 +92,6 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   const metrics = trajectory?.final_metrics;
   return {
     label,
-    trialName,
     task: lastSegment(trial.task_name),
     agent: trial.agent_info?.name ?? null,
     model: trial.agent_info?.model_info?.name ?? null,
@@ -111,25 +108,11 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   };
 }
 
-function leakedRow(row: Row): Row {
-  return { ...row, status: 'LEAK' };
-}
-
 function rowsFor(label: string, jobDir: string): Row[] {
   const rows = readdirSync(jobDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => {
-      const trialDir = join(jobDir, entry.name);
-      const row = rowFor(label, trialDir, entry.name);
-      return existsSync(join(trialDir, LEAK_MARKER_FILE)) ? leakedRow(row) : row;
-    });
-  if (existsSync(join(jobDir, LEAK_MARKER_FILE)))
-    rows.push(leakedRow(errorRow(label, 'job files', null, null)));
+    .map((entry) => rowFor(label, join(jobDir, entry.name), entry.name));
   return rows.length > 0 ? rows : [errorRow(label, 'no trials', null, null)];
-}
-
-function cell(value: number | null, format: (n: number) => string = String): string {
-  return value === null ? '-' : format(value);
 }
 
 const PASSED_ICON = '✅';
@@ -139,7 +122,6 @@ const STATUS_ICON: Record<Status, string> = {
   PASS: PASSED_ICON,
   FAIL: FAILED_ICON,
   ERROR: '⚠️',
-  LEAK: '🚨',
 };
 
 function present(value: number | null, format: (n: number) => string): string | null {
@@ -256,7 +238,7 @@ function renderTaskSection(group: Row[]): string[] {
   return [
     ...hardBreaks([
       indented(1, `\`${first.task}\``),
-      indented(2, taskTitle(first.task)),
+      indented(2, QUESTIONS.get(first.task) ?? first.task),
       indented(2, figures),
     ]),
     '',
@@ -315,23 +297,16 @@ function renderAgentSections(rows: Row[]): string[] {
     .flatMap(([, sectionRows]) => renderAgentSection(sectionRows));
 }
 
-function renderIntro(): string[] {
-  return [
-    'Each trial is one attempt by an AI coding agent at a task. An automatic check decides pass or fail.',
-    '',
-  ];
-}
-
 function renderReport(rows: Row[]): string {
   const passed = rows.filter((row) => row.status === 'PASS').length;
   const lines = [
     '## Harbor benchmark',
     '',
-    ...renderIntro(),
-    `${passed === rows.length ? PASSED_ICON : FAILED_ICON} ${passed} of ${plural(rows.length, 'trial')} passed, ${cell(
-      total(rows.map((row) => row.costUsd)),
-      (n) => `$${n.toFixed(4)}`,
-    )} in total`,
+    'Each trial is one attempt by an AI coding agent at a task. An automatic check decides pass or fail.',
+    '',
+    `${passed === rows.length ? PASSED_ICON : FAILED_ICON} ${passed} of ${plural(rows.length, 'trial')} passed, ${
+      present(total(rows.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`) ?? '-'
+    } in total`,
     '',
     ...renderAgentSections(rows),
   ];

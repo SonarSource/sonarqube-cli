@@ -4,18 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { renderHomePage } from './home-page.ts';
 import { readJson } from './read-json.ts';
-import { renderRunPage, renderTrialPage } from './run-page.ts';
 import { readTaskDescriptions, type TaskDescription } from './task-descriptions.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TASKS_DIR = join(HERE, '..', 'tasks');
 const TASK_PAGE_TEMPLATE = join(HERE, 'task-page-template.html');
+const RUN_PAGE_TEMPLATE = join(HERE, 'run-page-template.html');
+const TRIAL_PAGE_TEMPLATE = join(HERE, 'trial-page-template.html');
+const EVOLUTION_TEMPLATE = join(HERE, 'evolution-page-template.html');
 const NOT_CHECKS = new Set(['trajectory_present', 'trajectory_ok']);
 const SCHEMA_VERSION = 2;
-const EVOLUTION_TEMPLATE = join(
-  dirname(fileURLToPath(import.meta.url)),
-  'evolution-page-template.html',
-);
 const MAX_RECENT_RUNS = 10;
 const SAFE_ID = /^[\w.-]+$/;
 const REDACTED = '[redacted]';
@@ -202,8 +200,8 @@ function build(publishedDir: string, newRunDir: string, outDir: string): void {
         : join(publishedDir, 'references', `${id}.json`);
     cpSync(source, join(outDir, 'references', `${id}.json`));
   }
-  writeFileSync(join(outDir, 'run.html'), renderRunPage());
-  writeFileSync(join(outDir, 'trial.html'), renderTrialPage());
+  cpSync(RUN_PAGE_TEMPLATE, join(outDir, 'run.html'));
+  cpSync(TRIAL_PAGE_TEMPLATE, join(outDir, 'trial.html'));
   cpSync(EVOLUTION_TEMPLATE, join(outDir, 'evolution.html'));
   writeFileSync(
     join(outDir, 'tasks.json'),
