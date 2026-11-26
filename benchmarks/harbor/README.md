@@ -27,7 +27,7 @@ The evolution page (`report/evolution-page-template.html`, copied to the site ro
 
 ```
 index.json            reference, latest runs, former references (run ids)
-index.html            lists the runs: the reference and latest runs link to their run page, former references to their run.json
+index.html            home page (report/home-page.ts and home-page-template.html): the reference, the latest runs, one run compared with the reference
 run.html              the page of one run, opened as run.html?run=<run id>
 trial.html            the page of one trial, opened as trial.html?run=<run id>&trial=<trial id>
 evolution.html        the evolution page, read from index.json and the run files

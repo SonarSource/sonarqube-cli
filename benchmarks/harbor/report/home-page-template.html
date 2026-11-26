@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor benchmark</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
+  --grid: #e1e0d9; --ring: rgba(11, 11, 11, 0.10); --wash: rgba(11, 11, 11, 0.05);
+  --select-bg: #184f95; --select-wash: #c3d8f5; --bar: #2a78d6; --ref: #eb6834;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #898781;
+    --grid: #2c2c2a; --ring: rgba(255, 255, 255, 0.10); --wash: rgba(255, 255, 255, 0.06);
+    --select-bg: #2a78d6; --select-wash: #1f3f6b; --bar: #3987e5; --ref: #eb6834;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--page); }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.top { display: flex; align-items: center; gap: 32px; padding: 0 20px; height: 56px; border-bottom: 1px solid var(--grid); background: var(--surface); }
+.brand { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.top nav { display: flex; gap: 4px; height: 100%; }
+.top nav a { display: flex; align-items: center; padding: 0 14px; color: var(--ink); font-weight: 600; text-decoration: none; border-bottom: 3px solid var(--select-bg); }
+.split { display: grid; grid-template-columns: minmax(320px, 36%) 1fr; }
+.left { padding: 32px 28px; border-right: 1px solid var(--grid); }
+.right { padding: 32px 28px; }
+.label { margin: 0 0 12px; color: var(--ink-2); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.none { color: var(--ink-3); }
+.ref { background: var(--select-wash); border-left: 4px solid var(--select-bg); border-radius: 0 12px 12px 0; padding: 24px; }
+.ref .version { font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.ref .meta { margin-top: 4px; color: var(--ink-2); }
+.pass { margin: 22px 0 0; font-size: 15px; }
+.pass b { font-size: 22px; }
+.meter { height: 8px; border-radius: 4px; background: rgba(11, 11, 11, 0.12); margin-top: 8px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--select-bg); }
+.sublabel { margin: 22px 0 8px; font-size: 13px; color: var(--ink-2); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 2px 10px; border-radius: 99px; font-size: 13px; background: var(--select-wash); color: var(--select-bg); font-weight: 600; }
+.ref .chip { background: #fff; }
+.open { display: inline-block; margin-top: 24px; background: var(--select-bg); color: #fff; text-decoration: none; font-weight: 600; padding: 9px 16px; border-radius: 8px; }
+.run { display: grid; grid-template-columns: 120px 1fr auto; gap: 16px; align-items: center; padding: 16px 18px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--ring); border-left: 4px solid transparent; border-radius: 12px; cursor: pointer; }
+.run:hover { background: var(--wash); }
+.run.on { background: var(--select-wash); border-left-color: var(--select-bg); }
+.run.on .chip { background: #fff; }
+.run .version { font-size: 17px; font-weight: 600; }
+.run .date { color: var(--ink-3); font-size: 13px; }
+.run .same { color: var(--ink-3); }
+.run .n { font-size: 15px; white-space: nowrap; }
+.past { margin-top: 24px; color: var(--ink-2); }
+.past a { color: var(--select-bg); margin-left: 12px; }
+.compare { padding: 32px 28px 56px; border-top: 1px solid var(--grid); }
+.compare h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.compare .note { margin: 0 0 20px; color: var(--ink-3); }
+.panel { display: grid; grid-template-columns: 240px 1fr; background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; overflow: hidden; }
+.measures { border-right: 1px solid var(--grid); }
+.measures button { display: block; width: 100%; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--grid); border-left: 4px solid transparent; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.measures button:hover { background: var(--wash); }
+.measures button.on { background: var(--select-wash); border-left-color: var(--select-bg); font-weight: 600; }
+.chart { position: relative; padding: 16px 20px 12px; min-width: 0; }
+.chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 8px; }
+.chart-head b { font-size: 15px; }
+.chart-head a { color: var(--select-bg); font-weight: 600; text-decoration: none; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); font-size: 13px; }
+.keys span { display: inline-flex; align-items: center; gap: 6px; }
+.keys i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.view { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+.view:hover { background: var(--wash); }
+svg { display: block; width: 100%; }
+svg text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+.grp { outline: none; }
+.grp .bar { transition: filter .12s; }
+.grp:hover .bar, .grp:focus-visible .bar { filter: brightness(1.15); }
+.grp:focus-visible .hit { stroke: var(--select-bg); stroke-width: 2; }
+.tip { position: absolute; pointer-events: none; z-index: 2; background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(0, 0, 0, .12); min-width: 190px; opacity: 0; transition: opacity .1s; }
+.tip.on { opacity: 1; }
+.tip .t { color: var(--ink-2); font-size: 12px; margin-bottom: 6px; }
+.tip .r { display: flex; align-items: center; gap: 8px; }
+.tip .r i { width: 12px; border-top: 3px solid; border-radius: 2px; }
+.tip .r b { margin-left: auto; font-size: 15px; }
+.tip .r span { color: var(--ink-2); font-size: 13px; }
+.tbl { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.tbl th, .tbl td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--grid); }
+.tbl th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+.tbl td:not(:first-child), .tbl th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.empty { padding: 60px 0; text-align: center; color: var(--ink-3); }
+@media (max-width: 760px) {
+  .split { grid-template-columns: 1fr; }
+  .left { border-right: 0; border-bottom: 1px solid var(--grid); padding: 20px 16px; }
+  .right, .compare { padding: 20px 16px; }
+  .top { gap: 12px; padding: 0 12px; }
+  .run { grid-template-columns: 1fr auto; }
+  .run .chips, .run .same { grid-column: 1 / -1; grid-row: 2; }
+  .panel { grid-template-columns: 1fr; }
+  .measures { display: grid; grid-template-columns: 1fr 1fr; border-right: 0; border-bottom: 1px solid var(--grid); }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="brand">Harbor benchmark</span>
+  <nav><a href="./">Home</a></nav>
+</header>
+<div class="split">
+  <aside class="left">
+    <p class="label">Reference</p>
+    <section id="ref"></section>
+  </aside>
+  <main class="right">
+    <p class="label">Latest runs</p>
+    <div id="runs"></div>
+    <p class="past" id="past"></p>
+  </main>
+</div>
+<section class="compare" id="compare">
+  <h2>Compare with the reference</h2>
+  <p class="note" id="note"></p>
+  <div class="panel">
+    <div class="measures" id="measures"></div>
+    <div class="chart">
+      <div class="chart-head">
+        <b id="title"></b>
+        <div class="keys" id="keys"></div>
+        <a id="open-run" href="#">Open this run</a>
+        <button class="view" id="view" type="button">Table</button>
+      </div>
+      <div id="plot"></div>
+      <div class="tip" id="tip"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+const data = JSON.parse(decodeURIComponent('__HOME_DATA__'));
+const ref = data.reference;
+const runs = data.recent;
+const MEASURES = [
+  { id: 'rate', name: 'Success rate', unit: '%', get: (t) => (100 * t.passed) / t.total },
+  { id: 'steps', name: 'Steps per trial', unit: '', get: (t) => t.steps },
+  { id: 'tokens', name: 'Tokens per trial', unit: 'k', get: (t) => (t.tokens === null ? null : t.tokens / 1000) },
+  { id: 'seconds', name: 'Agent time per trial', unit: ' s', get: (t) => t.seconds },
+];
+const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const dayOf = (run, withYear) => new Date(run.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: withYear ? 'numeric' : undefined, timeZone: 'UTC' });
+const totals = (run) => run.tasks.reduce((a, t) => [a[0] + t.passed, a[1] + t.total], [0, 0]);
+const chips = (run) => `<div class="chips">${run.tasks.map((t) => `<span class="chip">${esc(t.id)}</span>`).join('')}</div>`;
+const sameTasks = (run) => ref !== null && ref.tasks.every((t) => run.tasks.some((r) => r.id === t.id)) && run.tasks.every((t) => ref.tasks.some((r) => r.id === t.id));
+
+let selected = 0;
+let measure = MEASURES[0];
+let asTable = false;
+
+function drawReference() {
+  const host = document.getElementById('ref');
+  if (!ref) {
+    host.innerHTML = '<p class="none">No reference run yet.</p>';
+    return;
+  }
+  const [passed, total] = totals(ref);
+  host.className = 'ref';
+  host.innerHTML = `<div class="version">CLI ${esc(ref.version)}</div><div class="meta">${dayOf(ref, true)}</div>
+    <div class="pass"><b>${passed}</b> of ${total} trials passed</div>
+    <div class="meter"><i style="width:${(100 * passed) / total}%"></i></div>
+    <div class="sublabel">Tasks</div>${chips(ref)}
+    <a class="open" href="run.html?run=${encodeURIComponent(ref.runId)}">Open the reference run</a>`;
+}
+
+function drawPast() {
+  const host = document.getElementById('past');
+  host.innerHTML = data.former.length === 0 ? '' : `Past references ${data.former.map((f) => `<a href="references/${esc(f.runId)}.json">${esc(f.version)}</a>`).join('')}`;
+}
+
+function drawRuns() {
+  const host = document.getElementById('runs');
+  if (runs.length === 0) {
+    host.innerHTML = '<p class="none">No other run yet.</p>';
+    return;
+  }
+  host.innerHTML = runs.map((run, i) => {
+    const [passed, total] = totals(run);
+    const tasks = sameTasks(run) ? '<div class="same">Same tasks as the reference</div>' : chips(run);
+    return `<div class="run ${i === selected ? 'on' : ''}" data-i="${i}" role="button" tabindex="0"><div><div class="version">${esc(run.version)}</div><div class="date">${dayOf(run, false)}</div></div>${tasks}<div class="n"><b>${passed}</b> of ${total}</div></div>`;
+  }).join('');
+  host.querySelectorAll('.run').forEach((el) => {
+    const pick = () => { selected = Number(el.dataset.i); draw(); };
+    el.onclick = pick;
+    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+  });
+}
+
+function drawMeasures() {
+  const host = document.getElementById('measures');
+  host.innerHTML = MEASURES.map((m) => `<button type="button" class="${m === measure ? 'on' : ''}" data-id="${m.id}">${m.name}</button>`).join('');
+  host.querySelectorAll('button').forEach((b) => { b.onclick = () => { measure = MEASURES.find((m) => m.id === b.dataset.id); draw(); }; });
+}
+
+function niceTicks(maxValue) {
+  const raw = maxValue / 4;
+  const base = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((f) => f * base).find((x) => x >= raw);
+  return Array.from({ length: Math.ceil(maxValue / step) + 1 }, (_, i) => i * step);
+}
+
+const fmt = (v) => `${Math.round(v)}${measure.unit}`;
+
+function showTip(host, tip, title, refValue, runValue, runName, x, y) {
+  tip.replaceChildren();
+  const t = document.createElement('div');
+  t.className = 't';
+  t.textContent = title;
+  tip.append(t);
+  [[`Reference ${ref.version}`, refValue, 'var(--ref)'], [`Run ${runName}`, runValue, 'var(--bar)']].forEach(([name, value, color]) => {
+    const row = document.createElement('div');
+    row.className = 'r';
+    const key = document.createElement('i');
+    key.style.borderColor = color;
+    const label = document.createElement('span');
+    label.textContent = name;
+    const number = document.createElement('b');
+    number.textContent = fmt(value);
+    row.append(key, label, number);
+    tip.append(row);
+  });
+  const box = host.getBoundingClientRect();
+  tip.style.left = `${Math.min(Math.max(8, x - 95), box.width - 205)}px`;
+  tip.style.top = `${Math.max(8, y - 90)}px`;
+  tip.classList.add('on');
+}
+
+function drawChart() {
+  const run = runs[selected];
+  const both = ref.tasks.filter((t) => run.tasks.some((r) => r.id === t.id));
+  const shared = both.filter((t) => measure.get(t) !== null && measure.get(run.tasks.find((r) => r.id === t.id)) !== null);
+  const runName = `${run.version} (${dayOf(run, false)})`;
+  document.getElementById('note').textContent = `Reference ${ref.version} against run ${runName}, on the ${both.length} of ${ref.tasks.length} tasks they both ran.`;
+  document.getElementById('title').textContent = measure.name;
+  document.getElementById('view').textContent = asTable ? 'Chart' : 'Table';
+  document.getElementById('open-run').href = `run.html?run=${encodeURIComponent(run.runId)}`;
+  document.getElementById('keys').innerHTML = `<span><i style="background:var(--ref)"></i>Reference ${esc(ref.version)}</span><span><i style="background:var(--bar)"></i>Run ${esc(runName)}</span>`;
+  const plot = document.getElementById('plot');
+  const tip = document.getElementById('tip');
+  tip.classList.remove('on');
+  if (shared.length === 0) {
+    plot.innerHTML = `<div class="empty">${both.length === 0 ? 'No task in common with the reference' : 'No data for this measure on the tasks in common'}</div>`;
+    return;
+  }
+  const refValues = shared.map((t) => measure.get(t));
+  const runValues = shared.map((t) => measure.get(run.tasks.find((r) => r.id === t.id)));
+
+  if (asTable) {
+    plot.innerHTML = `<table class="tbl"><thead><tr><th>Task</th><th>Reference ${esc(ref.version)}</th><th>Run ${esc(runName)}</th></tr></thead><tbody>${shared.map((t, i) => `<tr><td>${esc(t.id)}</td><td>${fmt(refValues[i])}</td><td>${fmt(runValues[i])}</td></tr>`).join('')}</tbody></table>`;
+    return;
+  }
+
+  const W = Math.max(280, plot.clientWidth);
+  const H = W < 520 ? 280 : 320;
+  const L = 40;
+  const B = 34;
+  const Tp = 12;
+  const R = 8;
+  const ticks = measure.id === 'rate' ? [0, 25, 50, 75, 100] : niceTicks(Math.max(...refValues, ...runValues, 1));
+  const max = ticks[ticks.length - 1];
+  const y = (v) => Tp + (H - Tp - B) * (1 - v / max);
+  const step = (W - L - R) / shared.length;
+  const bw = Math.min(24, step * 0.2);
+  const bar = (x, v, color) => {
+    const h = y(0) - y(v);
+    const r = Math.min(4, h);
+    return `<path class="bar" fill="${color}" d="M${x},${y(0)} V${y(v) + r} a${r},${r} 0 0 1 ${r},${-r} H${x + bw - r} a${r},${r} 0 0 1 ${r},${r} V${y(0)} Z"/>`;
+  };
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${measure.name}, reference against run">`;
+  ticks.forEach((v) => {
+    svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
+  });
+  shared.forEach((t, i) => {
+    const cx = L + step * (i + 0.5);
+    const hit = Math.min(step, 160);
+    svg += `<g class="grp" tabindex="0" data-i="${i}" role="img" aria-label="${esc(t.id)}: reference ${fmt(refValues[i])}, run ${fmt(runValues[i])}">`;
+    svg += `<rect class="hit" x="${cx - hit / 2}" y="${Tp}" width="${hit}" height="${H - Tp - B}" fill="transparent"/>`;
+    svg += bar(cx - bw - 1, refValues[i], 'var(--ref)') + bar(cx + 1, runValues[i], 'var(--bar)');
+    svg += '</g>';
+    svg += `<text x="${cx}" y="${H - 12}" text-anchor="middle">${esc(t.id)}</text>`;
+  });
+  plot.innerHTML = `${svg}</svg>`;
+  plot.querySelectorAll('.grp').forEach((g) => {
+    const i = Number(g.dataset.i);
+    const place = (e) => {
+      const host = plot.getBoundingClientRect();
+      const b = g.getBoundingClientRect();
+      const x = e ? e.clientX - host.left : b.left - host.left + b.width / 2;
+      const yy = e ? e.clientY - host.top : Tp + 160;
+      showTip(plot, tip, shared[i].id, refValues[i], runValues[i], runName, x, yy);
+    };
+    g.addEventListener('pointermove', place);
+    g.addEventListener('focus', () => place(null));
+    g.addEventListener('pointerleave', () => tip.classList.remove('on'));
+    g.addEventListener('blur', () => tip.classList.remove('on'));
+  });
+}
+
+function draw() {
+  drawReference();
+  drawPast();
+  drawRuns();
+  const compare = document.getElementById('compare');
+  compare.hidden = !ref || runs.length === 0;
+  if (compare.hidden) return;
+  drawMeasures();
+  drawChart();
+}
+
+document.getElementById('view').onclick = () => { asTable = !asTable; draw(); };
+draw();
+addEventListener('resize', draw);
+</script>
+</body>
+</html>
