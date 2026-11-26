@@ -72,6 +72,7 @@ import {
 } from './analyze/container.ts';
 import {
   CONTAINER_SCAN_SEVERITIES,
+  type ContainerScanSeverity,
   DEFAULT_CONTAINER_FAIL_ON,
   DEFAULT_CONTAINER_TIMEOUT_SECS,
 } from './analyze/container-scanner-runner.ts';
@@ -876,7 +877,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         .choices(CONTAINER_SCAN_SEVERITIES)
         .argParser((value) => {
           const severity = value.toLowerCase();
-          if (!CONTAINER_SCAN_SEVERITIES.some((choice) => choice === severity)) {
+          if (!CONTAINER_SCAN_SEVERITIES.includes(severity as ContainerScanSeverity)) {
             throw new InvalidArgumentError(
               `Allowed choices are ${CONTAINER_SCAN_SEVERITIES.join(', ')}.`,
             );
