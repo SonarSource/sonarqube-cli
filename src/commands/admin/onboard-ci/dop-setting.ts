@@ -21,11 +21,15 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { DopSetting, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 
+interface ResolvedDopSetting extends DopSetting {
+  url: string;
+}
+
 export async function resolveDopSetting(
   bindings: ProjectBindingsClient,
   platform: 'gitlab' | 'github',
   bindingName?: string,
-): Promise<DopSetting & { url: string }> {
+): Promise<ResolvedDopSetting> {
   const label = platform === 'github' ? 'GitHub' : 'GitLab';
   const settings = await bindings.listDopSettings(platform).orThrow();
   if (settings.length === 0) {

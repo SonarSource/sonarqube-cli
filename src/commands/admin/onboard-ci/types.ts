@@ -18,24 +18,40 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { ComponentsClient } from '@/core/server/components.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
-import { ProjectBindingsClient } from '@/core/server/project-bindings.ts';
-import { UsersClient } from '@/core/server/users.ts';
+export interface OnboardCiOptions {
+  bindingName?: string;
+  reposFile?: string;
+  dryRun?: boolean;
+}
 
-/**
- * The SonarQube Server APIs this command drives, built from one transport client so
- * they share it for the whole run. Exposed as fields rather than re-declared as
- * forwarding methods.
- */
-export class OnboardCiSqsClient {
-  readonly bindings: ProjectBindingsClient;
-  readonly components: ComponentsClient;
-  readonly users: UsersClient;
+export interface RepoProject {
+  repo: string;
+  projectKey: string;
+}
 
-  constructor(client: SonarHttpClient) {
-    this.bindings = new ProjectBindingsClient(client);
-    this.components = new ComponentsClient(client);
-    this.users = new UsersClient(client);
-  }
+export interface OpenedResult extends RepoProject {
+  prUrl: string;
+}
+
+export interface SkippedResult {
+  repo: string;
+  reason: string;
+  prUrl?: string;
+}
+
+export interface FailedResult {
+  repo: string;
+  error: string;
+}
+
+export type RepoOutcome =
+  | { outcome: 'proceed'; projectKey: string }
+  | { outcome: 'opened'; projectKey: string; prUrl: string }
+  | { outcome: 'skip'; reason: string; prUrl?: string; message?: string };
+
+export interface RepoRunResults {
+  opened: OpenedResult[];
+  wouldOpen: RepoProject[];
+  skipped: SkippedResult[];
+  failed: FailedResult[];
 }
