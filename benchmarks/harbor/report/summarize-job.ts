@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TASKS_PAGE_URL, taskTitle } from './tasks.ts';
 import { lastSegment, readJson } from './read-json.ts';
@@ -24,6 +24,15 @@ interface FinalMetrics {
 type Status = 'PASS' | 'FAIL' | 'ERROR' | 'LEAK';
 
 const LEAK_MARKER_FILE = 'secrets-leak.json';
+const PLUGIN_MARKER_FILE = join('agent', 'sonarqube-agent-plugin.json');
+const CLAUDE_OUTPUT_FILE = join('agent', 'claude-code.txt');
+const PLUGIN_NAME = 'sonarqube';
+
+interface PluginMarker {
+  installed?: boolean;
+  ref?: string;
+  version?: string;
+}
 
 interface Row {
   label: string;
@@ -31,6 +40,7 @@ interface Row {
   task: string;
   agent: string | null;
   model: string | null;
+  plugin: string | null;
   status: Status;
   agentSeconds: number | null;
   steps: number | null;
@@ -54,13 +64,53 @@ function statusOf(trial: TrialResult): Status {
   return reward >= 1 ? 'PASS' : 'FAIL';
 }
 
-function errorRow(label: string, task: string, agent: string | null, model: string | null): Row {
+function claudeInitPlugins(trialDir: string): string[] | null {
+  const outputPath = join(trialDir, CLAUDE_OUTPUT_FILE);
+  if (!existsSync(outputPath)) return null;
+  for (const line of readFileSync(outputPath, 'utf8').split('\n')) {
+    if (!line.startsWith('{')) continue;
+    try {
+      const event = JSON.parse(line) as {
+        type?: string;
+        subtype?: string;
+        plugins?: { name?: string }[];
+      };
+      if (event.type === 'system' && event.subtype === 'init')
+        return (event.plugins ?? []).map((plugin) => plugin.name ?? '');
+    } catch {
+      // Claude Code also writes plain text lines to this file.
+    }
+  }
+  return null;
+}
+
+function pluginOf(
+  trialDir: string,
+  agent: string | null,
+): { plugin: string | null; loaded: boolean } {
+  const marker = readJson<PluginMarker>(join(trialDir, PLUGIN_MARKER_FILE));
+  if (!marker) return { plugin: null, loaded: true };
+  if (!marker.installed) return { plugin: 'without', loaded: true };
+  const plugin = `with ${marker.version ?? marker.ref ?? ''}`.trim();
+  const plugins = agent === 'claude-code' ? claudeInitPlugins(trialDir) : null;
+  if (plugins === null || plugins.includes(PLUGIN_NAME)) return { plugin, loaded: true };
+  return { plugin: `${plugin}, not loaded`, loaded: false };
+}
+
+function errorRow(
+  label: string,
+  task: string,
+  agent: string | null,
+  model: string | null,
+  plugin: string | null = null,
+): Row {
   return {
     label,
     trialName: null,
     task,
     agent,
     model,
+    plugin,
     status: 'ERROR',
     agentSeconds: null,
     steps: null,
@@ -77,11 +127,13 @@ function crashedTrialRow(label: string, trialDir: string, trialName: string): Ro
   );
   const modelName = config?.agent?.model_name;
   const suffixStart = trialName.lastIndexOf('__');
+  const agent = config?.agent?.name ?? null;
   return errorRow(
     label,
     suffixStart > 0 ? trialName.slice(0, suffixStart) : trialName,
-    config?.agent?.name ?? null,
+    agent,
     modelName ? lastSegment(modelName) : null,
+    pluginOf(trialDir, agent).plugin,
   );
 }
 
@@ -92,13 +144,17 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
     join(trialDir, 'agent', 'trajectory.json'),
   );
   const metrics = trajectory?.final_metrics;
+  const agent = trial.agent_info?.name ?? null;
+  const { plugin, loaded } = pluginOf(trialDir, agent);
   return {
     label,
     trialName,
     task: lastSegment(trial.task_name),
-    agent: trial.agent_info?.name ?? null,
+    agent,
     model: trial.agent_info?.model_info?.name ?? null,
-    status: statusOf(trial),
+    plugin,
+    // A trial that was meant to run with the plugin but did not load it measures nothing.
+    status: loaded ? statusOf(trial) : 'ERROR',
     agentSeconds: secondsBetween(
       trial.agent_execution?.started_at,
       trial.agent_execution?.finished_at,
@@ -229,7 +285,9 @@ function average(values: (number | null)[]): number | null {
 function groupTrials(rows: Row[]): Row[][] {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
-    const key = [row.task, row.agent ?? '-', row.model ?? '-', row.label].join('|');
+    const key = [row.task, row.agent ?? '-', row.model ?? '-', row.plugin ?? '-', row.label].join(
+      '|',
+    );
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, group]) => group);
@@ -239,6 +297,12 @@ function agentLabel(agent: string | null): string {
   if (agent === 'claude-code') return 'Claude Code';
   if (agent === 'codex') return 'Codex';
   return agent ?? 'Unknown agent';
+}
+
+function pluginLabel(plugin: string | null): string {
+  if (plugin === null) return '';
+  if (plugin === 'without') return ', without the SonarQube agent plugin';
+  return `, with the SonarQube agent plugin ${plugin.slice('with '.length)}`;
 }
 
 const TASKS_PER_MODEL_BEFORE_FOLD = 6;
@@ -302,7 +366,7 @@ function renderAgentSection(sectionRows: Row[]): string[] {
   const result = `${passed} of ${plural(sectionRows.length, 'trial')} passed`;
   const figures = [result, cost && `${cost} in total`, plural(groups.length, 'task')];
   return [
-    `### ${mark} Agent: ${agentLabel(first.agent)} (${first.model ?? 'unknown model'})`,
+    `### ${mark} Agent: ${agentLabel(first.agent)} (${first.model ?? 'unknown model'})${pluginLabel(first.plugin)}`,
     '',
     figures.filter(Boolean).join(GAP),
     '',
@@ -315,7 +379,7 @@ function renderAgentSection(sectionRows: Row[]): string[] {
 function renderAgentSections(rows: Row[]): string[] {
   const sections = new Map<string, Row[]>();
   for (const row of rows) {
-    const key = [row.agent ?? '-', row.model ?? '-'].join('|');
+    const key = [row.agent ?? '-', row.model ?? '-', row.plugin ?? '-'].join('|');
     sections.set(key, [...(sections.get(key) ?? []), row]);
   }
   return [...sections.entries()]

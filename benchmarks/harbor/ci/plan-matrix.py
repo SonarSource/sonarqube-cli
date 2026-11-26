@@ -53,6 +53,18 @@ def select_tasks(inputs: dict) -> list[str]:
     return tasks
 
 
+PLUGIN_CHOICES = {"without": ["without"], "with": ["with"], "with and without": ["without", "with"]}
+
+
+def select_plugin(inputs: dict) -> list[str]:
+    choice = inputs.get("agent_plugin", "without")
+    if choice not in PLUGIN_CHOICES:
+        fail(f"Unknown agent_plugin '{choice}', expected one of: {', '.join(PLUGIN_CHOICES)}")
+    if inputs["store-report"] is True and choice != "without":
+        fail("The release report compares releases without the agent plugin: uncheck the publish box to run with it")
+    return PLUGIN_CHOICES[choice]
+
+
 def select_attempts(choice: str) -> list[int]:
     if not choice.isdigit() or not 1 <= int(choice) <= MAX_ATTEMPTS:
         fail(f"attempts must be a number from 1 to {MAX_ATTEMPTS}, got '{choice}'")
@@ -61,9 +73,10 @@ def select_attempts(choice: str) -> list[int]:
 
 def plan(inputs: dict) -> list[dict]:
     jobs = [
-        {"os": "linux", "task": task, "agent": agent, "attempt": attempt}
+        {"os": "linux", "task": task, "agent": agent, "plugin": plugin, "attempt": attempt}
         for agent in select_agents(inputs["agent"])
         for task in select_tasks(inputs)
+        for plugin in select_plugin(inputs)
         for attempt in select_attempts(inputs["attempts"])
     ]
     if len(jobs) > MAX_JOBS:
@@ -87,10 +100,14 @@ def summary(jobs: list[dict]) -> str:
     tasks = list(dict.fromkeys(job["task"] for job in jobs))
     agents = list(dict.fromkeys((job["agent"]["name"], job["agent"]["model"]) for job in jobs))
     attempts = max(job["attempt"] for job in jobs)
+    plugins = list(dict.fromkeys(job["plugin"] for job in jobs))
+    variants = f" \u00d7 {plural(len(plugins), 'plugin variant')}" if len(plugins) > 1 else ""
     lines = [
         "## Harbor benchmark plan",
         "",
-        f"{plural(len(jobs), 'job')} to run: {plural(len(tasks), 'task')} \u00d7 {plural(len(agents), 'agent')} \u00d7 {plural(attempts, 'attempt')}",
+        f"{plural(len(jobs), 'job')} to run: {plural(len(tasks), 'task')} \u00d7 {plural(len(agents), 'agent')}{variants} \u00d7 {plural(attempts, 'attempt')}",
+        "",
+        f"SonarQube agent plugin: {' and '.join(plugins)}",
         "",
         "#### Agents",
         "",

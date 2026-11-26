@@ -12,6 +12,14 @@ on:
           - "claude-code : claude-haiku-5-5"
           - "codex : gpt-6.1-terra"
           - all agents and models
+      agent_plugin:
+        description: SonarQube agent plugin in the agent environment ("with and without" runs each task both ways)
+        type: choice
+        default: without
+        options:
+          - without
+          - with
+          - with and without
       task_integrate_happy:
         description: "Task: integrate--happy"
         type: boolean
@@ -52,6 +60,7 @@ env:
   HARBOR_PYTHON_VERSION: "3.13"
   UV_VERSION: 0.13.5
   CODEX_VERSION: rust-v0.164.0
+  AGENT_PLUGIN_REF: 2.7.0
 
 jobs:
   plan:
@@ -71,7 +80,7 @@ jobs:
         run: python3 -I benchmarks/harbor/ci/plan-matrix.py
 
   benchmark:
-    name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }} - ${{ matrix.agent.name }} - ${{ matrix.agent.model }} - ${{ matrix.attempt }}
+    name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }} - ${{ matrix.agent.name }} - ${{ matrix.agent.model }} - plugin ${{ matrix.plugin }} - ${{ matrix.attempt }}
     runs-on: sonar-m
     needs: plan
     strategy:
@@ -101,6 +110,7 @@ jobs:
           MODEL: ${{ matrix.agent.provider }}/${{ matrix.agent.model }}
           JOB_NAME: ${{ matrix.os }}
           TASK: ${{ matrix.task }}
+          AGENT_PLUGIN: ${{ matrix.plugin }}
           HB_SONAR_ADMIN_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_ADMIN_TOKEN }}
           HB_SONAR_PROJECT: SonarSource_sonarqube-cli
           SONAR_RUN_TOKEN_ID_FILE: ${{ runner.temp }}/sonar-run-token-id
@@ -126,7 +136,7 @@ jobs:
         if: ${{ !cancelled() && steps.revoke.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-${{ matrix.attempt }}
+          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-plugin-${{ matrix.plugin }}-${{ matrix.attempt }}
           path: harbor-jobs
 
       - name: Record the missing trial
@@ -138,16 +148,19 @@ jobs:
           AGENT: ${{ matrix.agent.name }}
           MODEL: ${{ matrix.agent.model }}
           ATTEMPT: ${{ matrix.attempt }}
+          AGENT_PLUGIN: ${{ matrix.plugin }}
         run: |
-          trial="missing-jobs/${OS}/${TASK}__missing-${AGENT}-${MODEL}-${ATTEMPT}"
-          mkdir -p "${trial}"
+          trial="missing-jobs/${OS}/${TASK}__missing-${AGENT}-${MODEL}-plugin-${AGENT_PLUGIN}-${ATTEMPT}"
+          mkdir -p "${trial}/agent"
           jq -n --arg name "${AGENT}" --arg model "${MODEL}" '{agent: {name: $name, model_name: $model}}' > "${trial}/config.json"
+          jq -n --arg plugin "${AGENT_PLUGIN}" --arg ref "${AGENT_PLUGIN_REF}" \
+            'if $plugin == "with" then {installed: true, ref: $ref} else {installed: false} end' > "${trial}/agent/sonarqube-agent-plugin.json"
 
       - name: Upload the missing trial record
         if: ${{ !cancelled() && steps.revoke.outcome != 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-${{ matrix.attempt }}
+          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-plugin-${{ matrix.plugin }}-${{ matrix.attempt }}
           path: missing-jobs
 
   report:
