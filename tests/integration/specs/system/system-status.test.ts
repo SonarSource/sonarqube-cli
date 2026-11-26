@@ -713,10 +713,10 @@ command = "another-tool stop"
       );
       expect(normalizePath(result.stdout)).toContain('Codex: INSTALLED (~/.codex/hooks.json)');
       if (kind.startsWith('sonar')) {
-        expect(result.stdout).toContain(`Managed Sonar hooks (${managedPath}): SessionStart`);
+        expect(result.stdout).toContain(`Managed SonarQube hooks (${managedPath}): SessionStart`);
         expect(result.stdout).not.toContain('SessionStart, Stop');
       } else {
-        expect(result.stdout).not.toContain('Managed Sonar hooks');
+        expect(result.stdout).not.toContain('Managed SonarQube hooks');
       }
     },
     { timeout: 15000 },

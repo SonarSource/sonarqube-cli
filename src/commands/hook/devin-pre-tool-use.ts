@@ -87,7 +87,7 @@ export async function devinPreToolUse(ctx: CommandInvocationContext): Promise<Ho
       ctx,
     );
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
-      denyToolUse(`Sonar detected secrets in file: ${filePath}`);
+      denyToolUse(`SonarQube detected secrets in file: ${filePath}`);
     }
   } catch (err) {
     logger.debug(`PreToolUse secrets scan failed: ${(err as Error).message}`);

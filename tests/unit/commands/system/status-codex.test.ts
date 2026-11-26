@@ -112,9 +112,9 @@ command = "another-tool stop"
       expect(
         console.findCall('text', 'Status does not verify hook delivery to the current session.'),
       ).toBeUndefined();
-      expect(Boolean(console.findCall('text', `Managed Sonar hooks (${path}): SessionStart`))).toBe(
-        managed,
-      );
+      expect(
+        Boolean(console.findCall('text', `Managed SonarQube hooks (${path}): SessionStart`)),
+      ).toBe(managed);
     },
   );
 
