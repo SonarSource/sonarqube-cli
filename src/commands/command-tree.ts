@@ -870,6 +870,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   analyze
     .command('container')
     .description('Analyze a local container image with SonarQube Cloud Advanced Security')
+    .rootHelp({ summary: 'Scan a local container image', cloudOnly: true })
     .argument(
       '<image>',
       'Docker or Podman image reference, Docker or OCI .tar archive, or OCI layout directory',
@@ -980,6 +981,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .stage(Stage.Beta())
     .rootHelp({
+      category: 'setup',
+      summary: 'Set up SonarQube for this project',
       label: 'init',
     })
     .option('--path <directory>', 'Directory to onboard (default: current directory)')

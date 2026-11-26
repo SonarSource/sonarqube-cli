@@ -47,7 +47,7 @@ const ROOT_DOCUMENTATION_URL = 'https://sonarsource.com/sonarqube/cli';
 const ROOT_FEEDBACK_URL = 'https://forms.gle/jrGic3awT5t5vf7V9';
 
 const ROOT_COMMAND_ORDER: Record<CommandCategory, readonly string[]> = {
-  setup: ['auth', 'link', 'import', 'integrate'],
+  setup: ['init', 'auth', 'link', 'import', 'integrate'],
   guide: ['context', 'architecture'],
   verify: ['analyze', 'quality-gate', 'list', 'api', 'allowlist'],
   data: ['badge'],
