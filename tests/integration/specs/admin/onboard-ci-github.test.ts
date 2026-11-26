@@ -144,6 +144,9 @@ describe('GitHub bulk CI onboarding', () => {
         'second',
       ]);
       await run({ ...OPTIONS, dryRun });
+      expect(console.findCall('phase', 'Results')?.args[1]).toMatchObject([
+        { detail: 'skipped (repository is bound to multiple SonarQube project keys)' },
+      ]);
       const report = harness.cwd
         .file(dryRun ? 'sonar-onboard-ci-report-dry.json' : 'sonar-onboard-ci-report.json')
         .asJson();

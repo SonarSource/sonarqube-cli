@@ -312,7 +312,10 @@ describe('sonar admin onboard-ci gitlab', () => {
         `admin onboard-ci gitlab --group ${GROUP}${dryRun ? ' --dry-run' : ''}`,
       );
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('multiple SonarQube project keys');
+      expect(result.stdout).toContain(
+        'skipped (repository is bound to multiple SonarQube project keys)',
+      );
+      expect(result.stdout).not.toContain('MULTIPLE_PROJECT_KEYS');
       const report = harness.cwd
         .file(dryRun ? 'sonar-onboard-ci-report-dry.json' : 'sonar-onboard-ci-report.json')
         .asJson();

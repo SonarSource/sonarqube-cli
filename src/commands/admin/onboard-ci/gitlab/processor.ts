@@ -62,7 +62,7 @@ export interface ProcessRepoContext {
 }
 
 export type RepoClassification =
-  | { outcome: 'skip'; reason: SkipReason; message: string; prUrl?: string }
+  | { outcome: 'skip'; reason: SkipReason; message?: string; prUrl?: string }
   | {
       outcome: 'proceed';
       ciFilePath: string;
@@ -108,7 +108,6 @@ function classifyExistingCiFile(
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,
-      message: 'skipped (already configured)',
     };
   }
 
@@ -147,7 +146,6 @@ async function classifyNewRepo(
     return {
       outcome: 'skip',
       reason: SkipReason.OtherCiDetected,
-      message: 'skipped (other CI detected)',
     };
   }
 
@@ -155,7 +153,6 @@ async function classifyNewRepo(
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,
-      message: 'skipped (already configured)',
     };
   }
 
@@ -172,14 +169,12 @@ export async function assessRepo(
     return {
       outcome: 'skip',
       reason: SkipReason.NotInSonarQube,
-      message: 'skipped (not bound in SonarQube)',
     };
   }
   if (projectKeys.size > 1) {
     return {
       outcome: 'skip',
       reason: SkipReason.MultipleProjectKeys,
-      message: 'skipped (repository is bound to multiple SonarQube project keys)',
     };
   }
   const [existingProjectKey] = projectKeys;
@@ -188,7 +183,6 @@ export async function assessRepo(
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,
-      message: 'skipped (already configured)',
     };
   }
 
@@ -218,7 +212,6 @@ export async function assessRepo(
     return {
       outcome: 'skip',
       reason: SkipReason.MrAlreadyOpen,
-      message: 'skipped (MR already open)',
       prUrl: openMrs[0].web_url,
     };
   }
@@ -252,7 +245,6 @@ export async function executeRepo(
         return {
           outcome: 'skip',
           reason: SkipReason.MrAlreadyOpen,
-          message: 'skipped (MR already open)',
           prUrl,
         };
       }

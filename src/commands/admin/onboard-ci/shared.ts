@@ -35,6 +35,19 @@ import type { Console } from '@/core/ui/console.ts';
 import type { RepoOutcome, RepoRunResults } from './types.ts';
 
 const CONCURRENCY_LIMIT = 10;
+const SKIP_MESSAGES: Partial<Record<string, string>> = {
+  NOT_IN_SONARQUBE: 'skipped (not bound in SonarQube)',
+  MULTIPLE_PROJECT_KEYS: 'skipped (repository is bound to multiple SonarQube project keys)',
+  ALREADY_CONFIGURED: 'skipped (already configured)',
+  ALREADY_ANALYZED: 'skipped (already analyzed)',
+  PR_ALREADY_OPEN: 'skipped (PR already open)',
+  MR_ALREADY_OPEN: 'skipped (MR already open)',
+  OTHER_CI_DETECTED: 'skipped (other CI detected)',
+  UNSUPPORTED_REPOSITORY: 'skipped (unsupported repository)',
+  WORKFLOW_COLLISION: 'skipped (SonarQube workflow already exists)',
+  UNSUPPORTED_WORKFLOW: 'skipped (unsupported workflow file)',
+};
+
 export const REPORT_FILE = 'sonar-onboard-ci-report.json';
 export const DRY_RUN_REPORT_FILE = 'sonar-onboard-ci-report-dry.json';
 
@@ -139,7 +152,11 @@ export async function runRepos<Repo>(
           break;
         case 'skip':
           results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
-          progress.update(name, 'done', result.message ?? result.reason);
+          progress.update(
+            name,
+            'done',
+            result.message ?? SKIP_MESSAGES[result.reason] ?? result.reason,
+          );
           break;
       }
     } catch (error) {
