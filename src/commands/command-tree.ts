@@ -75,6 +75,16 @@ import {
 import { allowlistSecretsRemove } from './allowlist/secrets/remove.ts';
 import { allowlistSecretsShow } from './allowlist/secrets/show.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
+import {
+  analyzeContainer,
+  type AnalyzeContainerOptions,
+  CONTAINER_SCAN_FORMATS,
+} from './analyze/container.ts';
+import {
+  CONTAINER_SCAN_SEVERITIES,
+  DEFAULT_CONTAINER_FAIL_ON,
+  DEFAULT_CONTAINER_TIMEOUT_SECS,
+} from './analyze/container-scanner-runner.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';
 import {
@@ -841,6 +851,66 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     }
     return upper;
   });
+
+  analyze
+    .command('container')
+    .description('Analyze a local container image with SonarQube Cloud Advanced Security')
+    .argument(
+      '<image>',
+      'Docker or Podman image reference, Docker or OCI .tar archive, or OCI layout directory',
+    )
+    .addOption(
+      new SonarOption('--container-engine <engine>', 'Engine to export a local image from').choices(
+        ['docker', 'podman'],
+      ),
+    )
+    .option('--registry <host>', 'Override the image registry')
+    .option('--repository <path>', 'Override the image repository')
+    .option('--tag <tag>', 'Override the image tag')
+    .addOption(
+      new SonarOption('--timeout-secs <seconds>', 'Timeout in seconds per scanner operation')
+        .argParser((value) => {
+          const seconds = Number(value);
+          if (!/^\d+$/.test(value) || !Number.isSafeInteger(seconds) || seconds < 1) {
+            throw new InvalidArgumentError('Expected a positive integer.');
+          }
+          return seconds;
+        })
+        .default(DEFAULT_CONTAINER_TIMEOUT_SECS),
+    )
+    .addOption(
+      new SonarOption(
+        '--fail-on <severity>',
+        'Fail when a finding reaches this severity (case-insensitive). Use none to disable the threshold',
+      )
+        .choices(CONTAINER_SCAN_SEVERITIES)
+        .argParser((value) => {
+          const severity = value.toLowerCase();
+          if (!CONTAINER_SCAN_SEVERITIES.some((choice) => choice === severity)) {
+            throw new InvalidArgumentError(
+              `Allowed choices are ${CONTAINER_SCAN_SEVERITIES.join(', ')}.`,
+            );
+          }
+          return severity;
+        })
+        .default(DEFAULT_CONTAINER_FAIL_ON),
+    )
+    .addOption(formatOption(CONTAINER_SCAN_FORMATS, 'json'))
+    .showUpdateNotification(isTableFormatOption)
+    .addHelpText(
+      'after',
+      [
+        '',
+        'Examples:',
+        '  $ sonar analyze container my-app:1.4.0',
+        '  $ sonar analyze container my-app:1.4.0 --format table',
+        '  $ sonar analyze container my-app:1.4.0 --container-engine podman',
+        '  $ sonar analyze container ./my-image.tar --tag 1.4.0 --fail-on medium > container-scan.json',
+      ].join('\n'),
+    )
+    .authenticatedAction((ctx, image: string, options: AnalyzeContainerOptions) =>
+      analyzeContainer(image, options, ctx),
+    );
 
   analyze
     .command('dependency-risks')
