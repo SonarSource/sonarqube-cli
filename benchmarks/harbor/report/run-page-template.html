@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor benchmark - run</title>
+<style>
+:root{color-scheme:light;--page:#fafaf8;--ink:#111;--ink-2:#6b6a66;--line:#e6e5e0;--wash:rgba(11,11,11,.05);--track:rgba(11,11,11,.10);--blue:#2a78d6;--fail:#d9692f;--select-wash:#dbe8f8;--band:rgba(42,120,214,.10);--head:#f1f1ee}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0f0f0f;--ink:#f0efec;--ink-2:#9a9992;--line:#2a2a28;--wash:rgba(255,255,255,.06);--track:rgba(255,255,255,.13);--blue:#3987e5;--fail:#f2884f;--select-wash:#1d3556;--band:rgba(57,135,229,.16);--head:#1b1b1a}}
+*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px/1.5 system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+.top{display:flex;gap:28px;align-items:baseline;padding:18px 40px;border-bottom:1px solid var(--line)}.top b{font-size:16px}.top a{color:var(--ink-2);text-decoration:none}.top a.here{color:var(--ink)}
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:calc(100vh - 58px)}
+aside{border-right:1px solid var(--line);padding:28px 18px;align-self:start}
+aside h2{margin:0 0 10px 6px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.opt{display:grid;grid-template-columns:36px 1fr;align-items:center;gap:12px;width:100%;margin-bottom:6px;padding:9px 12px 9px 9px;border:1px solid transparent;border-radius:6px;background:none;color:var(--ink);font:inherit;font-weight:600;text-align:left;cursor:pointer;transition:background .15s,transform .1s}
+.opt .ico{width:36px;height:36px;border-radius:6px;display:grid;place-items:center;background:var(--wash);color:var(--ink-2)}
+.opt .ico svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.opt:hover{background:var(--wash)}.opt:active{transform:scale(.98)}.opt.on{background:var(--select-wash);border-color:var(--blue)}.opt.on .ico{background:var(--blue);color:#fff}
+.content{padding:28px 36px 56px;min-width:0}
+h1{margin:0 0 2px;font-size:24px;font-weight:600;letter-spacing:-.02em}.sub{color:var(--ink-2);font-size:14px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.tab{border:1px solid var(--line);background:none;padding:9px 14px;font:inherit;color:var(--ink);cursor:pointer;text-align:left;border-radius:4px;transition:background .15s,transform .1s}
+.tab small{display:block;color:var(--ink-2);font-size:12px}.tab b{font-weight:600}
+.tab:hover{background:var(--wash)}.tab:active{transform:scale(.98)}.tab.on{border-color:var(--blue);background:var(--select-wash)}
+.taskname{margin:24px 0 0;font-size:18px;font-weight:600;overflow-wrap:anywhere}.back{color:var(--ink-2);text-decoration:none;font-size:14px}.empty,.err{margin:40px 0;color:var(--ink-2)}.top a.here{color:var(--ink)}
+svg{display:block;width:100%;overflow:visible;user-select:none}svg text{fill:var(--ink-2);font:12px system-ui,sans-serif}
+svg text.col{fill:var(--ink);font-size:14px;font-weight:600}svg text.big{fill:var(--ink);font-size:13px}
+.whisk{stroke:var(--ink-2);stroke-width:1.5}.edge{stroke-width:2.5}.med{stroke:var(--ink);stroke-width:2;stroke-dasharray:5 4}
+.dot{fill:var(--blue);fill-opacity:.6;stroke:var(--page);stroke-width:1.5;cursor:pointer;transition:fill-opacity .12s}.dot.bad{fill:var(--fail);fill-opacity:.85}.dot:hover,.dot.hl{fill-opacity:1;stroke:var(--ink)}
+.box:hover .fill{fill-opacity:.3}
+.refline{stroke:var(--ink-2);stroke-width:1.2;stroke-dasharray:3 4;opacity:.7}
+.animate .dot{animation:pop .35s ease-out both;animation-delay:calc(var(--i)*25ms);transform-box:fill-box;transform-origin:center}@keyframes pop{from{transform:scale(.3);opacity:0}}
+.scores{display:grid;grid-template-columns:1fr 1fr;margin-top:6px}.scores div{text-align:center;font-size:14px}.scores b{font-size:20px;display:block}
+details.trials{margin-top:30px;border-top:1px solid var(--line);padding-top:14px}summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none}summary::before{content:"▸ ";color:var(--ink-2)}details[open] summary::before{content:"▾ "}
+.tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:12px 0;color:var(--ink-2);font-size:13px}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--wash)}.seg button{border:0;background:none;padding:5px 13px;border-radius:999px;font:inherit;color:var(--ink-2);cursor:pointer}.seg button.on{background:var(--page);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.chip{border:1px solid var(--line);background:none;border-radius:999px;padding:5px 13px;font:inherit;color:var(--ink-2);cursor:pointer}.chip.on{border-color:var(--blue);background:var(--select-wash);color:var(--ink)}
+.trow{display:grid;grid-template-columns:60px 112px minmax(0,1fr) 80px;align-items:center;gap:14px;padding:8px 10px;color:inherit;text-decoration:none;font-variant-numeric:tabular-nums}.trow:hover,.trow.hl{background:var(--wash)}
+.trow .num{font-weight:600}.st{display:inline-flex;align-items:center;gap:7px;font-size:13px}.st::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--blue)}.st.bad::before{background:var(--fail)}
+.track{display:block;height:10px;border-radius:5px;background:var(--track);overflow:hidden}.track i{display:block;height:100%;background:var(--blue)}.track i.bad{background:var(--fail)}.trow .v{text-align:right}
+.tip{position:fixed;z-index:10;pointer-events:none;max-width:280px;padding:8px 12px;border-radius:8px;background:var(--ink);color:var(--page);font-size:13px;white-space:pre-line;opacity:0;transition:opacity .1s}.tip.on{opacity:1}
+@media(max-width:900px){.layout{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}.content{padding:20px 16px}.trow{grid-template-columns:52px 96px 1fr 64px}}
+</style>
+</head>
+<body>
+<div class="top"><b>Harbor benchmark</b><a href="./">Home</a><a class="here" href="#">Run</a></div>
+<div class="layout">
+<aside><h2>Measure</h2><div id="measures"></div></aside>
+<main class="content">
+<a class="back" href="./">&larr; All runs</a>
+<h1 id="title"></h1>
+<div class="sub" id="sub"></div>
+<div class="tabs" id="tabs"></div>
+<div id="chart"></div>
+<details class="trials" id="trials"><summary id="tsum"></summary><div id="tbody"></div></details>
+</main>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+<script>
+const SAFE = /^[\w.-]+$/;
+let data = null;
+
+async function fetchJson(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  return response.json();
+}
+
+function pointsByTask(file) {
+  const byTask = new Map();
+  for (const trial of file.trials) {
+    const point = { id: trial.id, status: trial.status, seconds: trial.agentSeconds, steps: trial.stepCount, tokens: trial.tokens };
+    byTask.set(trial.task, [...(byTask.get(trial.task) ?? []), point]);
+  }
+  return byTask;
+}
+
+async function loadData() {
+  const runId = new URLSearchParams(location.search).get('run') ?? '';
+  if (!SAFE.test(runId)) throw new Error('This page needs ?run=<run id>.');
+  const [index, file] = await Promise.all([fetchJson('index.json'), fetchJson(`runs/${runId}/run.json`)]);
+  const referenceId = index.reference !== null && index.reference !== runId ? index.reference : null;
+  const reference = referenceId === null ? null : await fetchJson(`runs/${referenceId}/run.json`);
+  const referencePoints = reference === null ? new Map() : pointsByTask(reference);
+  return {
+    run: file.run,
+    referenceVersion: reference === null ? null : reference.run.cliVersion,
+    tasks: [...pointsByTask(file)].map(([id, trials]) => ({ id, trials, reference: referencePoints.get(id) ?? null })),
+  };
+}
+
+const ICONS = {
+  seconds: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  tokens: '<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
+  steps: '<path d="M3 18h5v-5h5V8h5V4"/>',
+};
+const MEASURES = [
+  { key: 'seconds', label: 'Time', format: (v) => `${Math.round(v)} s`, full: (v) => `${Math.round(v)} s` },
+  { key: 'tokens', label: 'Tokens', format: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v)}`), full: (v) => `${Math.round(v).toLocaleString('en-US')} tokens` },
+  { key: 'steps', label: 'Steps', format: (v) => `${Math.round(v)}`, full: (v) => `${Math.round(v)} steps` },
+];
+const SORTS = [['number', 'Number'], ['seconds', 'Time'], ['tokens', 'Tokens'], ['steps', 'Steps']];
+const state = { task: null, measure: MEASURES[0], sort: 'number', onlyNotPassed: false, animate: true };
+
+const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const quantile = (values, p) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = (sorted.length - 1) * p;
+  const low = Math.floor(index);
+  return sorted[low] + (sorted[Math.ceil(index)] - sorted[low]) * (index - low);
+};
+const isPass = (point) => point.status === 'PASS';
+const statusLabel = (point) => (isPass(point) ? 'Passed' : point.status === 'FAIL' ? 'Did not pass' : 'Error');
+const passedCount = (points) => points.filter(isPass).length;
+const numberOf = (point) => state.task.trials.indexOf(point) + 1;
+
+function trialHref(id) {
+  return `trial.html?run=${encodeURIComponent(data.run.runId)}&trial=${encodeURIComponent(id)}`;
+}
+
+function box(values, cx, width, y, color, name) {
+  const f = state.measure.format;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const q1 = quantile(values, 0.25);
+  const q3 = quantile(values, 0.75);
+  const median = quantile(values, 0.5);
+  const tip = `${name}\nMedian ${f(median)}\nMiddle half ${f(q1)} to ${f(q3)}\nRange ${f(min)} to ${f(max)}`;
+  return `<g class="box" data-tip="${esc(tip)}"><rect x="${cx - width / 2 - 8}" y="${y(max) - 4}" width="${width + 16}" height="${y(min) - y(max) + 8}" fill="transparent"/>
+    <line class="whisk" x1="${cx}" x2="${cx}" y1="${y(max)}" y2="${y(q3)}"/><line class="whisk" x1="${cx}" x2="${cx}" y1="${y(q1)}" y2="${y(min)}"/>
+    <line class="whisk" x1="${cx - 12}" x2="${cx + 12}" y1="${y(max)}" y2="${y(max)}"/><line class="whisk" x1="${cx - 12}" x2="${cx + 12}" y1="${y(min)}" y2="${y(min)}"/>
+    <rect class="fill" x="${cx - width / 2}" y="${y(q3)}" width="${width}" height="${Math.max(3, y(q1) - y(q3))}" fill="${color}" fill-opacity="0.18"/>
+    <line class="edge" stroke="${color}" x1="${cx - width / 2}" x2="${cx + width / 2}" y1="${y(q3)}" y2="${y(q3)}"/><line class="edge" stroke="${color}" x1="${cx - width / 2}" x2="${cx + width / 2}" y1="${y(q1)}" y2="${y(q1)}"/>
+    <line class="med" x1="${cx - width / 2}" x2="${cx + width / 2}" y1="${y(median)}" y2="${y(median)}"/></g>`;
+}
+
+const DOT_OFFSETS = [0, -14, 14, -28, 28];
+function placeDots(points, key, y) {
+  const rowEnds = DOT_OFFSETS.map(() => -Infinity);
+  return [...points].sort((a, b) => a[key] - b[key]).map((point) => {
+    const cy = y(point[key]);
+    const free = rowEnds.findIndex((end) => cy - end >= 15);
+    const row = free === -1 ? rowEnds.indexOf(Math.min(...rowEnds)) : free;
+    rowEnds[row] = cy;
+    return { point, cy, offset: DOT_OFFSETS[row] };
+  });
+}
+
+function chart() {
+  const { task, measure } = state;
+  const key = measure.key;
+  const own = task.trials.filter((point) => point[key] !== null);
+  if (own.length === 0) return `<div class="empty">No ${esc(measure.label.toLowerCase())} was recorded for this task.</div>`;
+  const reference = (task.reference ?? []).filter((point) => point[key] !== null);
+  const hasReference = reference.length > 0;
+  const showsReference = data.referenceVersion !== null && !data.run.isReference;
+  const high = Math.max(...own.map((point) => point[key]), ...reference.map((point) => point[key])) * 1.1;
+  const top = 20;
+  const bottom = 340;
+  const y = (value) => bottom - (value / high) * (bottom - top);
+  const runX = showsReference ? 250 : 400;
+  const referenceX = 560;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((share) => share * high);
+  const dots = placeDots(own, key, y).map(({ point, cy, offset }, index) => {
+    const cx = runX + offset;
+    const tip = `Trial ${numberOf(point)}\n${measure.full(point[key])}\n${statusLabel(point)}\nClick to open`;
+    return `<a href="${esc(trialHref(point.id))}" data-trial="${esc(point.id)}" data-tip="${esc(tip)}" aria-label="${esc(`Trial ${numberOf(point)}: ${measure.full(point[key])}, ${statusLabel(point).toLowerCase()}`)}"><circle class="dot ${isPass(point) ? '' : 'bad'}" cx="${cx}" cy="${cy}" r="6.5" style="--i: ${index}"/><circle cx="${cx}" cy="${cy}" r="13" fill="transparent"/></a>`;
+  });
+  const referenceColumn = !showsReference
+    ? ''
+    : hasReference
+      ? `${box(reference.map((point) => point[key]), referenceX, 110, y, 'var(--ink-2)', `Reference run, CLI ${data.referenceVersion}`)}
+        <text class="col" x="${referenceX}" y="${bottom + 28}" text-anchor="middle">Reference</text><text x="${referenceX}" y="${bottom + 46}" text-anchor="middle">CLI ${esc(data.referenceVersion)}</text><text class="big" x="${referenceX}" y="${bottom + 66}" text-anchor="middle">${passedCount(task.reference)} of ${task.reference.length} passed</text>`
+      : `<text x="${referenceX}" y="${y(high * 0.62)}" text-anchor="middle">Not in the reference run</text>`;
+  return `<svg class="${state.animate ? 'animate' : ''}" viewBox="0 0 720 ${bottom + 80}" role="img" aria-label="${esc(measure.label)} of ${esc(task.id)}">
+    ${ticks.map((tick) => `<line x1="70" x2="710" y1="${y(tick)}" y2="${y(tick)}" stroke="var(--line)"/><text x="60" y="${y(tick) + 4}" text-anchor="end">${esc(measure.format(tick))}</text>`).join('')}
+    ${showsReference && hasReference ? `<line class="refline" x1="70" x2="710" y1="${y(quantile(reference.map((point) => point[key]), 0.5))}" y2="${y(quantile(reference.map((point) => point[key]), 0.5))}"/>` : ''}
+    ${box(own.map((point) => point[key]), runX, 110, y, 'var(--blue)', 'This run')}
+    ${referenceColumn}
+    ${dots.join('')}
+    <text class="col" x="${runX}" y="${bottom + 28}" text-anchor="middle">This run</text><text class="big" x="${runX}" y="${bottom + 48}" text-anchor="middle">${passedCount(task.trials)} of ${task.trials.length} passed</text>
+  </svg>`;
+}
+
+function trialsBody() {
+  const { task } = state;
+  const measure = state.sort === 'number' ? state.measure : MEASURES.find((item) => item.key === state.sort);
+  const numbered = task.trials.map((point, index) => ({ point, number: index + 1 }));
+  const shown = state.onlyNotPassed ? numbered.filter((item) => !isPass(item.point)) : numbered;
+  const rows = state.sort === 'number' ? shown : [...shown].sort((a, b) => (b.point[state.sort] ?? -1) - (a.point[state.sort] ?? -1));
+  const max = Math.max(0, ...task.trials.map((point) => point[measure.key] ?? 0));
+  const tools = `<div class="tools">Sort by <span class="seg">${SORTS.map(([key, label]) => `<button type="button" class="${state.sort === key ? 'on' : ''}" data-sort="${key}">${label}</button>`).join('')}</span><button type="button" class="chip ${state.onlyNotPassed ? 'on' : ''}" data-only>Only trials that did not pass</button></div>`;
+  const list = rows.length === 0
+    ? '<div class="sub">Every trial passed.</div>'
+    : rows.map(({ point, number }) => {
+        const value = point[measure.key];
+        const width = value === null || max <= 0 ? 0 : Math.max(2, (value / max) * 100);
+        return `<a class="trow" href="${esc(trialHref(point.id))}" data-trial="${esc(point.id)}"><span class="num">Trial ${number}</span><span class="st ${isPass(point) ? '' : 'bad'}">${esc(statusLabel(point))}</span><span class="track"><i class="${isPass(point) ? '' : 'bad'}" style="width: ${width}%"></i></span><span class="v">${value === null ? '-' : esc(measure.format(value))}</span></a>`;
+      }).join('');
+  return tools + list;
+}
+
+function render() {
+  document.getElementById('measures').innerHTML = MEASURES.map((measure) => `<button type="button" class="opt ${measure === state.measure ? 'on' : ''}" data-m="${measure.key}"><span class="ico"><svg viewBox="0 0 24 24">${ICONS[measure.key]}</svg></span>${measure.label}</button>`).join('');
+  document.getElementById('tabs').innerHTML = data.tasks.map((task) => `<button type="button" class="tab ${task === state.task ? 'on' : ''}" data-t="${esc(task.id)}"><b>${esc(task.id)}</b><small>${passedCount(task.trials)} of ${task.trials.length} passed</small></button>`).join('');
+  document.getElementById('chart').innerHTML = chart();
+  state.animate = false;
+  document.getElementById('tsum').textContent = `Trials of this run (${state.task.trials.length})`;
+  document.getElementById('tbody').innerHTML = trialsBody();
+}
+
+function show() {
+  const date = new Date(data.run.date);
+  const comparison = data.run.isReference
+    ? 'this is the reference run'
+    : data.referenceVersion === null
+      ? 'no reference run to compare with'
+      : `compared with the reference, CLI ${data.referenceVersion}`;
+  document.getElementById('title').textContent = `CLI ${data.run.cliVersion}`;
+  document.getElementById('sub').textContent = [
+    Number.isNaN(date.getTime()) ? data.run.date : date.toISOString().slice(0, 10),
+    `${data.tasks.length} tasks`,
+    `${data.run.attempts} trials per task`,
+    comparison,
+  ].join(' · ');
+  if (data.tasks.length === 0) throw new Error('This run has no trial.');
+  state.task = data.tasks[0];
+  render();
+}
+
+const tip = document.getElementById('tip');
+document.addEventListener('click', (event) => {
+  const measure = event.target.closest('[data-m]');
+  if (measure) {
+    state.measure = MEASURES.find((item) => item.key === measure.dataset.m);
+    state.animate = true;
+    render();
+    return;
+  }
+  const task = event.target.closest('[data-t]');
+  if (task) {
+    state.task = data.tasks.find((item) => item.id === task.dataset.t);
+    state.animate = true;
+    render();
+    return;
+  }
+  const sort = event.target.closest('[data-sort]');
+  if (sort) {
+    state.sort = sort.dataset.sort;
+    render();
+    return;
+  }
+  if (event.target.closest('[data-only]')) {
+    state.onlyNotPassed = !state.onlyNotPassed;
+    render();
+  }
+});
+document.addEventListener('mouseover', (event) => {
+  const tipped = event.target.closest('[data-tip]');
+  if (tipped) {
+    tip.textContent = tipped.dataset.tip;
+    tip.classList.add('on');
+  }
+  const trial = event.target.closest('[data-trial]');
+  if (trial) {
+    document.querySelectorAll('[data-trial]').forEach((node) => {
+      if (node.dataset.trial !== trial.dataset.trial) return;
+      (node.classList.contains('trow') ? node : node.querySelector('.dot')).classList.add('hl');
+    });
+  }
+});
+document.addEventListener('mouseout', (event) => {
+  if (event.target.closest('[data-tip]')) tip.classList.remove('on');
+  document.querySelectorAll('.hl').forEach((node) => node.classList.remove('hl'));
+});
+document.addEventListener('mousemove', (event) => {
+  const left = event.clientX + 16 + tip.offsetWidth > innerWidth ? event.clientX - tip.offsetWidth - 16 : event.clientX + 16;
+  tip.style.left = `${left}px`;
+  tip.style.top = `${event.clientY + 16}px`;
+});
+
+loadData()
+  .then((loaded) => {
+    data = loaded;
+    show();
+  })
+  .catch((error) => {
+    document.getElementById('title').textContent = 'This run cannot be shown';
+    document.getElementById('sub').textContent = error.message;
+  });
+</script>
+</body>
+</html>
