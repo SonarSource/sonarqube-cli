@@ -233,12 +233,10 @@ function showTip(host, tip, title, refValue, runValue, runName, x, y) {
 
 function drawChart() {
   const run = runs[selected];
-  const shared = ref.tasks.filter((t) => {
-    const other = run.tasks.find((r) => r.id === t.id);
-    return other && measure.get(t) !== null && measure.get(other) !== null;
-  });
+  const both = ref.tasks.filter((t) => run.tasks.some((r) => r.id === t.id));
+  const shared = both.filter((t) => measure.get(t) !== null && measure.get(run.tasks.find((r) => r.id === t.id)) !== null);
   const runName = `${run.version} (${dayOf(run, false)})`;
-  document.getElementById('note').textContent = `Reference ${ref.version} against run ${runName}, on the ${shared.length} of ${ref.tasks.length} tasks they both ran.`;
+  document.getElementById('note').textContent = `Reference ${ref.version} against run ${runName}, on the ${both.length} of ${ref.tasks.length} tasks they both ran.`;
   document.getElementById('title').textContent = measure.name;
   document.getElementById('view').textContent = asTable ? 'Chart' : 'Table';
   document.getElementById('open-run').href = `run.html?run=${encodeURIComponent(run.runId)}`;
@@ -247,7 +245,7 @@ function drawChart() {
   const tip = document.getElementById('tip');
   tip.classList.remove('on');
   if (shared.length === 0) {
-    plot.innerHTML = '<div class="empty">No task in common with the reference</div>';
+    plot.innerHTML = `<div class="empty">${both.length === 0 ? 'No task in common with the reference' : 'No data for this measure on the tasks in common'}</div>`;
     return;
   }
   const refValues = shared.map((t) => measure.get(t));
