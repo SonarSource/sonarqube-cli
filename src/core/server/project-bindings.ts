@@ -202,13 +202,15 @@ export class ProjectBindingsClient {
   }
 
   // filters by dopSettingId to avoid cross-ALM collisions (GitHub, Azure also populate `repository`)
-  getAllProjectBindings(dopSettingId: string): ResultAsync<Map<string, string>, HttpClientError> {
+  getAllProjectBindings(
+    dopSettingId: string,
+  ): ResultAsync<Map<string, Set<string>>, HttpClientError> {
     const pageSize = 500;
 
     const fetchPage = (
       pageIndex: number,
-      bindingMap: Map<string, string>,
-    ): ResultAsync<Map<string, string>, HttpClientError> =>
+      bindingMap: Map<string, Set<string>>,
+    ): ResultAsync<Map<string, Set<string>>, HttpClientError> =>
       this.client
         .get<ProjectBindingsPageResponse>('/api/v2/dop-translation/project-bindings', {
           pageSize,
@@ -222,7 +224,7 @@ export class ProjectBindingsClient {
             : fetchPage(pageIndex + 1, bindingMap);
         });
 
-    return fetchPage(1, new Map<string, string>());
+    return fetchPage(1, new Map<string, Set<string>>());
   }
 }
 
@@ -237,11 +239,14 @@ interface ProjectBindingsPageResponse {
 
 function mergeBindingsPage(
   result: ProjectBindingsPageResponse,
-  bindingMap: Map<string, string>,
+  bindingMap: Map<string, Set<string>>,
 ): void {
   // SQS preserves repository casing; normalize keys for case-insensitive lookups.
   for (const binding of result.projectBindings) {
-    bindingMap.set(binding.repository.toLowerCase(), binding.projectKey);
+    const repository = binding.repository.toLowerCase();
+    const projectKeys = bindingMap.get(repository) ?? new Set<string>();
+    projectKeys.add(binding.projectKey);
+    bindingMap.set(repository, projectKeys);
   }
 }
 
