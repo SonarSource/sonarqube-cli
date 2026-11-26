@@ -148,7 +148,7 @@ svg text.cur { fill: var(--blue); font-size: 11px; font-weight: 600; }
 </style>
 </head>
 <body>
-<div class="top"><b>Harbor benchmark</b><a href="./">Home</a><a class="here" href="evolution.html">Evolution</a></div>
+<div class="top"><b>Harbor benchmark</b><a href="./">Home</a><a class="here" href="evolution.html">Evolution</a><a href="task.html">Tasks</a></div>
 <div class="layout">
   <aside>
     <section><h2>Measure</h2><div class="opts" id="measures" role="radiogroup" aria-label="Measure"></div></section>
@@ -418,7 +418,7 @@ function renderDetails() {
 function render(animate) {
   renderSide();
   document.getElementById('title').textContent = 'Evolution by stable CLI version';
-  document.getElementById('sub').innerHTML = `${esc(state.task)} - ${MEASURES[state.measure].label.toLowerCase()}`;
+  document.getElementById('sub').innerHTML = `${esc(state.task)} - ${MEASURES[state.measure].label.toLowerCase()} - <a href="task.html?task=${encodeURIComponent(state.task)}">What this task tests</a>`;
   renderChart(animate);
   renderDetails();
 }

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { TASKS_PAGE_URL, taskTitle } from './tasks.ts';
+import { taskTitle } from './tasks.ts';
 import { lastSegment, readJson } from './read-json.ts';
 
 interface TrialResult {
@@ -255,7 +255,7 @@ function renderTaskSection(group: Row[]): string[] {
   const figures = [result, time, cost].filter(Boolean).join(GAP);
   return [
     ...hardBreaks([
-      indented(1, `\`${first.task}\` ([link](${TASKS_PAGE_URL}#${first.task}))`),
+      indented(1, `\`${first.task}\``),
       indented(2, taskTitle(first.task)),
       indented(2, figures),
     ]),

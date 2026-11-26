@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHECKS, TASKS_PAGE_URL, TITLES } from './tasks.ts';
+import { CHECKS, TITLES } from './tasks.ts';
 
 const META_PLACEHOLDER = '__TRIAL_META__';
 
@@ -17,7 +17,7 @@ export function renderTrialPage(): string {
   const template = readTemplate('trial-page-template.html');
   if (!template.includes(META_PLACEHOLDER))
     throw new Error(`trial-page-template.html has no ${META_PLACEHOLDER} placeholder`);
-  const meta = { checks: CHECKS, titles: TITLES, tasksPage: TASKS_PAGE_URL };
+  const meta = { checks: CHECKS, titles: TITLES };
   const payload = encodeURIComponent(JSON.stringify(meta)).replace(/'/g, '%27');
   return template.replace(META_PLACEHOLDER, () => payload);
 }

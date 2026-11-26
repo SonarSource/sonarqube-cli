@@ -25,7 +25,8 @@ body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 sys
 .top { display: flex; align-items: center; gap: 32px; padding: 0 20px; height: 56px; border-bottom: 1px solid var(--grid); background: var(--surface); }
 .brand { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 .top nav { display: flex; gap: 4px; height: 100%; }
-.top nav a { display: flex; align-items: center; padding: 0 14px; color: var(--ink); font-weight: 600; text-decoration: none; border-bottom: 3px solid var(--select-bg); }
+.top nav a { display: flex; align-items: center; padding: 0 14px; color: var(--ink); font-weight: 600; text-decoration: none; border-bottom: 3px solid transparent; }
+.top nav a.here { border-bottom-color: var(--select-bg); }
 .split { display: grid; grid-template-columns: minmax(320px, 36%) 1fr; }
 .left { padding: 32px 28px; border-right: 1px solid var(--grid); }
 .right { padding: 32px 28px; }
@@ -103,7 +104,7 @@ svg text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
 <body>
 <header class="top">
   <span class="brand">Harbor benchmark</span>
-  <nav><a href="./">Home</a></nav>
+  <nav><a class="here" href="./">Home</a><a href="evolution.html">Evolution</a><a href="task.html">Tasks</a></nav>
 </header>
 <div class="split">
   <aside class="left">

@@ -43,7 +43,7 @@ details.trials{margin-top:30px;border-top:1px solid var(--line);padding-top:14px
 </style>
 </head>
 <body>
-<div class="top"><b>Harbor benchmark</b><a href="./">Home</a><a class="here" href="#">Run</a></div>
+<div class="top"><b>Harbor benchmark</b><a href="./">Home</a><a href="evolution.html">Evolution</a><a href="task.html">Tasks</a></div>
 <div class="layout">
 <aside><h2>Measure</h2><div id="measures"></div></aside>
 <main class="content">
@@ -51,6 +51,7 @@ details.trials{margin-top:30px;border-top:1px solid var(--line);padding-top:14px
 <h1 id="title"></h1>
 <div class="sub" id="sub"></div>
 <div class="tabs" id="tabs"></div>
+<a class="back" id="taskinfo">What this task tests</a>
 <div id="chart"></div>
 <details class="trials" id="trials"><summary id="tsum"></summary><div id="tbody"></div></details>
 </main>
@@ -203,6 +204,7 @@ function trialsBody() {
 function render() {
   document.getElementById('measures').innerHTML = MEASURES.map((measure) => `<button type="button" class="opt ${measure === state.measure ? 'on' : ''}" data-m="${measure.key}"><span class="ico"><svg viewBox="0 0 24 24">${ICONS[measure.key]}</svg></span>${measure.label}</button>`).join('');
   document.getElementById('tabs').innerHTML = data.tasks.map((task) => `<button type="button" class="tab ${task === state.task ? 'on' : ''}" data-t="${esc(task.id)}"><b>${esc(task.id)}</b><small>${passedCount(task.trials)} of ${task.trials.length} passed</small></button>`).join('');
+  document.getElementById('taskinfo').href = `task.html?task=${encodeURIComponent(state.task.id)}`;
   document.getElementById('chart').innerHTML = chart();
   state.animate = false;
   document.getElementById('tsum').textContent = `Trials of this run (${state.task.trials.length})`;

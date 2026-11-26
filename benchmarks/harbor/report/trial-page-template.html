@@ -122,7 +122,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
 </style>
 </head>
 <body>
-<div class="top-bar"><b>Harbor benchmark</b><a href="./">Home</a></div>
+<div class="top-bar"><b>Harbor benchmark</b><a href="./">Home</a><a href="evolution.html">Evolution</a><a href="task.html">Tasks</a></div>
 <div class="wrap"><main id="main"><h1>Loading</h1></main></div>
 <script>
 const META = JSON.parse(decodeURIComponent('__TRIAL_META__'));
@@ -343,7 +343,7 @@ function page(trial, summary, run, runId) {
       el('span', { text: '›' }),
       el('span', { text: position ? 'trial ' + position + ' of ' + siblings.length : trial.id }),
     ]),
-    el('h1', {}, [el('a', { href: META.tasksPage + '#' + trial.task, target: '_blank', rel: 'noopener', title: 'What this task tests', text: trial.task })]),
+    el('h1', {}, [el('a', { href: 'task.html?task=' + encodeURIComponent(trial.task), title: 'What this task tests', text: trial.task })]),
     title && title !== trial.task ? el('p', { class: 'sub', text: title }) : null,
     verdictCard(trial, summary),
     ...trajectorySection(trial),

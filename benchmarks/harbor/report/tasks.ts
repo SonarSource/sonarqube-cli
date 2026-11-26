@@ -1,5 +1,3 @@
-export const TASKS_PAGE_URL = 'https://internal.sip.sonarsource.io/apps/harbor-tasks/';
-
 export const TITLES: Record<string, string> = {
   'integrate--happy': 'Set up SonarQube for the coding agent',
   'auth--missing-org': 'Repair the CLI, then count the open issues',
