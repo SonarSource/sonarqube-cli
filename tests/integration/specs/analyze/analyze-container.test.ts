@@ -119,6 +119,7 @@ describe('analyze container', () => {
   it.skipIf(IS_WINDOWS)(
     'reports SIGTERM cancellation with exit 143 in JSON and the process status',
     async () => {
+      harness.state().withTelemetryEnabled();
       installStub(harness, { delayMs: 15_000 });
       const invocations = harness.cliHome.file(CONTAINER_SCANNER_INVOCATIONS_FILE);
       const session = harness.runInteractive('analyze container ./my-image.tar');
@@ -134,6 +135,20 @@ describe('analyze container', () => {
         expect(JSON.parse(result.stdout)).toMatchObject({
           exitCode: 143,
           errors: [{ kind: 'scannerExecution', message: 'Container scan cancelled.' }],
+        });
+        const analysis = readAnalysisEvents(harness.sonarUserHome.path);
+        const commands = readCommandEvents(harness.sonarUserHome.path);
+        expect(analysis).toHaveLength(1);
+        expect(commands).toHaveLength(1);
+        expect(analysis[0].event_payload).toMatchObject({
+          analyzer: 'sonar-container-scanner',
+          caller_command: 'analyze container',
+          findings_count: 0,
+          errors_count: 0,
+          failures_count: 0,
+          exit_code: 143,
+          invocation_id: commands[0].event_payload.invocation_id,
+          details: '',
         });
       } finally {
         session.kill();
@@ -168,6 +183,7 @@ describe('analyze container', () => {
     expect(JSON.parse(result.stdout)).toEqual(report);
     expect(result.stderr).toContain(summary);
     expect(readAnalysisEvents(harness.sonarUserHome.path)).toEqual([]);
+    expect(readCommandEvents(harness.sonarUserHome.path)).toEqual([]);
     expect(readContainerScannerInvocations(harness)).toEqual([
       {
         argv: [
@@ -339,6 +355,21 @@ describe('analyze container', () => {
 
   it.each([
     {
+      title: 'clean scan with below-threshold findings',
+      nativeExit: 0,
+      stdout: JSON.stringify({
+        issues: [findings[0]],
+        errors: [],
+        configuration,
+        exitCode: 0,
+      }),
+      cliExit: 0,
+      commandResult: 'success',
+      observedFindings: 1,
+      errors: 0,
+      failures: 0,
+    },
+    {
       title: 'threshold hit with partial results',
       nativeExit: 1,
       stdout: JSON.stringify({
@@ -348,15 +379,32 @@ describe('analyze container', () => {
         exitCode: 1,
       }),
       cliExit: 51,
+      commandResult: 'failure',
       observedFindings: 2,
       errors: 1,
       failures: 0,
+    },
+    {
+      title: 'native execution failure',
+      nativeExit: 2,
+      stdout: JSON.stringify({
+        issues: [],
+        errors: [{ kind: 'backendAuth', message: `Sensitive auth detail ${TOKEN}` }],
+        configuration,
+        exitCode: 2,
+      }),
+      cliExit: 1,
+      commandResult: 'failure',
+      observedFindings: 0,
+      errors: 0,
+      failures: 1,
     },
     {
       title: 'malformed output',
       nativeExit: 0,
       stdout: '[',
       cliExit: 1,
+      commandResult: 'failure',
       observedFindings: 0,
       errors: 0,
       failures: 1,
@@ -364,7 +412,9 @@ describe('analyze container', () => {
   ])('records one correlated analysis fact for $title', async (test) => {
     harness.state().withTelemetryEnabled();
     installStub(harness, { stdout: test.stdout, exitCode: test.nativeExit });
-    const result = await harness.run('analyze container ./my-image.tar');
+    const result = await harness.run(
+      'analyze container ./my-image.tar --registry registry.example --repository team/secret-app --tag release-1',
+    );
     expect(result.exitCode).toBe(test.cliExit);
     const analysis = readAnalysisEvents(harness.sonarUserHome.path);
     const commands = readCommandEvents(harness.sonarUserHome.path);
@@ -373,6 +423,9 @@ describe('analyze container', () => {
     expect(commands[0].event_payload).toMatchObject({
       command: 'analyze',
       subcommand: 'container',
+      result: test.commandResult,
+      target_project_count: 0,
+      project_uuid: null,
     });
     expect(analysis[0].event_payload).toMatchObject({
       analyzer: 'sonar-container-scanner',
@@ -384,9 +437,10 @@ describe('analyze container', () => {
       invocation_id: commands[0].event_payload.invocation_id,
       details: '',
     });
+    expect(analysis[0].event_payload.analysis_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(analysis[0].event_payload.scan_duration_ms).toBeGreaterThanOrEqual(0);
     expect(JSON.stringify([analysis, commands])).not.toMatch(
-      /my-image|CVE-2025|Sensitive package detail/,
+      /my-image|CVE-2025|Sensitive|container-test-token|container-test-org|registry\.example|secret-app|release-1/,
     );
   });
 
