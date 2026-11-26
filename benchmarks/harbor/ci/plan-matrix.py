@@ -60,7 +60,7 @@ def select_plugin(inputs: dict) -> list[str]:
     choice = inputs.get("agent_plugin", "without")
     if choice not in PLUGIN_CHOICES:
         fail(f"Unknown agent_plugin '{choice}', expected one of: {', '.join(PLUGIN_CHOICES)}")
-    if inputs["store-report"] is True and choice != "without":
+    if inputs.get("store-report") is True and choice != "without":
         fail("The release report compares releases without the agent plugin: uncheck the publish box to run with it")
     return PLUGIN_CHOICES[choice]
 

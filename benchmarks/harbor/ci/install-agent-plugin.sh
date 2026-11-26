@@ -8,6 +8,8 @@ if [[ -z "$plugin_dir" ]]; then
   jq -n '{installed: false}' > "$marker"
   exit 0
 fi
+# Written before installing, so a trial whose install fails still reports the variant it asked for.
+jq -n --arg ref "${HB_AGENT_PLUGIN_REF:-}" '{installed: true, ref: $ref}' > "$marker"
 version="$(jq -r .version "$plugin_dir/.claude-plugin/plugin.json")"
 case "$AGENT" in
   claude-code)

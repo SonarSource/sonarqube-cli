@@ -41,6 +41,7 @@ interface Row {
   agent: string | null;
   model: string | null;
   plugin: string | null;
+  pluginLoaded: boolean;
   status: Status;
   agentSeconds: number | null;
   steps: number | null;
@@ -91,10 +92,10 @@ function pluginOf(
   const marker = readJson<PluginMarker>(join(trialDir, PLUGIN_MARKER_FILE));
   if (!marker) return { plugin: null, loaded: true };
   if (!marker.installed) return { plugin: 'without', loaded: true };
-  const plugin = `with ${marker.version ?? marker.ref ?? ''}`.trim();
+  // The ref is written before the install, so a failed install groups with its variant.
+  const plugin = `with ${marker.ref || marker.version || ''}`.trim();
   const plugins = agent === 'claude-code' ? claudeInitPlugins(trialDir) : null;
-  if (plugins === null || plugins.includes(PLUGIN_NAME)) return { plugin, loaded: true };
-  return { plugin: `${plugin}, not loaded`, loaded: false };
+  return { plugin, loaded: plugins === null || plugins.includes(PLUGIN_NAME) };
 }
 
 function errorRow(
@@ -111,6 +112,7 @@ function errorRow(
     agent,
     model,
     plugin,
+    pluginLoaded: true,
     status: 'ERROR',
     agentSeconds: null,
     steps: null,
@@ -153,6 +155,7 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
     agent,
     model: trial.agent_info?.model_info?.name ?? null,
     plugin,
+    pluginLoaded: loaded,
     // A trial that was meant to run with the plugin but did not load it measures nothing.
     status: loaded ? statusOf(trial) : 'ERROR',
     agentSeconds: secondsBetween(
@@ -364,7 +367,13 @@ function renderAgentSection(sectionRows: Row[]): string[] {
   const mark = passed === sectionRows.length ? PASSED_ICON : FAILED_ICON;
   const cost = present(total(sectionRows.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`);
   const result = `${passed} of ${plural(sectionRows.length, 'trial')} passed`;
-  const figures = [result, cost && `${cost} in total`, plural(groups.length, 'task')];
+  const notLoaded = sectionRows.filter((row) => !row.pluginLoaded).length;
+  const figures = [
+    result,
+    notLoaded > 0 && `⚠️ ${notLoaded} did not load the plugin`,
+    cost && `${cost} in total`,
+    plural(groups.length, 'task'),
+  ];
   return [
     `### ${mark} Agent: ${agentLabel(first.agent)} (${first.model ?? 'unknown model'})${pluginLabel(first.plugin)}`,
     '',

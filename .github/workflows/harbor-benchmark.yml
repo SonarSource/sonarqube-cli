@@ -267,7 +267,7 @@ jobs:
     name: Publish the release report
     runs-on: sonar-xs
     needs: report
-    if: ${{ !cancelled() && inputs.store-report && needs.report.outputs.release-report == 'true' }}
+    if: ${{ !cancelled() && inputs.store-report && inputs.agent_plugin == 'without' && needs.report.outputs.release-report == 'true' }}
     permissions:
       id-token: write
       contents: read
