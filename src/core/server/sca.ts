@@ -27,6 +27,11 @@ import type { ScaIssueRelease, ScaIssuesReleasesResponse } from './types.ts';
 
 export type ScaEnablement = 'enabled' | 'not_enabled' | 'check_failed';
 
+interface ScaFeatureEnablement {
+  enabled: boolean;
+  packageCheckEnabled?: boolean;
+}
+
 export interface GetWorstIssuesReleasesParams {
   projectKey: string;
   types: string[];
@@ -62,12 +67,20 @@ export class ScaClient {
     connectionType: 'cloud' | 'on-premise',
     orgKey?: string,
   ): ResultAsync<ScaEnablement, never> {
-    const isCloud = connectionType === 'cloud';
-    const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
-    const params = isCloud && orgKey ? { organization: orgKey } : undefined;
-    return this.client
-      .get<{ enabled: boolean }>(endpoint, params)
+    return this.getFeatureEnablement(connectionType, orgKey)
       .map((result): ScaEnablement => (result.enabled ? 'enabled' : 'not_enabled'))
+      .orElse(() => okAsync<ScaEnablement>('check_failed'));
+  }
+
+  /** Package checks can be available without full SCA; older servers report only `enabled`. */
+  getPackageCheckEnablement(
+    connectionType: 'cloud' | 'on-premise',
+    orgKey?: string,
+  ): ResultAsync<ScaEnablement, never> {
+    return this.getFeatureEnablement(connectionType, orgKey)
+      .map((result): ScaEnablement =>
+        (result.packageCheckEnabled ?? result.enabled) ? 'enabled' : 'not_enabled',
+      )
       .orElse(() => okAsync<ScaEnablement>('check_failed'));
   }
 
@@ -111,5 +124,15 @@ export class ScaClient {
       issuesReleases: response.issuesReleases,
       totalCount: response.page.total,
     }));
+  }
+
+  private getFeatureEnablement(
+    connectionType: 'cloud' | 'on-premise',
+    orgKey?: string,
+  ): ResultAsync<ScaFeatureEnablement, HttpClientError> {
+    const isCloud = connectionType === 'cloud';
+    const endpoint = isCloud ? '/sca/feature-enabled' : '/api/v2/sca/feature-enabled';
+    const params = isCloud && orgKey ? { organization: orgKey } : undefined;
+    return this.client.get<ScaFeatureEnablement>(endpoint, params);
   }
 }
