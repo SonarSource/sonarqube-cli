@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor benchmark - trial</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #6e6c68;
+  --grid: #e1e0d9; --ring: rgba(11, 11, 11, 0.10); --wash: rgba(11, 11, 11, 0.05);
+  --accent: #2a78d6; --strip: #c3c2b7;
+  --good: #64a06b; --good-text: #3d6f45; --good-wash: #f1f6f1;
+  --bad: #d17b77; --bad-text: #a8403b; --bad-wash: #f9eeed;
+  --warn: #e0b24f; --warn-text: #7a5a1a; --warn-wash: #f6eddb;
+  --term-bg: #15171b; --term-fg: #e9e7e2; --term-dim: #8d9099; --term-prompt: #7fb0f2; --term-line: #2a2d33;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #898781;
+    --grid: #2c2c2a; --ring: rgba(255, 255, 255, 0.10); --wash: rgba(255, 255, 255, 0.06);
+    --accent: #3987e5; --strip: #54544e;
+    --good: #4b7050; --good-text: #8bc592; --good-wash: #1b241d;
+    --bad: #99524e; --bad-text: #e08a85; --bad-wash: #2a1f1e;
+    --warn: #c9a255; --warn-text: #e3c487; --warn-wash: #302a1c;
+    --term-bg: #0b0c0e; --term-line: #24272c;
+  }
+}
+* { box-sizing: border-box; }
+html { background: var(--page); }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top-bar { display: flex; gap: 28px; align-items: baseline; padding: 18px 40px; border-bottom: 1px solid var(--grid); }
+.top-bar b { font-size: 16px; }
+.top-bar a { color: var(--ink); text-decoration: none; }
+.wrap { max-width: 920px; margin: 0 auto; padding: 28px 16px 72px; }
+.back { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 7px 16px; border: 1px solid var(--ring); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 600; text-decoration: none; }
+.back:hover { background: var(--wash); }
+.back.end { margin: 34px 0 0; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--ink-3); font-size: 14px; }
+.crumbs a { font-weight: 600; text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+h1 { font-size: 30px; line-height: 1.15; margin: 18px 0 0; font-weight: 650; letter-spacing: -0.02em; overflow-wrap: anywhere; font-family: var(--mono); }
+h1 a { color: inherit; text-decoration: none; }
+h1 a:hover { color: var(--accent); }
+.sub { color: var(--ink-2); margin: 6px 0 0; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 650; }
+.muted { color: var(--ink-3); }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 16px; min-width: 0; }
+.ico { width: 20px; height: 20px; flex: none; display: inline-block; vertical-align: -4px; }
+.ico.good { color: var(--good); } .ico.bad { color: var(--bad); } .ico.warn { color: var(--warn); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 999px; font-size: 13px; font-weight: 650; background: var(--wash); color: var(--ink-2); }
+.verdict { margin-top: 22px; overflow: hidden; }
+.banner { display: flex; align-items: center; gap: 14px; padding: 18px 20px; }
+.banner .ico { width: 30px; height: 30px; }
+.banner h2 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); border-top: 1px solid var(--ring); }
+.stat { padding: 14px 20px; border-right: 1px solid var(--ring); }
+.stat:last-child { border-right: 0; }
+.stat .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--ink-3); font-size: 12px; }
+.checks { padding: 18px 20px 20px; border-top: 1px solid var(--ring); }
+.checks-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.check-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; background: var(--wash); }
+.check-list li.ko { grid-template-columns: minmax(0, 1fr) auto; }
+.check-list .lab { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+.met-fold { margin-top: 12px; }
+.met-fold summary { cursor: pointer; color: var(--ink-2); padding: 6px 0; }
+.met-fold .check-list { margin-top: 8px; }
+.section { margin: 34px 0 10px; }
+.timeline { margin-top: 10px; }
+.strip { display: flex; gap: 3px; height: 18px; }
+.strip button { display: block; flex: 1; height: 100%; border: 0; padding: 0; border-radius: 5px; background: var(--strip); min-width: 6px; cursor: pointer; }
+.strip button.err { background: var(--warn); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--strip); }
+.legend i.err { background: var(--warn); }
+.steps { list-style: none; margin: 18px 0 0; padding: 0; }
+.step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; position: relative; padding-bottom: 20px; scroll-margin-top: 16px; }
+.step::before { content: ""; position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: var(--grid); }
+.step:last-child::before { display: none; }
+.step .n { width: 30px; height: 30px; border-radius: 50%; background: var(--surface); border: 2px solid var(--grid); font-size: 13px; font-weight: 650; display: grid; place-items: center; color: var(--ink-2); position: relative; }
+.step .n.small { font-size: 10px; }
+.step .body { min-width: 0; padding-top: 3px; }
+.result-tag { display: inline-block; margin-bottom: 8px; padding: 1px 9px; border: 1px solid var(--grid); border-radius: 999px; color: var(--ink-3); font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.rich p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.rich p:last-child { margin-bottom: 0; }
+.rich ul { margin: 0 0 8px; padding-left: 20px; }
+.rich code { font-family: var(--mono); font-size: 13px; background: var(--wash); padding: 1px 6px; border-radius: 5px; }
+.say { margin-bottom: 8px; }
+.call { background: var(--term-bg); color: var(--term-fg); border-radius: 12px; margin: 8px 0 0; overflow: hidden; border: 1px solid var(--term-line); }
+.call.err { border-color: var(--warn); }
+.call > button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 12px 14px; cursor: pointer; }
+.call .cmd { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; flex: 1; min-width: 0; white-space: pre-wrap; }
+.call .cmd::before { content: "$ "; color: var(--term-prompt); }
+.call .cmd.clamp { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.call .more { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--term-line); padding: 8px 14px; color: var(--term-prompt); font: 650 12px var(--sans); cursor: pointer; }
+.call .more:hover { text-decoration: underline; }
+.call .more[hidden] { display: none; }
+.call .head { display: flex; gap: 10px; align-items: flex-start; }
+.call .out { color: var(--term-dim); font-family: var(--mono); font-size: 12px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call .flag { flex: none; font: 650 11px var(--sans); text-transform: uppercase; letter-spacing: .06em; color: #15171b; background: var(--warn); border-radius: 999px; padding: 2px 8px; margin-left: 8px; }
+.call pre { margin: 0; padding: 12px 14px; border-top: 1px solid var(--term-line); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 var(--mono); max-height: 420px; overflow: auto; color: var(--term-fg); }
+.note { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--warn-text); }
+details.tech { margin-top: 34px; }
+details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
+.kv { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: 6px 16px; margin: 14px 0 0; }
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .top-bar { padding: 14px 16px; }
+  .kv { grid-template-columns: 1fr; } .kv dd { margin-bottom: 6px; }
+  .stat { border-right: 0; border-bottom: 1px solid var(--ring); }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<div class="top-bar"><b>Harbor benchmark</b><a href="./">Home</a></div>
+<div class="wrap"><main id="main"><h1>Loading</h1></main></div>
+<script>
+const META = JSON.parse(decodeURIComponent('__TRIAL_META__'));
+const SAFE = /^[\w.-]+$/;
+const PREVIEW_LENGTH = 140;
+const SECONDS_PER_MINUTE = 60;
+const SHORT_SECONDS = 10;
+const ICONS = {
+  good: '<svg viewBox="0 0 20 20" class="ico good" aria-hidden="true"><path d="M4.5 10.5l3.6 3.6 7.4-8.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  bad: '<svg viewBox="0 0 20 20" class="ico bad" aria-hidden="true"><circle cx="10" cy="10" r="9.2" fill="var(--bad-wash)" stroke="currentColor" stroke-width="1.4"/><path d="M10 5.6v5.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="10" cy="14.2" r="1.15" fill="currentColor"/></svg>',
+  warn: '<svg viewBox="0 0 20 20" class="ico warn" aria-hidden="true"><path d="M10 2.4L18.3 16.8H1.7Z" fill="var(--warn-wash)" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M10 7.6v4.3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="10" cy="14.3" r="1.05" fill="currentColor"/></svg>',
+};
+
+function el(tag, props, children) {
+  const node = document.createElement(tag);
+  Object.keys(props || {}).forEach((key) => {
+    if (key === 'class') node.className = props[key];
+    else if (key === 'text') node.textContent = props[key];
+    else if (key === 'html') node.innerHTML = props[key];
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), props[key]);
+    else node.setAttribute(key, props[key]);
+  });
+  (children || []).forEach((child) => {
+    if (child !== null && child !== undefined) node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+  });
+  return node;
+}
+const icon = (kind) => el('span', { html: ICONS[kind], style: 'display:inline-flex' });
+const plural = (count, word) => count + ' ' + word + (count === 1 ? '' : 's');
+function fmtSeconds(value) {
+  if (value === null || value === undefined) return null;
+  if (value < SHORT_SECONDS) return value.toFixed(1) + ' s';
+  const total = Math.round(value);
+  if (total < SECONDS_PER_MINUTE) return total + ' s';
+  return Math.floor(total / SECONDS_PER_MINUTE) + ' min ' + (total % SECONDS_PER_MINUTE) + ' s';
+}
+function compact(value) {
+  if (value === null || value === undefined) return null;
+  if (value < 1000) return String(value);
+  return (value / 1000).toFixed(value < 10000 ? 1 : 0) + 'k';
+}
+async function fetchJson(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  return response.json();
+}
+
+function inline(text) {
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/).filter(Boolean).map((part) => {
+    if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) return el('strong', { text: part.slice(2, -2) });
+    if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) return el('code', { text: part.slice(1, -1) });
+    return part;
+  });
+}
+function richText(text) {
+  const wrap = el('div', { class: 'rich' });
+  let list = null;
+  text.split('\n').forEach((raw) => {
+    const line = raw.trim();
+    const bullet = /^[-*]\s+(.*)$/.exec(line);
+    if (bullet) {
+      if (!list) {
+        list = el('ul');
+        wrap.appendChild(list);
+      }
+      list.appendChild(el('li', {}, inline(bullet[1])));
+      return;
+    }
+    list = null;
+    if (line) wrap.appendChild(el('p', {}, inline(line)));
+  });
+  return wrap;
+}
+
+function firstLine(text) {
+  const line = text.split('\n').map((l) => l.trim()).find((l) => /\w{2}/.test(l)) || '';
+  return line.length > PREVIEW_LENGTH ? line.slice(0, PREVIEW_LENGTH) + '…' : line;
+}
+const blockedByHook = (call) => /hook error/i.test(call.output);
+function callNode(call) {
+  const shown = call.arguments.command !== undefined ? call.arguments.command : call.arguments.cmd;
+  const command = shown !== undefined ? String(shown) : JSON.stringify(call.arguments);
+  const label = call.name === 'Bash' ? command : call.name + ' ' + command;
+  const body = el('pre', { text: call.output || '(no output recorded)' });
+  body.hidden = true;
+  const cmd = el('div', { class: 'cmd clamp', text: label });
+  const flag = call.isError ? el('span', { class: 'flag', text: blockedByHook(call) ? 'blocked' : 'failed' }) : null;
+  const more = el('button', { type: 'button', class: 'more', text: 'Show more', onclick() {
+    const clamped = cmd.classList.toggle('clamp');
+    more.textContent = clamped ? 'Show more' : 'Show less';
+  } });
+  more.hidden = true;
+  const header = el('button', { type: 'button', 'aria-expanded': 'false', onclick() {
+    body.hidden = !body.hidden;
+    header.setAttribute('aria-expanded', String(!body.hidden));
+  } }, [
+    el('div', { class: 'head' }, [cmd, flag]),
+    call.output ? el('div', { class: 'out', text: '→ ' + firstLine(call.output) }) : null,
+  ]);
+  return el('div', { class: 'call' + (call.isError ? ' err' : '') }, [header, more, body]);
+}
+function fitCommands() {
+  document.querySelectorAll('.call .cmd.clamp').forEach((cmd) => {
+    cmd.closest('.call').querySelector('.more').hidden = cmd.scrollHeight <= cmd.clientHeight + 1;
+  });
+}
+
+function stepNode(step, id, number, tag) {
+  const failed = step.calls.some((call) => call.isError);
+  const body = el('div', { class: 'body' });
+  if (tag) body.appendChild(el('span', { class: 'result-tag', text: tag }));
+  if (step.message) body.appendChild(el('div', { class: 'say' }, [richText(step.message)]));
+  step.calls.forEach((call) => body.appendChild(callNode(call)));
+  if (failed) body.appendChild(el('p', { class: 'note', text: step.calls.some(blockedByHook) ? 'A hook blocked this step. Click it to read why.' : 'A command failed here. Click it to read the answer.' }));
+  return el('li', { class: 'step', id: 'step-' + id }, [el('span', { class: 'n' + (tag === 'Task' ? ' small' : ''), text: String(number) }), body]);
+}
+
+function checkItem(check) {
+  return el('li', { class: check.passed ? 'ok' : 'ko' }, [
+    check.passed ? icon('good') : null,
+    el('span', { text: META.checks[check.name] || check.name }),
+    el('span', { class: 'lab', text: check.passed ? 'Met' : 'Not met' }),
+  ]);
+}
+function checksNode(trial) {
+  if (!trial.checks.length) return null;
+  const met = trial.checks.filter((check) => check.passed);
+  const missed = trial.checks.filter((check) => !check.passed);
+  return el('div', { class: 'checks' }, [
+    el('div', { class: 'checks-head' }, [
+      el('span', { class: 'eyebrow', text: missed.length ? 'What failed' : 'What was checked' }),
+      el('span', { class: 'pill', text: met.length + ' of ' + trial.checks.length + ' met' }),
+    ]),
+    missed.length ? el('ul', { class: 'check-list' }, missed.map(checkItem)) : null,
+    met.length ? el('details', { class: 'met-fold' }, [
+      el('summary', { text: missed.length ? 'Show the ' + plural(met.length, 'check') + ' that passed' : 'Show the ' + plural(met.length, 'check') }),
+      el('ul', { class: 'check-list' }, met.map(checkItem)),
+    ]) : null,
+  ]);
+}
+
+function statusOf(status) {
+  if (status === 'PASS') return { text: 'Passed', kind: 'good' };
+  if (status === 'FAIL') return { text: 'Failed', kind: 'bad' };
+  return { text: 'Error', kind: 'warn' };
+}
+function verdictCard(trial, summary) {
+  const status = statusOf(trial.status);
+  const stats = [
+    [fmtSeconds(summary.agentSeconds), 'Agent time'],
+    [summary.stepCount !== null ? String(summary.stepCount) : null, 'Steps'],
+    [compact(summary.tokens), 'Tokens'],
+  ].filter((item) => item[0] !== null);
+  return el('div', { class: 'card verdict' }, [
+    el('div', { class: 'banner' }, [icon(status.kind), el('h2', { text: status.text })]),
+    stats.length ? el('div', { class: 'stats' }, stats.map(([value, label]) => el('div', { class: 'stat' }, [el('div', { class: 'v', text: value }), el('div', { class: 'l', text: label })]))) : null,
+    trial.error ? el('p', { class: 'note', style: 'padding:0 20px 14px', text: trial.error }) : null,
+    checksNode(trial),
+  ]);
+}
+
+function trajectorySection(trial) {
+  const indexed = trial.steps.map((step, index) => ({ step, id: index + 1 }));
+  const request = indexed.find((item) => item.step.source === 'user' && item.step.message && !item.step.message.trimStart().startsWith('<'));
+  const agentSteps = indexed.filter((item) => item.step.source === 'agent');
+  const heading = el('div', { class: 'section eyebrow', text: 'Trajectory' });
+  if (agentSteps.length === 0) {
+    const nothing = el('p', { class: 'muted', text: request ? 'No agent step was recorded for this trial.' : 'No steps were recorded for this trial.' });
+    return [heading, request ? el('ol', { class: 'steps' }, [stepNode(request.step, request.id, 'Ask', 'Task')]) : null, nothing];
+  }
+  const last = agentSteps[agentSteps.length - 1];
+  const finalAnswer = last && last.step.calls.length === 0 && last.step.message ? last : null;
+  const strip = el('div', { class: 'strip' }, agentSteps.map((item, index) => {
+    const failed = item.step.calls.some((call) => call.isError);
+    return el('button', { type: 'button', class: failed ? 'err' : '', title: 'Step ' + (index + 1) + (failed ? ', a command failed' : ''), 'aria-label': 'Go to step ' + (index + 1), onclick() {
+      const target = document.getElementById('step-' + item.id);
+      if (target) target.scrollIntoView();
+    } });
+  }));
+  return [
+    heading,
+    agentSteps.length ? el('div', { class: 'timeline' }, [strip, el('div', { class: 'legend' }, [el('span', {}, [el('i'), 'A step']), el('span', {}, [el('i', { class: 'err' }), 'A command failed'])])]) : null,
+    el('ol', { class: 'steps' }, [
+      request ? stepNode(request.step, request.id, 'Ask', 'Task') : null,
+      ...agentSteps.map((item, index) => stepNode(item.step, item.id, index + 1, item === finalAnswer ? 'Result' : null)),
+    ]),
+  ];
+}
+
+function technicalDetails(trial, summary, run) {
+  const rows = [
+    ['Run', run.run.runId + ', CLI ' + run.run.cliVersion],
+    ['Agent', summary.agent || '-'],
+    ['Model', summary.model || '-'],
+    ['Tokens (billed)', summary.tokens !== null ? summary.tokens.toLocaleString('en-US') : '-'],
+    ['Agent time', fmtSeconds(summary.agentSeconds) || '-'],
+  ];
+  trial.checks.forEach((check) => rows.push(['Verifier: ' + check.name, check.passed ? 'passed' : 'failed']));
+  const list = el('dl', { class: 'kv' });
+  rows.forEach(([key, value]) => {
+    list.appendChild(el('dt', { text: key }));
+    list.appendChild(el('dd', { text: value }));
+  });
+  return el('details', { class: 'tech' }, [el('summary', { text: 'Technical details' }), list]);
+}
+
+function page(trial, summary, run, runId) {
+  const siblings = run.trials.filter((item) => item.task === trial.task);
+  const position = siblings.findIndex((item) => item.id === trial.id) + 1;
+  const title = META.titles[trial.task];
+  const runLink = (extra) => el('a', { class: 'back' + extra, href: 'run.html?run=' + encodeURIComponent(runId), text: '← Back to the run (CLI ' + run.run.cliVersion + ')' });
+  return [
+    runLink(''),
+    el('nav', { class: 'crumbs', 'aria-label': 'Breadcrumb' }, [
+      el('a', { href: 'run.html?run=' + encodeURIComponent(runId), text: 'Run ' + run.run.cliVersion }),
+      el('span', { text: '›' }),
+      el('span', { text: trial.task }),
+      el('span', { text: '›' }),
+      el('span', { text: position ? 'trial ' + position + ' of ' + siblings.length : trial.id }),
+    ]),
+    el('h1', {}, [el('a', { href: META.tasksPage + '#' + trial.task, target: '_blank', rel: 'noopener', title: 'What this task tests', text: trial.task })]),
+    title && title !== trial.task ? el('p', { class: 'sub', text: title }) : null,
+    verdictCard(trial, summary),
+    ...trajectorySection(trial),
+    technicalDetails(trial, summary, run),
+    runLink(' end'),
+  ];
+}
+
+async function main() {
+  const params = new URLSearchParams(location.search);
+  const runId = params.get('run') ?? '';
+  const trialId = params.get('trial') ?? '';
+  if (!SAFE.test(runId) || !SAFE.test(trialId)) throw new Error('This page needs ?run=<run id>&trial=<trial id>.');
+  const [run, trial] = await Promise.all([fetchJson(`runs/${runId}/run.json`), fetchJson(`runs/${runId}/trials/${trialId}.json`)]);
+  const summary = run.trials.find((item) => item.id === trialId);
+  if (!summary) throw new Error(`Trial ${trialId} is not listed in runs/${runId}/run.json`);
+  document.getElementById('main').replaceChildren(...page(trial, summary, run, runId).filter(Boolean));
+  fitCommands();
+}
+
+main().catch((error) => {
+  document.getElementById('main').replaceChildren(el('h1', { text: 'This trial cannot be shown' }), el('p', { class: 'sub', text: error.message }));
+});
+window.addEventListener('resize', fitCommands);
+</script>
+</body>
+</html>
