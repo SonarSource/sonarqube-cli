@@ -1,14 +1,7 @@
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { readJson } from './read-json.ts';
 
 const SCHEMA_VERSION = 2;
 const MAX_RECENT_RUNS = 10;
@@ -42,7 +35,9 @@ interface Index {
 }
 
 function load<T>(path: string): T {
-  return JSON.parse(readFileSync(path, 'utf8')) as T;
+  const value = readJson<T>(path);
+  if (value === null) throw new Error(`Missing '${path}'`);
+  return value;
 }
 
 function checkIds(ids: unknown, where: string): void {
@@ -151,8 +146,7 @@ function checkTrials(outDir: string, id: string): void {
   for (const { id: trialId } of loadRun(join(runDir, 'run.json')).trials) {
     if (!SAFE_ID.test(trialId)) throw new Error(`Unsafe trial id '${trialId}' in run ${id}`);
     const path = join(runDir, 'trials', `${trialId}.json`);
-    if (!existsSync(path)) throw new Error(`Missing trial file '${path}'`);
-    JSON.parse(readFileSync(path, 'utf8'));
+    if (readJson(path) === null) throw new Error(`Missing trial file '${path}'`);
   }
 }
 
