@@ -239,12 +239,12 @@ async function chooseNewProjectPath(
     }
     return { path: 'no-project', projectRoot, remote };
   }
-  if (intent?.kind === 'bind') {
+  // Without a terminal, binding is the default: nobody is there to decline it.
+  if (intent?.kind === 'bind' || (!intent && !interactive)) {
     telemetry?.detected('bound_new').record('project_bind', 'success');
     return { path: 'bound-new', projectRoot, remote, repositorySlug };
   }
-  if (intent || !interactive) {
-    // Without an intent, the no-project step names the options that would answer it.
+  if (intent) {
     return { path: 'no-project', projectRoot, remote, repositorySlug };
   }
 

@@ -81,7 +81,7 @@ describe('fact builders', () => {
 
   it('builds a CliProjectInitCreationAttempted fact', () => {
     const payload: ProjectInitPayload = {
-      init_path: 'unbound_new',
+      init_path: 'bound_new',
       steps: ['create_project:success'],
       stopped_at: null,
       failure_reason: null,

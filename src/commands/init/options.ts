@@ -49,8 +49,8 @@ export function validateProjectName(name: string, label = '--name'): string {
 }
 
 /**
- * The onboarding path the caller consented to up front. It answers the matching prompts, and is
- * the only consent a non-interactive run has: without it, nothing is linked or bound.
+ * The onboarding path the caller consented to up front. It answers the matching prompts. Without
+ * it, a non-interactive run links the project found for the directory, or else binds a new one.
  */
 export type InitIntent =
   /** Link an existing project: the one found for the directory, or `projectKey`. */
