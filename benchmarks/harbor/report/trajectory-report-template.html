@@ -318,6 +318,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   function statusOf(trial) {
     if (trial.leak) return { text: 'Secret found', kind: 'bad' };
     if (trial.exception) return { text: 'Error', kind: 'warn' };
+    if (trial.pluginLoaded === false) return { text: 'Error: plugin not loaded', kind: 'warn' };
     if (rewardOf(trial) === null) return { text: 'No result', kind: 'warn' };
     return passed(trial) ? { text: 'Passed', kind: 'good' } : { text: 'Failed', kind: 'bad' };
   }
