@@ -29,6 +29,7 @@ import {
   type ResolvedOrg,
   resolveOrg,
 } from '@/commands/import/resolve-options.ts';
+import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
@@ -131,12 +132,7 @@ export async function bindNewRoots(
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
   // The browser authorization and the import both change things, so a preview stops short of them.
   if (dryRun) {
-    if (!linkedAlmKey) {
-      console.info(
-        `Organization '${org.key}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
-      );
-    }
-    return roots.map(({ path, projectKey }) => ({ path, kind: 'would-bind', projectKey }));
+    return previewBindings(roots, org.key, !linkedAlmKey, console);
   }
   // One authorization serves every root: the batch below reuses the key it returns.
   const almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
@@ -146,6 +142,20 @@ export async function bindNewRoots(
       : undefined;
   }
   return importBatch(roots, slug, noun, { ...org, almKey }, api, deps);
+}
+
+function previewBindings(
+  roots: readonly BindableRoot[],
+  organizationKey: string,
+  authorizationNeeded: boolean,
+  console: Console,
+): MonorepoRootResult[] {
+  if (authorizationNeeded) {
+    console.info(
+      `Organization '${organizationKey}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
+    );
+  }
+  return roots.map(({ path, projectKey }) => ({ path, kind: 'would-bind', projectKey }));
 }
 
 /** A denied optional bind blocks only the new roots, not existing-project onboarding. */
