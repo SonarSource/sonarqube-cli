@@ -115,10 +115,12 @@ function describeDryRun(action: DryRunAction): string[] {
       ];
     case 'bind':
       return [
-        `Would create a project bound to the repository '${action.repositorySlug}' in organization '${action.organization}', and save it in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
+        `Would create a project bound to the repository '${action.repositorySlug}'${action.organization ? ` in organization '${action.organization}'` : ' on SonarQube Server'}, and save it in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
         ...(action.authorizationNeeded
           ? [
-              `Organization '${action.organization}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
+              action.organization
+                ? `Organization '${action.organization}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`
+                : 'A DevOps platform personal access token would first be connected in the browser.',
             ]
           : []),
       ];

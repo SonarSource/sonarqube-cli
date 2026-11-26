@@ -100,8 +100,8 @@ export type DryRunAction =
   | {
       type: 'bind';
       repositorySlug: string;
-      organization: string;
-      /** The organization is not linked to the DevOps platform yet, which takes a browser step. */
+      organization?: string;
+      /** Linking the Cloud organization or connecting a Server token takes a browser step. */
       authorizationNeeded: boolean;
     };
 

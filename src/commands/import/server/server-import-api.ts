@@ -36,6 +36,9 @@ import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 import { type PatStatus, patStatusFromError } from './pat-status.ts';
 
+/** Import cannot be offered on this server; onboarding may continue without binding. */
+export class ServerImportUnavailableError extends CommandFailedError {}
+
 export type { DopPlatform, DopSetting } from '@/core/server/project-bindings.ts';
 
 export const DOP_PLATFORM_LABELS: Record<DopPlatform, string> = {
@@ -355,11 +358,11 @@ export class ServerImportApiClient {
   }
 
   /** Refuses a server older than 2025.1; one whose version cannot be read is given the benefit of the doubt. */
-  async requireSupportedVersion(): Promise<void> {
+  async requireSupportedVersion(command = 'sonar import'): Promise<void> {
     const version = await this.version();
     if (version === undefined || isAtLeast(version, IMPORT_MIN_VERSION)) return;
-    throw new CommandFailedError(
-      `SonarQube Server ${version} is not supported by sonar import; ${IMPORT_MIN_VERSION} or later is required.`,
+    throw new ServerImportUnavailableError(
+      `SonarQube Server ${version} is not supported by ${command}; ${IMPORT_MIN_VERSION} or later is required.`,
       { remediationHint: 'Upgrade SonarQube Server, then retry.' },
     );
   }

@@ -981,7 +981,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--bind',
-      'Create a project bound to the repository without prompting (SonarQube Cloud, organization linked to your DevOps platform). With --monorepo, a root whose project already exists is offered for linking, and fails when declined or without a terminal',
+      'Create a project bound to the repository without prompting for project creation (requires a connected DevOps platform). With --monorepo (SonarQube Cloud only), a root whose project already exists is offered for linking, and fails when declined or without a terminal',
+    )
+    .option(
+      '--dop-setting <key>',
+      'SonarQube Server only: key of the DevOps platform setting to bind through',
     )
     .option(
       '--dry-run',

@@ -71,6 +71,7 @@ export interface InitOptions {
   /** `true` for a bare `--link`, the key for `--link <key>`. */
   link?: string | boolean;
   bind?: boolean;
+  dopSetting?: string;
   dryRun?: boolean;
 }
 
@@ -131,6 +132,7 @@ async function onboard(
     monorepo: options.monorepo === true,
     monorepoRoots,
     pathGiven: options.path !== undefined,
+    dopSetting: options.dopSetting,
     telemetry,
     session,
   });
@@ -196,6 +198,7 @@ interface RunSettings {
   intent: InitIntent | undefined;
   monorepo: boolean;
   monorepoRoots: readonly MonorepoRootOption[];
+  dopSetting?: string;
   /** `--path` fixed the directory, so there is no folder to choose. */
   pathGiven: boolean;
   telemetry: InitTelemetryRecorder;
@@ -224,6 +227,9 @@ async function run(
     }
     throw error;
   }
+  if (settings.dopSetting !== undefined && auth.connectionType === 'cloud') {
+    throw new InvalidOptionError('--dop-setting is only supported on SonarQube Server.');
+  }
   settings.session.auth = auth;
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = {
@@ -233,6 +239,7 @@ async function run(
     interactive,
     dryRun,
     intent,
+    dopSetting: settings.dopSetting,
     telemetry,
   };
   telemetry.begin('detect');

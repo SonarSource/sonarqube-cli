@@ -43,6 +43,7 @@ import {
   type DopSetting,
   type PatProbe,
   type ServerImportApiClient,
+  ServerImportUnavailableError,
 } from './server/server-import-api.ts';
 import { ServerImportPlan } from './server/server-import-plan.ts';
 import type { PlatformSupport, ServerRepository } from './server/server-repository.ts';
@@ -54,23 +55,24 @@ const NO_VISIBILITY_RESTRICTION: OnlyPrivateProjects = { enabled: false, availab
 
 const NETWORK_HINT = 'Check your network connection and authentication, then retry.';
 
+export class ServerImportDeclinedError extends CommandFailedError {}
+
+interface ServerBackendOptions {
+  command?: string;
+  confirmPatConnection?: () => Promise<boolean>;
+}
+
 /** SonarQube Server: repositories come from a DevOps platform setting the user has connected to. */
 export class ServerBackend implements ImportBackend {
   constructor(
     private readonly api: ServerImportApiClient,
     private readonly serverUrl: string,
+    private readonly context: ServerBackendOptions = {},
   ) {}
 
   async plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan> {
-    validateSelectionOptions({ ...options, nonInteractive: !canPrompt(options) });
-    await this.api.requireSupportedVersion();
-
-    const settings = await this.loadSettings();
-    const setting = await selectSetting(settings, options, console);
+    const { setting } = await this.prepare(options, console);
     const label = DOP_PLATFORM_LABELS[setting.type];
-    console.info(`DevOps platform: ${setting.key} (${label})`);
-
-    await this.requireConnectedPat(setting, options, console);
 
     const support = SUPPORTED_PLATFORMS[setting.type];
     if (!support) {
@@ -90,6 +92,24 @@ export class ServerBackend implements ImportBackend {
     return new ServerImportPlan(this.api, this.serverUrl, setting, repositories, selection);
   }
 
+  /** Checks prerequisites without opening a browser when previewing onboarding. */
+  async prepare(
+    options: ImportPlanOptions,
+    console: Console,
+    dryRun = false,
+  ): Promise<{ setting: DopSetting; authorizationNeeded: boolean }> {
+    validateSelectionOptions({ ...options, nonInteractive: !canPrompt(options, console) });
+    await this.api.requireSupportedVersion(this.context.command);
+    const settings = await this.loadSettings();
+    const setting = await selectSetting(settings, options, console);
+    console.info(`DevOps platform: ${setting.key} (${DOP_PLATFORM_LABELS[setting.type]})`);
+    if (dryRun) {
+      return { setting, authorizationNeeded: (await this.statusOf(setting)).status !== 'valid' };
+    }
+    await this.requireConnectedPat(setting, options, console);
+    return { setting, authorizationNeeded: false };
+  }
+
   /** Lists the platform's repositories page by page, recording each in `repositories`, and applies the user's selection. */
   private selectRepositories(
     setting: DopSetting,
@@ -101,7 +121,11 @@ export class ServerBackend implements ImportBackend {
     const listed = support.listRepositories(this.api, setting, options.repo);
     const fetchServerPage =
       setting.type === 'azure'
-        ? guardAzureSignIn(listed, buildConnectUrl(this.serverUrl, setting, { resetPat: true }))
+        ? guardAzureSignIn(
+            listed,
+            buildConnectUrl(this.serverUrl, setting, { resetPat: true }),
+            this.context.command,
+          )
         : listed;
     const reportedWarnings = new Set<string>();
     return selectRepos(
@@ -130,7 +154,7 @@ export class ServerBackend implements ImportBackend {
         almKey: undefined,
         onlyPrivateProjects: NO_VISIBILITY_RESTRICTION,
       },
-      { ...options, nonInteractive: !canPrompt(options), console },
+      { ...options, nonInteractive: !canPrompt(options, console), console },
     );
   }
 
@@ -146,7 +170,7 @@ export class ServerBackend implements ImportBackend {
     if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
       const version = await fetchServerVersion(this.serverUrl).catch(() => undefined);
       const detected = version ? ` Detected server version: ${version}.` : '';
-      return new CommandFailedError(
+      return new ServerImportUnavailableError(
         `This SonarQube Server does not support importing repositories (the DevOps platform settings API was not found).${detected}`,
         { remediationHint: 'Upgrade SonarQube Server, then retry.' },
       );
@@ -173,10 +197,14 @@ export class ServerBackend implements ImportBackend {
       status === 'missing'
         ? `No personal access token is connected for ${label} setting '${setting.key}'.`
         : this.rejectedProblem(setting, emptyListing);
-    if (!canPrompt(options)) {
+    if (!canPrompt(options, console)) {
       throw new CommandFailedError(problem, {
-        remediationHint: `Connect it at ${url}, then run 'sonar import' again.`,
+        remediationHint: `Connect it at ${url}, then run '${this.context.command ?? 'sonar import'}' again.`,
       });
+    }
+
+    if (this.context.confirmPatConnection && !(await this.context.confirmPatConnection())) {
+      throw new ServerImportDeclinedError('DevOps platform token connection declined.');
     }
 
     console.info(`${problem} Connect it in your browser:`);
@@ -223,7 +251,7 @@ export class ServerBackend implements ImportBackend {
       process.off('SIGINT', onSigint);
     }
 
-    const rerun = `run 'sonar import' again.`;
+    const rerun = `run '${this.context.command ?? 'sonar import'}' again.`;
     switch (result) {
       case 'valid':
         return;
@@ -321,8 +349,9 @@ function mapRequestError(error: unknown, action: string): unknown {
 }
 
 /** Whether the run may stop and ask the user something. */
-function canPrompt(options: ImportOptions): boolean {
+function canPrompt(options: ImportOptions, console: Console): boolean {
   return (
+    console.canPrompt() &&
     !options.nonInteractive &&
     process.env.CI !== 'true' &&
     Boolean(process.stdin.isTTY || process.env.SONARQUBE_CLI_MOCK_TTY)
@@ -335,7 +364,7 @@ async function selectSetting(
   console: Console,
 ): Promise<DopSetting> {
   if (settings.length === 0) {
-    throw new CommandFailedError(
+    throw new ServerImportUnavailableError(
       'No DevOps platform integration is configured on this SonarQube Server.',
       {
         remediationHint:
@@ -361,7 +390,7 @@ async function selectSetting(
     return settings[0];
   }
 
-  if (!canPrompt(options)) {
+  if (!canPrompt(options, console)) {
     throw new InvalidOptionError(
       'Several DevOps platform settings are configured: pass --dop-setting <key> to choose one.',
       `Available keys: ${keys}.`,

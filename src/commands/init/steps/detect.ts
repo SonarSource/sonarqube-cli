@@ -52,6 +52,7 @@ export interface DetectDeps {
   interactive: boolean;
   /** `--dry-run`: every step stops before its first write and reports what it would do. */
   dryRun?: boolean;
+  dopSetting?: string;
   /** The path the caller consented to with `--link` or `--bind`. */
   intent?: InitIntent;
   /**
@@ -217,25 +218,13 @@ function bindingUnavailable(reason: string): InvalidOptionError {
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { auth, console, interactive, intent, telemetry }: DetectDeps,
+  { console, interactive, intent, telemetry }: DetectDeps,
 ): Promise<InitPath> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
   if (repositorySlug === null) {
     if (intent?.kind === 'bind') {
       throw bindingUnavailable('the git remote is not a GitHub or Azure DevOps repository.');
-    }
-    return { path: 'no-project', projectRoot, remote };
-  }
-  if (auth.connectionType !== 'cloud') {
-    if (intent?.kind === 'bind') {
-      throw bindingUnavailable('creating a bound project is only available on SonarQube Cloud.');
-    }
-    if (!intent) {
-      console.info(
-        'Creating a bound project is only available on SonarQube Cloud for now.',
-        'stderr',
-      );
     }
     return { path: 'no-project', projectRoot, remote };
   }

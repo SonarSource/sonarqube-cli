@@ -24,7 +24,8 @@ import type { ServerImportApiClient } from '@/commands/import/server/server-impo
 import { ServerBackend } from '@/commands/import/server-backend.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BadRequestError, ServerError } from '@/core/server/errors.ts';
-import type { Console } from '@/core/ui/console.ts';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const GITLAB = { id: 'gl-id', key: 'my gitlab', type: 'gitlab' as const };
 
@@ -43,9 +44,10 @@ async function failingImport(putError: Error): Promise<unknown> {
   } as unknown as ServerImportApiClient;
   const backend = new ServerBackend(api, 'https://sonarqube.example.com/');
 
-  const plan = await backend.plan({ repo: ['group/repo-a'], nonInteractive: true }, {
-    info: () => undefined,
-  } as unknown as Console);
+  const plan = await backend.plan(
+    { repo: ['group/repo-a'], nonInteractive: true },
+    new FakeConsole(),
+  );
   if (plan.selection.kind !== 'batch') throw new Error('expected a batch selection');
   return plan.importRepo(plan.selection.repos[0]).then(
     () => undefined,

@@ -1389,20 +1389,23 @@ describe('sonar init', () => {
     );
 
     it(
-      'does not offer binding on SonarQube Server and says why',
+      'offers binding on Server and explains when no integration is configured',
       async () => {
         const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
         harness.withAuth(server.recordedAuthServerUrl(), TOKEN);
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stderr).toContain(NO_PROJECT);
-        expect(result.stdout).not.toContain('Bind this repository');
-        expect(result.stderr).toContain('only available on SonarQube Cloud');
+        expect(result.stdout).toContain('Bind this repository');
+        expect(result.stdout + result.stderr).toContain(
+          'No DevOps platform integration is configured',
+        );
       },
       TIMEOUT,
     );
