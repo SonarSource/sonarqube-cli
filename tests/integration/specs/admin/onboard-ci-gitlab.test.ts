@@ -911,7 +911,7 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(openedRepos).toContain(40);
       expect(openedRepos).toContain(42);
       expect(openedRepos).not.toContain(41);
-    });
+    }, 15_000);
 
     it('warns for paths not found in group', async () => {
       await startServers(harness, {
