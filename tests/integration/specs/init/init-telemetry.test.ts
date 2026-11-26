@@ -220,8 +220,8 @@ describe('sonar init telemetry', () => {
       });
       expect(projectEvents()).toEqual([
         expect.objectContaining({
-          init_path: 'unbound_new',
-          steps: ['project_bind:declined', 'create_project:skipped'],
+          init_path: 'no_project',
+          steps: ['project_bind:declined', 'link:skipped'],
           stopped_at: 'project_bind',
           failure_reason: 'cancelled',
         }),
@@ -249,7 +249,7 @@ describe('sonar init telemetry', () => {
       expect(projectEvents()).toEqual([
         expect.objectContaining({
           init_path: 'link_existing',
-          steps: ['project_bind:skipped', 'create_project:skipped', 'link:declined'],
+          steps: ['project_bind:skipped', 'link:declined'],
           stopped_at: 'link',
           failure_reason: 'cancelled',
         }),
@@ -361,7 +361,7 @@ describe('sonar init telemetry', () => {
       await harness.run('init --monorepo --non-interactive --root api=api-key --root web=web-key');
 
       const run = runEvent();
-      expect(run).toMatchObject({ is_monorepo: true, project_count: 2 });
+      expect(run).toMatchObject({ is_monorepo: true, project_count: 2, failure_reason: null });
       expect(run.stopped_at ?? null).toBeNull();
       expect(projectEvents()).toEqual([
         expect.objectContaining({
@@ -372,10 +372,10 @@ describe('sonar init telemetry', () => {
         }),
         expect.objectContaining({
           project_index: 1,
-          init_path: 'unbound_new',
-          steps: ['project_bind:skipped', 'create_project:failed'],
-          stopped_at: 'create_project',
-          failure_reason: 'unknown',
+          init_path: 'no_project',
+          steps: ['project_bind:skipped', 'link:failed'],
+          stopped_at: 'link',
+          failure_reason: 'no_project_available',
         }),
       ]);
     },
@@ -412,23 +412,179 @@ describe('sonar init telemetry', () => {
     TIMEOUT,
   );
 
+  for (const interactiveRun of [true, false]) {
+    it.each(['no remote', 'unsupported remote', 'SonarQube Server'])(
+      `reports no_project_available with %s (interactive=${interactiveRun})`,
+      async (situation) => {
+        const server =
+          situation === 'SonarQube Server'
+            ? await harness.newFakeServer().withAuthToken(TOKEN).start()
+            : await signInToCloud();
+        if (situation === 'SonarQube Server') {
+          harness.withAuth(server.recordedAuthServerUrl(), TOKEN);
+        }
+        if (situation === 'no remote') {
+          initGitRepo(harness.cwd.path);
+        } else {
+          withRemote(
+            situation === 'unsupported remote'
+              ? 'https://gitlab.com/example/repository.git'
+              : GITHUB_REMOTE,
+          );
+        }
+        let result;
+        if (interactiveRun) {
+          interactive();
+          const session = harness.runInteractive('init');
+          await session.decline(INTEGRATE_PROMPT);
+          result = await session.waitFinish();
+        } else {
+          result = await harness.run('init --non-interactive');
+        }
+        expect(result.exitCode).toBe(interactiveRun ? 0 : 2);
+        expect(runEvent()).toMatchObject({
+          stopped_at: 'link',
+          failure_reason: 'no_project_available',
+        });
+        expect(projectEvents()).toEqual([
+          expect.objectContaining({
+            init_path: 'no_project',
+            steps: ['project_bind:skipped', `link:${interactiveRun ? 'skipped' : 'failed'}`],
+            stopped_at: 'link',
+            failure_reason: 'no_project_available',
+            project_uuid: null,
+          }),
+        ]);
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+        expect(
+          server
+            .getRecordedRequests()
+            .some(
+              (request) =>
+                request.method === 'POST' && request.path.startsWith('/api/alm_integration/'),
+            ),
+        ).toBe(false);
+      },
+      TIMEOUT,
+    );
+  }
+
   it(
-    'does not count a run as cancelled when there was nothing to decline',
+    'classifies a bare --link with no matching project as no_project_available',
     async () => {
-      interactive();
       await signInToCloud();
       initGitRepo(harness.cwd.path);
-
-      const session = harness.runInteractive('init');
-      await session.decline(INTEGRATE_PROMPT);
-      await session.waitFinish();
-
-      const run = runEvent();
-      expect(run.stopped_at ?? null).toBeNull();
-      expect(run.failure_reason ?? null).toBeNull();
+      const result = await harness.run('init --non-interactive --link');
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('--link found no SonarQube project');
+      expect(runEvent()).toMatchObject({
+        stopped_at: 'link',
+        failure_reason: 'no_project_available',
+      });
       expect(projectEvents()).toEqual([
         expect.objectContaining({
-          steps: ['project_bind:skipped', 'create_project:skipped'],
+          init_path: 'no_project',
+          failure_reason: 'no_project_available',
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'changes no_project to link_existing when a generated-key project is linked',
+    async () => {
+      initGitRepo(harness.cwd.path);
+      const { projectKey } = generateProjectProposal(harness.cwd.path, undefined, ORG);
+      await signInToCloud((s) => s.withProject(projectKey));
+      const result = await harness.run('init --non-interactive');
+      expect(result.exitCode).toBe(0);
+      expect(runEvent()).toMatchObject({ stopped_at: null, failure_reason: null });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'link_existing',
+          steps: ['project_bind:skipped', 'link:success'],
+          stopped_at: null,
+          failure_reason: null,
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it.each([
+    [403, 'permission'],
+    [500, 'network'],
+  ] as const)(
+    'preserves %s lookup failures instead of claiming no project is available',
+    async (status, reason) => {
+      initGitRepo(harness.cwd.path);
+      const { projectKey } = generateProjectProposal(harness.cwd.path, undefined, undefined);
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withProject(projectKey, (project) => project.withComponentShowError(status))
+        .start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN);
+      const result = await harness.run('init --non-interactive');
+      expect(result.exitCode).not.toBe(0);
+      expect(runEvent()).toMatchObject({ stopped_at: 'link', failure_reason: reason });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'no_project',
+          failure_reason: reason,
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'keeps a declined authorization as cancelled when it falls back to no project',
+    async () => {
+      interactive();
+      await signInToCloud((s) =>
+        s.withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }]),
+      );
+      withRemote(GITHUB_REMOTE);
+      const session = harness.runInteractive('init');
+      await session.accept('Bind this repository');
+      await session.decline('Authorize it in the browser');
+      await session.decline(INTEGRATE_PROMPT);
+      const result = await session.waitFinish();
+      expect(result.exitCode).toBe(0);
+      expect(runEvent()).toMatchObject({ stopped_at: 'org_bind', failure_reason: 'cancelled' });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'no_project',
+          failure_reason: null,
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it.each(['declining binding', 'link-only selection'])(
+    'classifies monorepo roots left without a project after %s',
+    async (choice) => {
+      await signInToCloud();
+      withRemote(GITHUB_REMOTE);
+      harness.cwd.writeFile('web/.keep', '');
+      if (choice === 'declining binding') {
+        interactive();
+        const session = harness.runInteractive('init --monorepo --root web=web-key');
+        await session.decline('Bind the 1 new project');
+        await session.decline(INTEGRATE_PROMPT);
+        await session.waitFinish();
+      } else {
+        await harness.run('init --monorepo --non-interactive --link --root web=web-key');
+      }
+      expect(runEvent()).toMatchObject({ stopped_at: null, failure_reason: null });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'no_project',
+          stopped_at: 'link',
+          failure_reason: choice === 'declining binding' ? 'cancelled' : 'no_project_available',
         }),
       ]);
     },

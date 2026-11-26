@@ -89,7 +89,7 @@ describe('InitTelemetryRecorder', () => {
     const recorder = new InitTelemetryRecorder(false);
     recorder.record('login', 'already_done');
     recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
+    const [project] = recorder.setProjects(['bound_new']);
     project.record('project_bind', 'skipped');
     project.record('create_project', 'success');
     project.setProjectKey('my-project');
@@ -109,7 +109,7 @@ describe('InitTelemetryRecorder', () => {
     expect(run.repo_id).toHaveLength(64);
     expect(projects).toEqual([
       {
-        init_path: 'unbound_new',
+        init_path: 'bound_new',
         steps: ['project_bind:skipped', 'create_project:success'],
         stopped_at: null,
         failure_reason: null,
@@ -140,7 +140,7 @@ describe('InitTelemetryRecorder', () => {
     const recorder = new InitTelemetryRecorder(false);
     recorder.record('login', 'success');
     recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
+    const [project] = recorder.setProjects(['bound_new']);
     project.begin('create_project');
     recorder.fail(new ForbiddenApiError('forbidden'));
 
@@ -160,7 +160,7 @@ describe('InitTelemetryRecorder', () => {
     const recorder = new InitTelemetryRecorder(true);
     recorder.record('login', 'already_done');
     recorder.record('detect', 'success');
-    const [linked, failed] = recorder.setProjects(['link_existing', 'unbound_new']);
+    const [linked, failed] = recorder.setProjects(['link_existing', 'bound_new']);
     linked.record('link', 'success');
     linked.setProjectKey('linked-key');
     failed.begin('create_project');
@@ -203,10 +203,10 @@ describe('InitTelemetryRecorder', () => {
     const recorder = new InitTelemetryRecorder(false);
     recorder.record('login', 'already_done');
     recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
+    const [project] = recorder.setProjects(['bound_new']);
     project.record('project_bind', 'declined');
     project.record('create_project', 'declined');
-    recorder.stopAtDeclined();
+    expect(recorder.stopAtDeclined()).toBe(true);
 
     const { run, projects } = await emit(recorder);
 
@@ -221,10 +221,10 @@ describe('InitTelemetryRecorder', () => {
   it('does not report a run as cancelled when nothing was declined', async () => {
     const recorder = new InitTelemetryRecorder(false);
     recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
+    const [project] = recorder.setProjects(['no_project']);
     project.record('project_bind', 'skipped');
-    project.record('create_project', 'skipped');
-    recorder.stopAtDeclined();
+    project.record('link', 'skipped');
+    expect(recorder.stopAtDeclined()).toBe(false);
 
     const { run, projects } = await emit(recorder);
 
@@ -249,15 +249,15 @@ describe('InitTelemetryRecorder', () => {
     const recorder = new InitTelemetryRecorder(false);
     recorder.begin('detect');
     recorder.detected('bound_new').record('project_bind', 'declined');
-    recorder.detected('unbound_new').record('create_project', 'success');
+    recorder.detected('no_project').record('link', 'skipped');
 
     const { run, projects } = await emit(recorder);
 
     expect(run.steps).toEqual(['detect:success']);
     expect(projects).toHaveLength(1);
     expect(projects[0]).toMatchObject({
-      init_path: 'unbound_new',
-      steps: ['project_bind:declined', 'create_project:success'],
+      init_path: 'no_project',
+      steps: ['project_bind:declined', 'link:skipped'],
     });
   });
 
@@ -272,7 +272,7 @@ describe('InitTelemetryRecorder', () => {
 
   it('finds monorepo roots by their label', () => {
     const recorder = new InitTelemetryRecorder(true);
-    const [api, web] = recorder.setProjects(['link_existing', 'unbound_new'], ['api', 'web']);
+    const [api, web] = recorder.setProjects(['link_existing', 'bound_new'], ['api', 'web']);
 
     expect(recorder.projectLabelled('web')).toBe(web);
     expect(recorder.projectLabelled('api')).toBe(api);
@@ -282,7 +282,7 @@ describe('InitTelemetryRecorder', () => {
   it('tells which steps were reached', () => {
     const recorder = new InitTelemetryRecorder(false);
     recorder.record('login', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
+    const [project] = recorder.setProjects(['bound_new']);
     project.record('project_bind', 'skipped');
 
     expect(recorder.has('login')).toBe(true);

@@ -201,11 +201,16 @@ async function mapExistingRoot(
  * Nothing creates a project without binding, so a root left without one fails with how to map one.
  * `--bind` is suggested only when it could create the root's project.
  */
-function noProjectForRoot(path: string, bindable: boolean): MonorepoRootResult {
+function noProjectForRoot(
+  path: string,
+  bindable: boolean,
+  failure: InitFailureReason = bindable ? 'cancelled' : 'no_project_available',
+): MonorepoRootResult {
   const bind = bindable ? ', or use --bind' : '';
   return {
     path,
     kind: 'failed',
+    failure,
     reason: `No project was linked or created: creating one without repository binding is not supported. Name an existing project with --root ${path}=<project key>${bind}.`,
   };
 }
@@ -246,7 +251,7 @@ async function offerGeneratedProject(
     };
   }
   // The project exists, which `--bind` refuses to touch.
-  return noProjectForRoot(path, false);
+  return noProjectForRoot(path, false, 'cancelled');
 }
 
 function onboardSelectedRoot(
@@ -261,7 +266,8 @@ function onboardSelectedRoot(
       if (!root.generated || linkOnly) {
         return mapExistingRoot(root, deps);
       }
-      return deps.interactive
+      // `--bind` refuses to touch an existing project, and without a terminal it cannot be asked.
+      return deps.interactive || deps.intent?.kind !== 'bind'
         ? offerGeneratedProject(root, deps)
         : Promise.resolve({
             path: root.path,
@@ -274,6 +280,7 @@ function onboardSelectedRoot(
             path: root.path,
             kind: 'failed',
             reason: `Project '${root.mapping.projectKey}' does not exist in ${deps.auth.orgKey ?? 'the active organization'}, and --link never creates one.`,
+            failure: 'no_project_available',
           })
         : Promise.resolve(noProjectForRoot(root.path, canBind(root, deps)));
     case 'other-org': {
@@ -623,7 +630,11 @@ async function onboardInOrder(
     const done = await previous;
     const project = telemetry?.projectLabelled(root.path);
     telemetry?.setActiveProject(project);
-    project?.begin(root.status.kind === 'new' ? 'create_project' : 'link');
+    const createsProject = root.status.kind === 'new' && bound.has(root.path);
+    if (createsProject) {
+      project?.setPath('bound_new');
+    }
+    project?.begin(createsProject ? 'create_project' : 'link');
     const result = await onboardRoot(root, deps, linkOnly, bound);
     if (project) {
       recordRootResult(project, result);
@@ -647,7 +658,7 @@ function initPathOf(status: RootStatus): InitPathId {
       return 'link_existing';
     case 'new':
     case 'unchecked':
-      return 'unbound_new';
+      return 'no_project';
   }
 }
 
