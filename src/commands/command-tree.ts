@@ -66,6 +66,7 @@ import {
   assertOnPremiseConnection,
   assertProvisionProjectsPermission,
 } from './admin/onboard-ci/shared.ts';
+import { OnboardingTelemetry } from './admin/onboard-ci/telemetry.ts';
 import { allowlistSecretsAdd } from './allowlist/secrets/add.ts';
 import {
   allowlistSecretsClear,
@@ -1385,11 +1386,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       "Path to a YAML file defining the full CI job body (image, tags, stage, script, variables, rules); {{SONAR_PROJECT_KEY}} is substituted with each repository's SonarQube project key. Mutually exclusive with --stage, --allow-failure, --trigger-on, --scanner-property, and --sonar-token-var-name",
     )
     .authenticatedAction(async (ctx, input: OnboardCiGitlabInput) => {
+      let telemetry: OnboardingTelemetry | null = null;
+      if (!input.dryRun) {
+        telemetry = new OnboardingTelemetry('GitLab');
+        ctx.recordTelemetry(telemetry);
+      }
       const options = validateOnboardCiGitlabOptions(input);
       assertOnPremiseConnection(ctx.auth, 'GitLab');
       await assertProvisionProjectsPermission(ctx.connection.httpClient);
       const gitlabToken = await resolveDevOpsToken(ctx.console, 'GitLab');
-      return onboardCiGitlab(ctx.connection, gitlabToken, options, ctx.console);
+      return onboardCiGitlab(ctx.connection, gitlabToken, options, ctx.console, telemetry);
     });
 
   addOnboardCiOptions(onboardCi.command('github'), {
@@ -1404,6 +1410,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Complete workflow YAML with {{SONAR_PROJECT_KEY}} placeholders; cannot be combined with --trigger-on, --scanner-property or --sonar-token-var-name',
     )
     .authenticatedAction(async (ctx, options: OnboardCiGithubOptions) => {
+      let telemetry: OnboardingTelemetry | null = null;
+      if (!options.dryRun) {
+        telemetry = new OnboardingTelemetry('GitHub');
+        ctx.recordTelemetry(telemetry);
+      }
       const workflowTemplate = validateOnboardCiGithubOptions(options);
       assertOnPremiseConnection(ctx.auth, 'GitHub');
       await assertProvisionProjectsPermission(ctx.connection.httpClient);
@@ -1413,7 +1424,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
           ctx.console.warn(message);
         },
       });
-      return onboardCiGithub(ctx.connection, github, options, ctx.console, workflowTemplate);
+      return onboardCiGithub(
+        ctx.connection,
+        github,
+        options,
+        ctx.console,
+        workflowTemplate,
+        telemetry,
+      );
     });
 
   // Hidden flush command — only registered when running as a telemetry worker.
