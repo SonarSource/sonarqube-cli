@@ -146,6 +146,10 @@ One per `sonar init` run, dry runs excepted. `steps` lists the run-level steps r
 
 One per project root of an init run, including roots that were linked (`link_existing`) or already set up (`already_done`). None when the run ends before the roots are known.
 
+`init_path: no_project` means no project was linked or created for that root. It does not prove that discovery completed: lookup failures retain their specific `failure_reason`, such as `network` or `permission`.
+
+When discovery confirms there is no project to link and the selected mode cannot create one, the root reports `stopped_at: link` and `failure_reason: no_project_available`. A single-project run reports the same stop and reason on `CliInitExecuted`; in a monorepo, the reason belongs to the affected root and does not stop successful roots. Explicit refusals remain `cancelled`. Empty stop fields alone are not a success indicator. This telemetry distinction does not change command exit codes.
+
 ```json
 {
   "metadata": {

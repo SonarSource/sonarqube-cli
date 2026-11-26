@@ -965,7 +965,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       label: 'init',
     })
     .option('--path <directory>', 'Directory to onboard (default: current directory)')
-    .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
+    .option(
+      '--non-interactive',
+      'Never prompt: link the project found for the repository, or else create one bound to it; fail with a hint when neither is possible',
+    )
     .option(
       '--monorepo',
       'Onboard several project roots: choose the folders in a tree, or name them with --root. Roots already in .sonar-config.json are reported as configured',
