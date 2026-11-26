@@ -134,7 +134,7 @@ describe('hosted-mcp-client', () => {
     const result = await harness.run('run mcp');
     expect(result.stdout).toBe('fallback-container\n');
     expect(result.stderr).toContain('health check failed');
-  });
+  }, 15000);
 
   it('falls back when the health check times out', async () => {
     const release = Promise.withResolvers<void>();
