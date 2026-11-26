@@ -3,6 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TASKS_PAGE_URL, checkSentence, taskTitle } from './tasks.ts';
 import { lastSegment, readJson } from './read-json.ts';
+import { trialPlugin } from './agent-plugin.ts';
 
 interface Span {
   started_at: string | null;
@@ -110,6 +111,8 @@ function stoppedTrialOf(group: string, trialDir: string) {
   const modelName = config?.agent?.model_name;
   const fromDir = suffixStart > 0 ? name.slice(0, suffixStart) : name;
   const task = config?.task?.path ? lastSegment(config.task.path.replace(/\/+$/, '')) : fromDir;
+  const agent = config?.agent?.name ?? null;
+  const { plugin, loaded } = trialPlugin(trialDir, agent);
   return {
     group,
     name,
@@ -117,9 +120,11 @@ function stoppedTrialOf(group: string, trialDir: string) {
     leak: existsSync(join(trialDir, LEAK_MARKER_FILE)),
     taskPage: `${TASKS_PAGE_URL}#${task}`,
     taskTitle: taskTitle(task),
-    agent: config?.agent?.name ?? null,
+    agent,
     agentVersion: null,
     model: modelName ? lastSegment(modelName) : null,
+    plugin,
+    pluginLoaded: loaded,
     startedAt: null,
     exception: 'Harbor stopped before it wrote result.json, so this trial has no verdict',
     rewards: null,
@@ -140,6 +145,7 @@ function trialOf(group: string, trialDir: string) {
   const agent = result.agent_info;
   const usage = result.agent_result;
   const task = lastSegment(result.task_name);
+  const { plugin, loaded } = trialPlugin(trialDir, agent?.name ?? null);
   return {
     group,
     name: result.trial_name,
@@ -150,6 +156,8 @@ function trialOf(group: string, trialDir: string) {
     agent: agent?.name ?? null,
     agentVersion: agent?.version ?? null,
     model: agent?.model_info?.name ?? null,
+    plugin,
+    pluginLoaded: loaded,
     startedAt: result.started_at,
     exception: result.exception_info
       ? `${result.exception_info.exception_type ?? 'Error'}: ${result.exception_info.exception_message ?? ''}`
