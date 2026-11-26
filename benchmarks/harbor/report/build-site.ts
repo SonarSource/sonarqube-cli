@@ -2,6 +2,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } f
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { readJson } from './read-json.ts';
+import { renderRunPage, renderTrialPage } from './run-page.ts';
 
 const SCHEMA_VERSION = 2;
 const MAX_RECENT_RUNS = 10;
@@ -119,7 +120,7 @@ function runSection(title: string, items: string[]): string {
 
 function renderPage(outDir: string, index: Index): string {
   const full = (id: string) =>
-    runItem(loadRun(join(outDir, 'runs', id, 'run.json')), `runs/${id}/run.json`);
+    runItem(loadRun(join(outDir, 'runs', id, 'run.json')), `run.html?run=${id}`);
   const former = (id: string) =>
     runItem(loadRun(join(outDir, 'references', `${id}.json`)), `references/${id}.json`);
   const sections = [
@@ -179,6 +180,8 @@ function build(publishedDir: string, newRunDir: string, outDir: string): void {
         : join(publishedDir, 'references', `${id}.json`);
     cpSync(source, join(outDir, 'references', `${id}.json`));
   }
+  writeFileSync(join(outDir, 'run.html'), renderRunPage());
+  writeFileSync(join(outDir, 'trial.html'), renderTrialPage());
   writeFileSync(join(outDir, 'index.json'), JSON.stringify(index));
   writeFileSync(join(outDir, 'index.html'), renderPage(outDir, index));
 }

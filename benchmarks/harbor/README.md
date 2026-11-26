@@ -19,16 +19,20 @@ The report takes pass/fail from the verifier reward (`1` = pass) and tokens, cos
 
 Nothing is uploaded before the run token is revoked. The workflow step `Revoke the run token` runs `run-isolated.sh revoke` after the benchmark, even when the benchmark failed, and the `Upload Harbor jobs` step runs only if that revocation succeeded. A run token that was printed by the agent is therefore already deleted when the artifacts leave the runner, and the report jobs read only those artifacts.
 
-To read the trajectories, `bun benchmarks/harbor/report/trajectory-report.ts <job dir>... > report.html` writes one self-contained page (no server). It lists the trials by agent and task. A trial opens on what was checked, what the agent did step by step and its final answer, with the tokens, the timings and the raw verifier scores under "Technical details". The task titles come from `report/tasks.ts`, which the summary uses too. In CI the `Report` job builds the page from all the trials, uploads it as the `report.html` artifact, and the run summary links each trial to its own trajectory in that page.
+The trajectories are read on the SIP site (see below): each trial has its own page. The task titles and the check sentences come from `report/tasks.ts`.
 
 The release report turns a run into data. The `report` job builds it with `report/run-json.ts` (below). Every run is published: the `publish` job runs whenever the release report was built and uploaded, even if some trials failed, so a regression stays in the history. SIP replaces the whole site at each upload, so the job rebuilds the full site every time: `report/sip.sh pull <dir>` downloads what is published (`index.json`, then the runs it lists), `report/build-site.ts <published dir> <release-report dir> <out dir>` adds this run, and `report/sip.sh push <dir>` zips the site and publishes it. The site holds the reference run (the one made with the stable CLI) in full, the 10 latest other runs in full (the oldest leaves), and for each former reference only its `run.json`, with one file per trial to stay under the SIP limits (10 MB per served file, 50 MB per upload; `push` checks both). When a run is marked as the reference, the previous reference becomes a former reference. `build-site.ts` also replaces anything that looks like a GitHub, SonarQube, AWS or Anthropic token in the trial files of the new run with `[redacted]`: SIP runs a SonarQube Cloud analysis on the pull request of every upload, and a token-shaped text in an agent output (the example token that `sonar integrate` prints, for instance) fails its quality gate.
 
 ```
 index.json            reference, latest runs, former references (run ids)
-index.html            lists the runs, each linking to its run.json
+index.html            lists the runs: the reference and latest runs link to their run page, former references to their run.json
+run.html              the page of one run, opened as run.html?run=<run id>
+trial.html            the page of one trial, opened as trial.html?run=<run id>&trial=<trial id>
 runs/<run id>/run.json, runs/<run id>/trials/<trial id>.json
 references/<run id>.json
 ```
+
+The two pages are static files (`report/run-page-template.html` and `trial-page-template.html`) that read the JSON files with `fetch`, because SIP does not serve an `index.html` for a folder below the root. The run page shows, for each task, the trials of the run as dots and a box plot of the run next to a box plot of the reference, one measure at a time, chosen in a side bar next to each chart (time, tokens, steps), with a tooltip on the dots and the boxes. Clicking a task block greys it and lists its trials: each one is a bar for the measure it is sorted by (number, time, tokens or steps), with an option to keep only the trials that did not pass. Each dot and each bar links to the trial page (`trial-page-template.html`), which reads the trial file and lists the agent steps with their commands and outputs. The reference run is not compared with itself.
 
 The `index.json` published on SIP is the only history, and the job needs the `SIP_PLATFORM_TOKEN` repository secret (a personal SIP token, valid one year).
 
