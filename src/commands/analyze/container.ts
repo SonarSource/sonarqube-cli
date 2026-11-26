@@ -21,7 +21,9 @@
 import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { installContainerScanner } from '@/core/host/install/container-scanner.ts';
-import { ProcessTimedOutError } from '@/core/process/process.ts';
+import logger from '@/core/observability/logger.ts';
+import { ProcessTimedOutError, type SpawnResult } from '@/core/process/process.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
   containerScanErrorReport,
@@ -29,6 +31,7 @@ import {
   parseContainerScanReport,
 } from './container-scanner-report.ts';
 import {
+  type ContainerScanCancellationExitCode,
   ContainerScanCancelledError,
   type ContainerScanOptions,
   prepareContainerScannerEnv,
@@ -49,35 +52,80 @@ export interface AnalyzeContainerOptions extends ContainerScanOptions {
   format: (typeof CONTAINER_SCAN_FORMATS)[number];
 }
 
+interface ExecutionFailure {
+  message: string;
+  exitCode: 1 | ContainerScanCancellationExitCode;
+  remediationHint?: string;
+}
+
+interface ContainerScanExecution {
+  result: SpawnResult;
+  executionFailure?: ExecutionFailure;
+}
+
+const EMPTY_SPAWN_RESULT: SpawnResult = { exitCode: null, stdout: '', stderr: '' };
+
+async function executeContainerScan(
+  image: string,
+  options: ContainerScanOptions,
+  env: NodeJS.ProcessEnv,
+  console: Console,
+  redact: (message: string) => string,
+): Promise<ContainerScanExecution> {
+  let binary: string;
+  try {
+    binary = await installContainerScanner(console);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Could not install the container scanner.';
+    logger.debug(`Container scanner installation failed: ${redact(message)}`);
+    return {
+      result: EMPTY_SPAWN_RESULT,
+      executionFailure: {
+        message,
+        exitCode: 1,
+        remediationHint: remediationHintFor(error),
+      },
+    };
+  }
+
+  try {
+    return { result: await runContainerScanner(binary, image, options, env) };
+  } catch (error) {
+    const isKnownError =
+      error instanceof ProcessTimedOutError || error instanceof CommandFailedError;
+    if (!isKnownError) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.debug(`Could not start the container scanner: ${redact(detail)}`);
+    }
+    return {
+      result: EMPTY_SPAWN_RESULT,
+      executionFailure: {
+        message: isKnownError ? error.message : 'Could not start the container scanner.',
+        exitCode: error instanceof ContainerScanCancelledError ? error.exitCode : 1,
+        remediationHint: remediationHintFor(error),
+      },
+    };
+  }
+}
+
 export async function analyzeContainer(
   image: string,
   options: AnalyzeContainerOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const env = await prepareContainerScannerEnv(ctx.auth);
-  const result = await installContainerScanner(ctx.console)
-    .catch((error: unknown) => {
-      const message =
-        error instanceof Error ? error.message : 'Could not install the container scanner.';
-      throw new CommandFailedError(message, { cause: error });
-    })
-    .then((binary) => runContainerScanner(binary, image, options, env))
-    .catch((error: unknown) => ({
-      exitCode: null,
-      stdout: '',
-      stderr: '',
-      executionFailure: {
-        message:
-          error instanceof ProcessTimedOutError || error instanceof CommandFailedError
-            ? error.message
-            : 'Could not start the container scanner.',
-        exitCode: error instanceof ContainerScanCancelledError ? error.exitCode : (1 as const),
-        remediationHint: remediationHintFor(error),
-      },
-    }));
+  const redact = (message: string): string =>
+    ctx.auth.token ? message.replaceAll(ctx.auth.token, '[redacted]') : message;
+  const { result, executionFailure } = await executeContainerScan(
+    image,
+    options,
+    env,
+    ctx.console,
+    redact,
+  );
 
   const scannerReport = parseContainerScanReport(result);
-  const executionFailure = 'executionFailure' in result ? result.executionFailure : undefined;
   const report =
     scannerReport ??
     containerScanErrorReport(
@@ -90,7 +138,6 @@ export async function analyzeContainer(
       },
       executionFailure?.exitCode,
     );
-  const redact = (message: string): string => message.replaceAll(ctx.auth.token, '[redacted]');
   const terminalText = (message: string): string =>
     redact(sanitizeScannerTerminalText(redact(message)));
   const scannerStderr =
@@ -108,11 +155,19 @@ export async function analyzeContainer(
     }
   }
 
-  if (options.format === 'table') {
-    ctx.console.print(formatContainerScanTable(report, stderr));
-  } else {
-    const errors = report.errors.map((error) => ({ ...error, message: redact(error.message) }));
-    ctx.console.print(formatContainerScanJson({ ...report, errors }));
+  switch (options.format) {
+    case 'table':
+      ctx.console.print(formatContainerScanTable(report, result.stderr));
+      break;
+    case 'json': {
+      const errors = report.errors.map((error) => ({ ...error, message: redact(error.message) }));
+      ctx.console.print(formatContainerScanJson({ ...report, errors }));
+      break;
+    }
+    default: {
+      const _exhaustive: never = options.format;
+      throw new CommandFailedError(`Unsupported container scan format: ${String(_exhaustive)}`);
+    }
   }
   process.exitCode = report.exitCode;
 }

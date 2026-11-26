@@ -286,17 +286,28 @@ describe('analyze container', () => {
     expect(JSON.parse(json.stdout)).toEqual({ ...report, exitCode: 51 });
     expect(json.stdout).toContain('\\u001b[31m\\u0007\\u009b\\u202e');
 
-    const errors = [{ kind: 'submission', message: 'Scan failed' + controls }];
+    const errors = [{ kind: 'submission', message: `Scan failed ${TOKEN}${controls}` }];
     installStub(harness, {
       stdout: JSON.stringify({ issues: [], errors, configuration, exitCode: 2 }),
       exitCode: 2,
     });
     const failure = await harness.run('analyze container ./my-image.tar');
     expect(failure.exitCode).toBe(1);
-    expect(failure.stderr).toContain('Scan failed');
+    expect(failure.stderr).toContain('Scan failed [redacted]');
+    expect(failure.stderr).not.toContain(TOKEN);
     expect(failure.stderr).not.toContain('\u001b');
     expect(failure.stderr).not.toContain('\u0007');
-    expect(JSON.parse(failure.stdout)).toMatchObject({ errors, exitCode: 1 });
+    expect(failure.stdout).not.toContain(TOKEN);
+    expect(JSON.parse(failure.stdout)).toMatchObject({
+      errors: [{ kind: 'submission', message: `Scan failed [redacted]${controls}` }],
+      exitCode: 1,
+    });
+
+    const tableFailure = await harness.run('analyze container ./my-image.tar --format table');
+    expect(tableFailure.exitCode).toBe(1);
+    expect(tableFailure.stdout).toContain('Container scan failed.');
+    expect(tableFailure.stderr).toContain('Scan failed [redacted]');
+    expect(tableFailure.stderr).not.toContain(TOKEN);
   });
 
   it('fails closed on malformed scanner output and redacts the token from diagnostics', async () => {

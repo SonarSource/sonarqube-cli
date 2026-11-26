@@ -71,6 +71,7 @@ import {
   CONTAINER_SCAN_FORMATS,
 } from './analyze/container.ts';
 import {
+  CONTAINER_SCAN_ENGINES,
   CONTAINER_SCAN_SEVERITIES,
   type ContainerScanSeverity,
   DEFAULT_CONTAINER_FAIL_ON,
@@ -852,7 +853,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .addOption(
       new SonarOption('--container-engine <engine>', 'Engine to export a local image from').choices(
-        ['docker', 'podman'],
+        CONTAINER_SCAN_ENGINES,
       ),
     )
     .option('--registry <host>', 'Override the image registry')
