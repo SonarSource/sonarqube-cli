@@ -5,7 +5,12 @@ import { parseArgs } from 'node:util';
 import { renderHomePage } from './home-page.ts';
 import { readJson } from './read-json.ts';
 import { renderRunPage, renderTrialPage } from './run-page.ts';
+import { readTaskDescriptions, type TaskDescription } from './task-descriptions.ts';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const TASKS_DIR = join(HERE, '..', 'tasks');
+const TASK_PAGE_TEMPLATE = join(HERE, 'task-page-template.html');
+const NOT_CHECKS = new Set(['trajectory_present', 'trajectory_ok']);
 const SCHEMA_VERSION = 2;
 const EVOLUTION_TEMPLATE = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -19,6 +24,7 @@ const SECRET_PATTERNS = [
   /\bsq[apu]_[0-9a-f]{40}\b/g,
   /\bAKIA[0-9A-Z]{16}\b/g,
   /\bsk-ant-[A-Za-z0-9_-]{10,}/g,
+  /\bsk_live_[A-Za-z0-9]{10,}/g,
 ];
 
 interface RunFile {
@@ -122,14 +128,37 @@ function renderPage(outDir: string, index: Index): string {
   });
 }
 
+function redact(text: string): string {
+  return SECRET_PATTERNS.reduce((result, pattern) => result.replace(pattern, REDACTED), text);
+}
+
 function redactTrials(trialsDir: string): void {
   for (const name of readdirSync(trialsDir)) {
     const path = join(trialsDir, name);
-    const text = readFileSync(path, 'utf8');
-    writeFileSync(
-      path,
-      SECRET_PATTERNS.reduce((result, pattern) => result.replace(pattern, REDACTED), text),
+    writeFileSync(path, redact(readFileSync(path, 'utf8')));
+  }
+}
+
+function checkDescriptions(outDir: string, runId: string, tasks: TaskDescription[]): void {
+  const described = new Map(tasks.map((task) => [task.id, task.checks.map((check) => check.key)]));
+  const runDir = join(outDir, 'runs', runId);
+  for (const { id } of loadRun(join(runDir, 'run.json')).trials) {
+    const trial = load<{ task: string; status: string; checks: { name: string }[] }>(
+      join(runDir, 'trials', `${id}.json`),
     );
+    if (trial.status === 'ERROR') continue;
+    const keys = described.get(trial.task);
+    if (!keys)
+      throw new Error(
+        `Task '${trial.task}' has no description: add tasks/${trial.task}/description.md`,
+      );
+    const verified = trial.checks
+      .map((check) => check.name)
+      .filter((name) => !NOT_CHECKS.has(name));
+    if ([...verified].sort().join() !== [...keys].sort().join())
+      throw new Error(
+        `The checks of tasks/${trial.task}/description.md (${keys.join(', ')}) differ from the ones the verifier wrote in trial ${id} (${verified.join(', ')})`,
+      );
   }
 }
 
@@ -143,6 +172,7 @@ function checkTrials(outDir: string, id: string): void {
 }
 
 function build(publishedDir: string, newRunDir: string, outDir: string): void {
+  const tasks = readTaskDescriptions(TASKS_DIR);
   const newRun = loadRun(join(newRunDir, 'run.json'));
   const { runId } = newRun.run;
   const previous = loadIndex(publishedDir);
@@ -159,6 +189,7 @@ function build(publishedDir: string, newRunDir: string, outDir: string): void {
       cpSync(join(newRunDir, 'run.json'), join(target, 'run.json'));
       cpSync(join(newRunDir, 'trials'), join(target, 'trials'), { recursive: true });
       redactTrials(join(target, 'trials'));
+      checkDescriptions(outDir, runId, tasks);
     } else {
       cpSync(join(publishedDir, 'runs', id), target, { recursive: true });
     }
@@ -174,6 +205,14 @@ function build(publishedDir: string, newRunDir: string, outDir: string): void {
   writeFileSync(join(outDir, 'run.html'), renderRunPage());
   writeFileSync(join(outDir, 'trial.html'), renderTrialPage());
   cpSync(EVOLUTION_TEMPLATE, join(outDir, 'evolution.html'));
+  writeFileSync(
+    join(outDir, 'tasks.json'),
+    JSON.stringify({
+      schemaVersion: SCHEMA_VERSION,
+      tasks: tasks.map((task) => ({ ...task, request: redact(task.request) })),
+    }),
+  );
+  cpSync(TASK_PAGE_TEMPLATE, join(outDir, 'task.html'));
   writeFileSync(join(outDir, 'index.json'), JSON.stringify(index));
   writeFileSync(join(outDir, 'index.html'), renderPage(outDir, index));
 }

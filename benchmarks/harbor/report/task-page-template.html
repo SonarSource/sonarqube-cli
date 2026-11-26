@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor benchmark - tasks</title>
+<style>
+:root{color-scheme:light;--page:#fafaf8;--ink:#111;--ink-2:#6b6a66;--line:#e6e5e0;--wash:rgba(11,11,11,.05);--blue:#2a78d6;--select-wash:#dbe8f8;--code:#f1f1ee;--ok:#1d7a3a;--ok-wash:#e3f2e6}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--page:#0f0f0f;--ink:#f0efec;--ink-2:#9a9992;--line:#2a2a28;--wash:rgba(255,255,255,.06);--blue:#3987e5;--select-wash:#1d3556;--code:#1b1b1a;--ok:#5fc27a;--ok-wash:#16301d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.55 system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+.top{display:flex;gap:28px;align-items:baseline;padding:18px 40px;border-bottom:1px solid var(--line)}
+.top a{color:var(--ink);font-size:16px;font-weight:700;text-decoration:none}
+.layout{display:grid;grid-template-columns:280px minmax(0,1fr)}
+aside{border-right:1px solid var(--line);padding:28px 18px;align-self:start}
+#nav summary{list-style:none;margin:0 0 10px 6px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);pointer-events:none}
+#nav summary::-webkit-details-marker{display:none}
+.opt{display:block;width:100%;margin-bottom:6px;padding:10px 12px;border:1px solid transparent;border-radius:6px;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:background .15s,transform .1s}
+.opt b{display:block;font:600 13px/1.4 ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+.opt small{display:block;color:var(--ink-2);font-size:13px;line-height:1.35;margin-top:3px}
+.opt:hover{background:var(--wash)}
+.opt:active{transform:scale(.98)}
+.opt[aria-current="true"]{background:var(--select-wash);border-color:var(--blue)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.content{padding:28px 40px 64px;min-width:0;max-width:880px}
+h1{margin:0 0 2px;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.id{display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--ink-2);font-size:13px}
+.id code{font-size:13px;color:var(--ink)}
+h2{margin:30px 0 8px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+p{margin:0 0 10px;max-width:72ch}
+code{font:13px ui-monospace,Menlo,monospace;background:var(--wash);padding:1px 5px;border-radius:4px}
+.request{position:relative}
+.request pre{margin:0;background:var(--code);border-radius:8px;padding:13px 90px 13px 15px;white-space:pre-wrap;word-break:break-word;font:14px/1.5 ui-monospace,Menlo,monospace}
+.copy{position:absolute;top:8px;right:8px;font:inherit;font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--page);color:var(--ink);cursor:pointer}
+.copy:hover{background:var(--wash)}
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.checks li{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start}
+.checks .n{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--wash);color:var(--ink-2);font-size:12px;font-weight:600;margin-top:1px}
+.checks small{display:block;color:var(--ink-2);font:12px ui-monospace,Menlo,monospace}
+.pass{margin-top:18px;padding:11px 14px;border-radius:8px;background:var(--ok-wash);color:var(--ok);font-weight:500;max-width:72ch}
+.message{color:var(--ink-2)}
+@media(max-width:900px){
+.top{padding:14px 16px}
+.layout{display:flex;flex-direction:column}
+.content{display:contents}
+#head{order:1;padding:18px 16px 14px}
+aside{order:2;align-self:stretch;border-right:0;border-bottom:1px solid var(--line);padding:6px 16px}
+#task{order:3;padding:0 16px 48px}
+#nav summary{pointer-events:auto;cursor:pointer;margin:0;padding:10px 0;font:600 13px ui-monospace,Menlo,monospace;letter-spacing:0;text-transform:none;color:var(--ink);display:flex;justify-content:space-between}
+#nav summary::after{content:"▾";color:var(--ink-2)}
+#nav[open] summary::after{content:"▴"}
+#nav[open] #list{padding-bottom:10px}
+}
+</style>
+</head>
+<body>
+<div class="top"><a href="index.html">Harbor benchmark</a></div>
+<div class="layout">
+<aside><details id="nav" open><summary id="navsum">Tasks</summary><div id="list"></div></details></aside>
+<main class="content"><div id="head"></div><div id="task"></div></main>
+</div>
+<script>
+const SCHEMA_VERSION = 2;
+const nav = document.getElementById('nav');
+const navSummary = document.getElementById('navsum');
+const list = document.getElementById('list');
+const head = document.getElementById('head');
+const task = document.getElementById('task');
+let tasks = [];
+let current = null;
+
+const isMobile = () => matchMedia('(max-width: 900px)').matches;
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  Object.assign(node, props);
+  node.append(...children.filter((child) => child !== null));
+  return node;
+}
+
+function inline(text) {
+  const fragment = document.createDocumentFragment();
+  text.split('`').forEach((part, index) => {
+    if (part === '') return;
+    fragment.append(index % 2 === 1 ? el('code', { textContent: part }) : part);
+  });
+  return fragment;
+}
+
+function section(title, ...content) {
+  return [el('h2', { textContent: title }), ...content];
+}
+
+function showMessage(message) {
+  head.replaceChildren();
+  task.replaceChildren(el('p', { className: 'message', textContent: message }));
+}
+
+async function copyRequest(button, text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = 'Copied';
+  } catch {
+    button.textContent = 'Copy failed';
+  }
+  setTimeout(() => (button.textContent = 'Copy'), 1500);
+}
+
+function renderTask(item) {
+  head.replaceChildren(
+    el('h1', { textContent: item.question }),
+    el('div', { className: 'id' }, 'Task name ', el('code', { textContent: item.id })),
+  );
+  const copy = el('button', { className: 'copy', type: 'button', textContent: 'Copy' });
+  copy.addEventListener('click', () => copyRequest(copy, item.request));
+  const success = item.success.charAt(0).toLowerCase() + item.success.slice(1);
+  task.replaceChildren(
+    ...section('What it tests', el('p', {}, inline(item.tests))),
+    ...section('Starting point', ...item.start.map((paragraph) => el('p', {}, inline(paragraph)))),
+    ...section('The request', el('div', { className: 'request' }, el('pre', { textContent: item.request }), copy)),
+    ...section(
+      'How it is checked',
+      el(
+        'ol',
+        { className: 'checks' },
+        ...item.checks.map((check, index) =>
+          el(
+            'li',
+            {},
+            el('span', { className: 'n', textContent: String(index + 1) }),
+            el('span', {}, inline(check.text), el('small', { textContent: check.key })),
+          ),
+        ),
+      ),
+    ),
+    el('div', { className: 'pass', textContent: `Passes when ${success}` }),
+  );
+}
+
+function buildList() {
+  list.replaceChildren(
+    ...tasks.map((item) => {
+      const button = el(
+        'button',
+        { className: 'opt', type: 'button' },
+        el('b', { textContent: item.id }),
+        el('small', { textContent: item.question }),
+      );
+      button.dataset.id = item.id;
+      button.addEventListener('click', () => select(item.id, true));
+      return button;
+    }),
+  );
+}
+
+function markCurrent() {
+  for (const button of list.children) {
+    if (current && button.dataset.id === current.id) button.setAttribute('aria-current', 'true');
+    else button.removeAttribute('aria-current');
+  }
+  navSummary.textContent = isMobile() && current ? current.id : 'Tasks';
+}
+
+function select(id, closeNav = false) {
+  const item = tasks.find((candidate) => candidate.id === id);
+  if (!item) {
+    current = null;
+    markCurrent();
+    showMessage(`There is no task named '${id}'.`);
+    return;
+  }
+  current = item;
+  if (closeNav && isMobile()) {
+    nav.open = false;
+    navSummary.focus();
+  }
+  markCurrent();
+  renderTask(item);
+  try {
+    history.replaceState(null, '', `?task=${encodeURIComponent(id)}`);
+  } catch (error) {
+    console.warn(`The address was not updated: ${error.message}`);
+  }
+}
+
+function move(step) {
+  const index = current ? tasks.indexOf(current) : step > 0 ? -1 : 0;
+  const next = tasks[(index + step + tasks.length) % tasks.length];
+  select(next.id);
+  list.querySelector('[aria-current="true"]').focus();
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (!event.target.closest('#list')) return;
+  event.preventDefault();
+  move(event.key === 'ArrowDown' ? 1 : -1);
+});
+
+matchMedia('(max-width: 900px)').addEventListener('change', () => {
+  nav.open = !isMobile();
+  markCurrent();
+});
+
+async function main() {
+  nav.open = !isMobile();
+  const response = await fetch('tasks.json');
+  if (!response.ok) {
+    showMessage(`Could not load tasks.json (HTTP ${response.status}).`);
+    return;
+  }
+  const data = await response.json();
+  if (data.schemaVersion !== SCHEMA_VERSION) {
+    showMessage(`Unsupported schemaVersion ${data.schemaVersion} in tasks.json.`);
+    return;
+  }
+  tasks = data.tasks;
+  if (tasks.length === 0) {
+    showMessage('No task is described yet.');
+    return;
+  }
+  buildList();
+  select(new URLSearchParams(location.search).get('task') || tasks[0].id);
+}
+
+main().catch((error) => showMessage(`Could not show the task: ${error.message}`));
+</script>
+</body>
+</html>
