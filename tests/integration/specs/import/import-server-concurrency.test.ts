@@ -94,7 +94,7 @@ describe('concurrent Server imports', () => {
           });
         } else {
           expect(
-            outcomes.filter((o) => o.status === 'fulfilled' && o.value !== undefined),
+            outcomes.filter((o) => o.status === 'fulfilled' && o.value?.detail !== undefined),
           ).toHaveLength(1);
         }
         const mutations = server
@@ -116,6 +116,7 @@ describe('concurrent Server imports', () => {
         expect(binding).toMatchObject({ repository: winnerId, devOpsPlatformSettingId: 'gl-id' });
         const winner = plans[winnerIndex];
         expect(await winner.plan.importRepo(winner.repo)).toEqual({
+          projectKey: KEY,
           detail: 'project already exists with matching binding',
         });
         expect(

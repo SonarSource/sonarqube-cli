@@ -20,7 +20,13 @@
 
 import { CloudBackend } from '@/commands/import/cloud-backend.ts';
 import { ImportApiClient } from '@/commands/import/import-api.ts';
+import type { ImportPlan } from '@/commands/import/import-backend.ts';
 import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/resolve-options.ts';
+import {
+  ServerImportApiClient,
+  ServerImportUnavailableError,
+} from '@/commands/import/server/server-import-api.ts';
+import { ServerBackend, ServerImportDeclinedError } from '@/commands/import/server-backend.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { waitInBrowser } from '@/core/host/browser.ts';
@@ -142,6 +148,10 @@ async function importRepository(
     { repo: [slug], nonInteractive: true },
     console,
   );
+  return importPlannedRepository(plan, slug);
+}
+
+async function importPlannedRepository(plan: ImportPlan, slug: string): Promise<string> {
   if (plan.selection.kind !== 'batch' || plan.selection.repos.length !== 1) {
     const reason = plan.selection.kind === 'batch' ? plan.selection.skipped[0]?.reason : undefined;
     const detail = reason ? `: ${reason}` : '.';
@@ -168,6 +178,9 @@ export async function runBoundNew(
   const { auth, http, console, intent, telemetry } = deps;
   const project = telemetry?.project(0);
   project?.begin('create_project');
+  if (auth.connectionType !== 'cloud') {
+    return runServerBoundNew({ path: 'bound-new', projectRoot, remote, repositorySlug }, deps);
+  }
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
@@ -210,6 +223,16 @@ export async function runBoundNew(
     importRepository(api, auth, repositorySlug, { ...org, almKey }, new QuietConsole(console)),
   );
 
+  return finishBoundNew(projectKey, projectRoot, deps);
+}
+
+async function finishBoundNew(
+  projectKey: string,
+  projectRoot: string,
+  deps: DetectDeps,
+): Promise<InitOutcome> {
+  const { auth, http, console } = deps;
+  const project = deps.telemetry?.project(0);
   await writeMapping(auth, projectKey, projectRoot, console, 'created');
   project?.record('create_project', 'success');
   project?.setProjectKey(projectKey);
@@ -221,4 +244,66 @@ export async function runBoundNew(
     'No analysis results yet: the first analysis of the new project is pending.',
   );
   return { kind: 'bound', projectKey };
+}
+
+async function runServerBoundNew(
+  path: BoundNewPath,
+  deps: DetectDeps,
+): Promise<InitOutcome | NoProjectPath> {
+  const { auth, http, console, interactive, dryRun, intent } = deps;
+  const project = deps.telemetry?.project(0);
+  const backend = new ServerBackend(
+    new ServerImportApiClient(http, auth.serverUrl),
+    auth.serverUrl,
+    {
+      command: 'sonar init',
+      confirmPatConnection: async () =>
+        requireAnswer(
+          await console.confirmPrompt(
+            'Connect your DevOps platform personal access token in the browser now?',
+            true,
+          ),
+        ),
+    },
+  );
+  const options = {
+    repo: [path.repositorySlug],
+    dopSetting: deps.dopSetting,
+    nonInteractive: !interactive,
+  };
+  let projectKey: string;
+  try {
+    if (dryRun) {
+      const preview = await backend.prepare(options, console, true);
+      return {
+        kind: 'dry-run',
+        action: {
+          type: 'bind',
+          repositorySlug: path.repositorySlug,
+          authorizationNeeded: preview.authorizationNeeded,
+        },
+      };
+    }
+    const plan = await backend.plan(options, console);
+    projectKey = await console.withSpinner('Creating the project', () =>
+      importPlannedRepository(plan, path.repositorySlug),
+    );
+  } catch (error) {
+    if (error instanceof ServerImportDeclinedError) {
+      project?.record('create_project', 'declined');
+      project?.stopAt('create_project', 'cancelled');
+      if (intent?.kind === 'bind') return { kind: 'declined' };
+      return { path: 'no-project', projectRoot: path.projectRoot, remote: path.remote };
+    }
+    if (error instanceof ServerImportUnavailableError && intent?.kind !== 'bind') {
+      console.warn(error.message);
+      if (error.remediationHint) console.info(error.remediationHint);
+      project?.record('create_project', 'skipped');
+      return { path: 'no-project', projectRoot: path.projectRoot, remote: path.remote };
+    }
+    project?.record('create_project', 'failed');
+    project?.stopAt('create_project', classifyInitFailure(error));
+    throw error;
+  }
+  return finishBoundNew(projectKey, path.projectRoot, deps);
 }

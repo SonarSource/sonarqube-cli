@@ -104,7 +104,7 @@ export class ServerImportPlan implements ImportPlan {
     }
     this.claimedKeys.set(projectKey, repository.id);
     if (await assertProjectKeyUsable(this.api, this.setting, repository, projectKey)) {
-      return { detail: ALREADY_BOUND };
+      return { detail: ALREADY_BOUND, projectKey };
     }
     try {
       await this.api.createBoundProject({
@@ -120,11 +120,11 @@ export class ServerImportPlan implements ImportPlan {
           (error instanceof UnexpectedApiError && error.status === CREATION_CONFLICT_STATUS)) &&
         (await assertProjectKeyUsable(this.api, this.setting, repository, projectKey))
       ) {
-        return { detail: ALREADY_BOUND };
+        return { detail: ALREADY_BOUND, projectKey };
       }
       throw this.explainedImportFailure(error, projectKey);
     }
-    return undefined;
+    return { projectKey };
   }
 
   /** One `bound-projects` call per project, in the order given; a failure does not stop the others. */

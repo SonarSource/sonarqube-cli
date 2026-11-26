@@ -22,7 +22,8 @@ import { describe, expect, it, mock } from 'bun:test';
 
 import type { ServerImportApiClient } from '@/commands/import/server/server-import-api.ts';
 import { ServerBackend } from '@/commands/import/server-backend.ts';
-import type { Console } from '@/core/ui/console.ts';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('ServerBackend importing a Bitbucket Server repository', () => {
   it('creates the bound project with the repository slug and the Bitbucket project key', async () => {
@@ -42,9 +43,10 @@ describe('ServerBackend importing a Bitbucket Server repository', () => {
     } as unknown as ServerImportApiClient;
     const backend = new ServerBackend(api, 'https://sonarqube.example.com');
 
-    const plan = await backend.plan({ repo: ['PRJ/my-repo'], nonInteractive: true }, {
-      info: () => undefined,
-    } as unknown as Console);
+    const plan = await backend.plan(
+      { repo: ['PRJ/my-repo'], nonInteractive: true },
+      new FakeConsole(),
+    );
     if (plan.selection.kind !== 'batch') throw new Error('expected a batch selection');
     await plan.importRepo(plan.selection.repos[0]);
 

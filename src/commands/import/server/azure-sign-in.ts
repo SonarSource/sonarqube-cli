@@ -38,6 +38,7 @@ const UNUSABLE_AZURE_RESPONSE = /unable to contact azure devops server|could not
 export function guardAzureSignIn(
   fetchPage: FetchServerRepositories,
   reconnectUrl: string,
+  command = 'sonar import',
 ): FetchServerRepositories {
   return async (pageIndex, pageSize) => {
     if (pageIndex !== 1) {
@@ -48,19 +49,19 @@ export function guardAzureSignIn(
       page = await fetchPage(pageIndex, pageSize);
     } catch (error) {
       throw error instanceof BadRequestError && UNUSABLE_AZURE_RESPONSE.test(error.message)
-        ? noRepositoryError(reconnectUrl)
+        ? noRepositoryError(reconnectUrl, command)
         : error;
     }
     if (page.repositories.length === 0) {
-      throw noRepositoryError(reconnectUrl);
+      throw noRepositoryError(reconnectUrl, command);
     }
     return page;
   };
 }
 
-function noRepositoryError(reconnectUrl: string): CommandFailedError {
+function noRepositoryError(reconnectUrl: string, command: string): CommandFailedError {
   return new CommandFailedError(
     'Azure DevOps did not return any repository. The token may be invalid or expired (Azure DevOps can answer an invalid token with a sign-in page that looks like success), or the token cannot see any project.',
-    { remediationHint: `Reconnect it at ${reconnectUrl}, then run 'sonar import' again.` },
+    { remediationHint: `Reconnect it at ${reconnectUrl}, then run '${command}' again.` },
   );
 }
