@@ -362,6 +362,11 @@ async function runLive(
       }),
     async (repo, classification, slug, progress) => {
       const result = await executeRepo(ctx, repo, classification);
+      if (result.outcome === 'skip') {
+        results.skipped.push({ repo: slug, reason: result.reason, mrUrl: result.mrUrl });
+        progress.update(slug, 'done', result.message);
+        return;
+      }
       results.opened.push({ repo: slug, projectKey: result.projectKey, mrUrl: result.mrUrl });
       progress.update(slug, 'done', 'MR opened');
     },

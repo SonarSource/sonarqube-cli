@@ -25,6 +25,8 @@ import type { GitLabClient, GitLabRepo, GitLabTreeEntry } from '@/core/gitlab/cl
 import { GitLabApiError } from '@/core/gitlab/client.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
+import { deleteBranchUnlessRequestOpen } from '../branch-guard.ts';
+import { hasSonarAnalysis } from '../ci-detection.ts';
 import type { OnboardCiSqsClient } from './sqs-api.ts';
 import {
   buildUpdatedCiYml,
@@ -44,14 +46,6 @@ enum OtherCiMarker {
   AzurePipelines = 'azure-pipelines.yml',
   CircleCi = '.circleci',
   TravisCi = '.travis.yml',
-}
-
-// Known limitation with --job-template: a template that wraps the scanner call in another
-// script and avoids these literal strings won't be detected on rerun, causing a duplicate job.
-enum SonarCiMarker {
-  SonarScanner = 'sonar-scanner',
-  SonarHostUrl = 'SONAR_HOST_URL',
-  SonarqubeAnalysis = 'sonarqube-analysis:',
 }
 
 export type RepoWithBranch = GitLabRepo & { default_branch: string };
@@ -75,7 +69,9 @@ export type RepoClassification =
       projectKey: string;
     };
 
-export type ExecuteResult = { outcome: 'opened'; projectKey: string; mrUrl: string };
+export type ExecuteResult =
+  | { outcome: 'opened'; projectKey: string; mrUrl: string }
+  | Extract<RepoClassification, { outcome: 'skip' }>;
 
 function isBranchAlreadyExistsError(err: unknown): boolean {
   return (
@@ -107,7 +103,7 @@ function classifyExistingCiFile(
   existingCi: string,
   ciFilePath: string,
 ): RepoClassification | null {
-  if (Object.values(SonarCiMarker).some((marker) => existingCi.includes(marker))) {
+  if (hasSonarAnalysis(existingCi)) {
     return {
       outcome: 'skip',
       reason: SkipReason.AlreadyConfigured,
@@ -232,7 +228,21 @@ export async function executeRepo(
     await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
   } catch (err) {
     if (isBranchAlreadyExistsError(err)) {
-      await ctx.gitlab.deleteBranch(repo.id, CI_BRANCH);
+      const mrUrl = await deleteBranchUnlessRequestOpen({
+        getOpenRequestUrl: async () => {
+          const openMrs = await ctx.gitlab.listOpenMergeRequests(repo.id, CI_BRANCH);
+          return openMrs[0]?.web_url;
+        },
+        deleteBranch: () => ctx.gitlab.deleteBranch(repo.id, CI_BRANCH),
+      });
+      if (mrUrl) {
+        return {
+          outcome: 'skip',
+          reason: SkipReason.MrAlreadyOpen,
+          message: 'skipped (MR already open)',
+          mrUrl,
+        };
+      }
       await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
     } else {
       throw err;
