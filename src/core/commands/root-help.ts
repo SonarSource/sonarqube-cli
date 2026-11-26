@@ -20,6 +20,7 @@
 
 import type { Help, Option } from 'commander';
 
+import { ALPHA_HELP_TAG, BETA_HELP_TAG, DEPRECATED_HELP_TAG } from '@/core/commands/stage.ts';
 import { cyan, gray, purple, softBlue, underline } from '@/core/ui/colors.ts';
 
 import { version as VERSION } from '../../../package.json';
@@ -114,11 +115,17 @@ function padToWidth(text: string, width: number): string {
   return text + ' '.repeat(Math.max(0, width - Bun.stringWidth(text)));
 }
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const LIFECYCLE_BADGES = [ALPHA_HELP_TAG, BETA_HELP_TAG, DEPRECATED_HELP_TAG];
+const AVAILABILITY_BADGES = ['[SonarQube Cloud only]', '[Vortex]'];
+const BADGE_PATTERN = new RegExp(
+  [...LIFECYCLE_BADGES, ...AVAILABILITY_BADGES].map(escapeRegExp).join('|'),
+  'g',
+);
+
 function colorBadges(text: string): string {
-  return text.replace(
-    /\[(BETA|ALPHA|DEPRECATED|SonarQube Cloud only|Vortex)\]/g,
-    (badge, kind: string) =>
-      ['SonarQube Cloud only', 'Vortex'].includes(kind) ? cyan(badge) : purple(badge),
+  return text.replace(BADGE_PATTERN, (badge) =>
+    AVAILABILITY_BADGES.includes(badge) ? cyan(badge) : purple(badge),
   );
 }
 
