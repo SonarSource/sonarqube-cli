@@ -50,7 +50,7 @@ describe('GitHubClient', () => {
 
   beforeEach(() => {
     retryNotices = [];
-    client = new GitHubClient(TOKEN, { onRetry: (message) => retryNotices.push(message) });
+    client = new GitHubClient(TOKEN, { onWarning: (message) => retryNotices.push(message) });
   });
   afterEach(() => {
     fetchSpy?.mockRestore();
@@ -209,11 +209,16 @@ describe('GitHubClient', () => {
   describe('retries', () => {
     let timeoutSpy: ReturnType<typeof spyOn>;
     let nowSpy: ReturnType<typeof spyOn>;
-    const now = 1_700_000_000_000;
+    let now = 1_700_000_000_000;
 
     beforeEach(() => {
-      nowSpy = spyOn(Date, 'now').mockReturnValue(now);
-      timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
+      now = 1_700_000_000_000;
+      nowSpy = spyOn(Date, 'now').mockImplementation(() => now);
+      timeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+        fn: () => void,
+        delay = 0,
+      ) => {
+        now += delay;
         fn();
         return 0 as unknown as ReturnType<typeof setTimeout>;
       }) as typeof setTimeout);
@@ -258,7 +263,7 @@ describe('GitHubClient', () => {
 
     it('doubles the delay for repeated secondary rate limits', async () => {
       const scopedNotices: string[] = [];
-      const scopedClient = client.withRetryHandler((message) => scopedNotices.push(message));
+      const scopedClient = client.withWarningHandler((message) => scopedNotices.push(message));
       const limited = () =>
         fakeResponse({ message: 'You have exceeded a secondary rate limit' }, { status: 403 });
       fetchSpy = mockFetchSeq(limited(), limited(), fakeResponse([METADATA]));
@@ -279,6 +284,42 @@ describe('GitHubClient', () => {
       );
       await client.getRepository(REPO);
       expect(timeoutSpy.mock.calls[0][1]).toBe(60000);
+    });
+
+    it('shares write spacing with repository-scoped clients', async () => {
+      const starts: number[] = [];
+      fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((() => {
+        starts.push(Date.now());
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as unknown as typeof fetch);
+      const scoped = client.withWarningHandler(() => undefined);
+      const start = now;
+      await Promise.all([
+        client.createBranch(REPO, 'first', 'sha'),
+        scoped.createBranch(REPO, 'second', 'sha'),
+      ]);
+      expect(starts).toEqual([start, start + 1000]);
+    });
+
+    it('shares a rejected write cooldown with reads from another scoped client', async () => {
+      const scopedNotices: string[] = [];
+      fetchSpy = mockFetchSeq(
+        fakeResponse({}, { status: 429, headers: { 'retry-after': '2' } }),
+        fakeResponse(METADATA),
+      );
+      const scoped = client.withWarningHandler((message) => scopedNotices.push(message));
+      const start = now;
+      const error = await scoped
+        .createBranch(REPO, 'first', 'sha')
+        .catch((error: unknown) => error);
+      expect(error).toMatchObject({ status: 429 });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(scopedNotices).toEqual([
+        'GitHub rate limit reached. Pausing shared requests for 3 seconds.',
+      ]);
+      expect(await client.getRepository(REPO)).toEqual(METADATA);
+      expect(now - start).toBe(3000);
+      expect(retryNotices).toEqual([]);
     });
 
     it('does not retry a permission error', async () => {
