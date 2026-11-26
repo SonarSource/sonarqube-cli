@@ -19,12 +19,17 @@
  */
 
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
-import type { StatsSinceChoice, StatsSummary } from '@/core/stats/stats-queries.ts';
 import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
-import type { StatsEntitlement } from './entitlement.ts';
+import type {
+  StatsCardViewModel,
+  StatsMetric,
+  StatsMetricRow,
+  StatsUnavailable,
+  StatsWindow,
+} from './view-model/types.ts';
 
 const SPARKLINE_BLOCKS = '▁▂▃▄▅▆▇█';
 const SPARKLINE_MAX_LEVEL = SPARKLINE_BLOCKS.length - 2;
@@ -39,44 +44,23 @@ export function sparkline(values: readonly number[]): string {
   return softBlue(line);
 }
 
-const MAX_SPARKLINE_COLUMNS = 30;
-
-function resolveBucketDays(totalDays: number): number {
-  return totalDays > MAX_SPARKLINE_COLUMNS ? Math.ceil(totalDays / MAX_SPARKLINE_COLUMNS) : 1;
-}
-
-function downsampleSum(values: readonly number[], bucketDays: number): number[] {
-  if (bucketDays <= 1) return [...values];
-  const buckets: number[] = [];
-  for (let i = 0; i < values.length; i += bucketDays) {
-    buckets.push(values.slice(i, i + bucketDays).reduce((sum, v) => sum + v, 0));
-  }
-  return buckets;
-}
-
 export const BAR_WIDTH = 18;
 const BAR_FILLED = '▓';
 const BAR_EMPTY = '░';
+const MAX_PERCENT = 100;
 
-export function bar(fraction: number): string {
-  const filled = Math.round(Math.min(Math.max(fraction, 0), 1) * BAR_WIDTH);
+export function bar(percent: number): string {
+  const clamped = Math.min(Math.max(percent, 0), MAX_PERCENT);
+  const filled = Math.round((clamped / MAX_PERCENT) * BAR_WIDTH);
   return softBlue(BAR_FILLED.repeat(filled)) + dim(BAR_EMPTY.repeat(BAR_WIDTH - filled));
 }
 
-const CARD_METRIC_LABELS = ['Analyses run', 'Issues caught'] as const;
-const CARD_TOTAL_LABELS = ['Secrets blocked', 'Dependency risks'] as const;
-
-const VORTEX_NOT_ENTITLED_LABEL = 'vortex analysis';
-const VORTEX_NOT_ENTITLED_MESSAGE = 'not available on this plan';
-const DEPENDENCY_RISKS_NOT_ENABLED_LABEL = 'dependency risks';
-const DEPENDENCY_RISKS_NOT_ENABLED_MESSAGE = 'not enabled for this organization';
-
-interface StatsMetricRow {
-  label: string;
-  windowValue: number;
-  dailySeries: readonly number[];
-  allTimeValue: number;
-}
+const CARD_METRIC_LABELS: Record<StatsMetric, string> = {
+  runs: 'Analyses run',
+  findings: 'Issues caught',
+  'secrets-blocked': 'Secrets blocked',
+  'dependency-risks': 'Dependency risks',
+};
 
 interface StatsPlaceholderRow {
   label: string;
@@ -84,23 +68,14 @@ interface StatsPlaceholderRow {
   ctaUrl?: string;
 }
 
-function buildPlaceholderRows(entitlement: StatsEntitlement | null): StatsPlaceholderRow[] {
-  const rows: StatsPlaceholderRow[] = [];
-  if (entitlement?.vortex === 'not_entitled') {
-    rows.push({
-      label: VORTEX_NOT_ENTITLED_LABEL,
-      message: VORTEX_NOT_ENTITLED_MESSAGE,
-      ctaUrl: VORTEX_PRODUCT_URL,
-    });
-  }
-  if (entitlement?.sca === 'not_enabled') {
-    rows.push({
-      label: DEPENDENCY_RISKS_NOT_ENABLED_LABEL,
-      message: DEPENDENCY_RISKS_NOT_ENABLED_MESSAGE,
-    });
-  }
-  return rows;
-}
+const PLACEHOLDER_ROWS: Record<StatsUnavailable, StatsPlaceholderRow> = {
+  'vortex-analysis': {
+    label: 'vortex analysis',
+    message: 'not available on this plan',
+    ctaUrl: VORTEX_PRODUCT_URL,
+  },
+  'dependency-risks': { label: 'dependency risks', message: 'not enabled for this organization' },
+};
 
 const PLACEHOLDER_CTA_INDENT = '  ';
 const PLACEHOLDER_CTA_ACTION = 'Learn more:';
@@ -116,114 +91,97 @@ function formatDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-const SINCE_WINDOW_DAYS: Record<Exclude<StatsSinceChoice, 'all'>, number> = {
-  '7d': 7,
-  '14d': 14,
-  '30d': 30,
-};
-
+const CARD_COLUMN_GAP = '  ';
 const HEADER_COLUMN_GAP_WIDTH = 12;
+const ALL_TIME_LABEL = 'all time';
+const ALL_HISTORY_SUBTITLE_INDENT = ' '.repeat(16);
+
+interface CardLayout {
+  labelWidth: number;
+  numberWidth: number;
+  columnLabel: string;
+}
 
 export function printSummaryCard(
-  summary: StatsSummary,
-  since: StatsSinceChoice,
-  entitlement: StatsEntitlement | null,
+  window: StatsWindow,
+  card: StatsCardViewModel,
   console: Console,
 ): void {
-  const secretsBlockedTotal =
-    since === 'all'
-      ? summary.allTime.secretsBlockedTotal
-      : summary.stopped.reduce((sum, entry) => sum + entry.count, 0);
-  const dependencyRisksTotal =
-    summary.analyzers.find((a) => a.analyzer === 'sca-scanner-cli')?.findings ?? 0;
+  const placeholderRows = card.unavailable.map((key) => PLACEHOLDER_ROWS[key]);
+  const layout = resolveCardLayout(card, placeholderRows);
+  const headerAndMetricLines =
+    window.since === 'all'
+      ? allHistoryCardLines(card, layout)
+      : windowedCardLines(window.days, card, layout);
 
-  const dailyRuns = summary.daily.map((d) => d.runs);
-  const dailyFindings = summary.daily.map((d) => d.findings);
-  const dailySecretsBlocked = summary.dailySecretsBlocked.map((d) => d.count);
-  const dailyDependencyRisks = summary.dailyDependencyRisks.map((d) => d.count);
-
-  const bucketDays = resolveBucketDays(dailyRuns.length);
-  const columnLabel = bucketDays === 1 ? 'day' : `${bucketDays} days`;
-
-  const metricRows: StatsMetricRow[] = [
-    {
-      label: CARD_METRIC_LABELS[0],
-      windowValue: summary.totalRuns,
-      dailySeries: dailyRuns,
-      allTimeValue: summary.allTime.totalRuns,
-    },
-    {
-      label: CARD_METRIC_LABELS[1],
-      windowValue: summary.totalFindings,
-      dailySeries: dailyFindings,
-      allTimeValue: summary.allTime.totalFindings,
-    },
-    {
-      label: CARD_TOTAL_LABELS[0],
-      windowValue: secretsBlockedTotal,
-      dailySeries: dailySecretsBlocked,
-      allTimeValue: summary.allTime.secretsBlockedTotal,
-    },
-    ...(entitlement?.sca === 'not_enabled'
-      ? []
-      : [
-          {
-            label: CARD_TOTAL_LABELS[1],
-            windowValue: dependencyRisksTotal,
-            dailySeries: dailyDependencyRisks,
-            allTimeValue: summary.allTime.dependencyRisksTotal,
-          },
-        ]),
-  ];
-  const placeholderRows = buildPlaceholderRows(entitlement);
-
-  const [labelWidth] = columnFormatting([
-    [...metricRows.map((row) => row.label), ...placeholderRows.map((row) => row.label)],
-  ]);
-  const [numberWidth] = columnFormatting([metricRows.map((row) => String(row.windowValue))]);
-
-  if (since === 'all') {
-    console.note([
-      `◆ sonar stats · since ${formatDate(summary.firstSeenMs ?? Date.now())}`,
-      `                one column per ${columnLabel}`,
-      '',
-      ...metricRows.map(
-        (row) =>
-          `${row.label.padEnd(labelWidth)}  ${String(row.windowValue).padStart(numberWidth)}  ${sparkline(downsampleSum(row.dailySeries, bucketDays))}`,
-      ),
-      ...placeholderRows.flatMap((row) => formatPlaceholderLines(row, labelWidth)),
-    ]);
-    return;
-  }
-
-  const windowDaysLabel = `last ${SINCE_WINDOW_DAYS[since]} days`;
-  const ALL_TIME_LABEL = 'all time';
-
-  const allTimeFormatted = metricRows.map((row) => row.allTimeValue.toLocaleString('en-US'));
-  const [allTimeWidth] = columnFormatting([[ALL_TIME_LABEL, ...allTimeFormatted]]);
-
-  const secondLinePrefix = `${windowDaysLabel} · one column per ${columnLabel}`;
-  const secondLineIndent = ' '.repeat(labelWidth);
-  const columnsShown = Math.ceil(dailyRuns.length / bucketDays);
-
-  const rowPrefixVisibleLength = labelWidth + 2 + numberWidth + 2 + columnsShown;
-  const header2PrefixVisibleLength = labelWidth + secondLinePrefix.length;
-  const allTimeColumnStart =
-    Math.max(rowPrefixVisibleLength, header2PrefixVisibleLength) + HEADER_COLUMN_GAP_WIDTH;
-
-  function metricLine(row: StatsMetricRow, allTimeFormattedValue: string): string {
-    const gap = allTimeColumnStart - rowPrefixVisibleLength;
-    return `${row.label.padEnd(labelWidth)}  ${String(row.windowValue).padStart(numberWidth)}  ${sparkline(downsampleSum(row.dailySeries, bucketDays))}${' '.repeat(gap)}${allTimeFormattedValue.padStart(allTimeWidth)}`;
-  }
-
-  const header2Gap = allTimeColumnStart - header2PrefixVisibleLength;
   console.note([
-    `◆ sonar stats · since ${formatDate(summary.firstSeenMs ?? Date.now())}`,
-    `${secondLineIndent}${secondLinePrefix}${' '.repeat(header2Gap)}${ALL_TIME_LABEL.padStart(allTimeWidth)}`,
-    '',
-    ...metricRows.map((row, i) => metricLine(row, allTimeFormatted[i])),
-    ...placeholderRows.flatMap((row) => formatPlaceholderLines(row, labelWidth)),
+    ...headerAndMetricLines,
+    ...placeholderRows.flatMap((row) => formatPlaceholderLines(row, layout.labelWidth)),
   ]);
+}
+
+function resolveCardLayout(
+  card: StatsCardViewModel,
+  placeholderRows: readonly StatsPlaceholderRow[],
+): CardLayout {
+  const labels = [...card.metrics.map(metricLabel), ...placeholderRows.map((row) => row.label)];
+  const [labelWidth] = columnFormatting([labels]);
+  const [numberWidth] = columnFormatting([card.metrics.map((row) => String(row.windowValue))]);
+  return { labelWidth, numberWidth, columnLabel: formatColumnLabel(card.bucketDays) };
+}
+
+function formatColumnLabel(bucketDays: number): string {
+  return bucketDays === 1 ? 'day' : `${bucketDays} days`;
+}
+
+function metricLabel(row: StatsMetricRow): string {
+  return CARD_METRIC_LABELS[row.metric];
+}
+
+function cardTitle(card: StatsCardViewModel): string {
+  return `◆ sonar stats · since ${formatDate(card.startedAtMs)}`;
+}
+
+function formatMetricPrefix(row: StatsMetricRow, layout: CardLayout): string {
+  const label = metricLabel(row).padEnd(layout.labelWidth);
+  const value = String(row.windowValue).padStart(layout.numberWidth);
+  return `${label}${CARD_COLUMN_GAP}${value}${CARD_COLUMN_GAP}${sparkline(row.series)}`;
+}
+
+function allHistoryCardLines(card: StatsCardViewModel, layout: CardLayout): string[] {
+  return [
+    cardTitle(card),
+    `${ALL_HISTORY_SUBTITLE_INDENT}one column per ${layout.columnLabel}`,
+    '',
+    ...card.metrics.map((row) => formatMetricPrefix(row, layout)),
+  ];
+}
+
+function windowedCardLines(days: number, card: StatsCardViewModel, layout: CardLayout): string[] {
+  const { labelWidth, numberWidth, columnLabel } = layout;
+  const allTimeValues = card.metrics.map((row) => row.allTimeValue.toLocaleString('en-US'));
+  const [allTimeWidth] = columnFormatting([[ALL_TIME_LABEL, ...allTimeValues]]);
+
+  const subtitle = `last ${days} days · one column per ${columnLabel}`;
+  const columnsShown = card.metrics[0].series.length;
+  const rowPrefixLength =
+    labelWidth + CARD_COLUMN_GAP.length + numberWidth + CARD_COLUMN_GAP.length + columnsShown;
+  const subtitlePrefixLength = labelWidth + subtitle.length;
+  const allTimeColumnStart =
+    Math.max(rowPrefixLength, subtitlePrefixLength) + HEADER_COLUMN_GAP_WIDTH;
+  const rowGap = ' '.repeat(allTimeColumnStart - rowPrefixLength);
+  const subtitleGap = ' '.repeat(allTimeColumnStart - subtitlePrefixLength);
+
+  function metricLine(row: StatsMetricRow, index: number): string {
+    return `${formatMetricPrefix(row, layout)}${rowGap}${allTimeValues[index].padStart(allTimeWidth)}`;
+  }
+
+  return [
+    cardTitle(card),
+    `${' '.repeat(labelWidth)}${subtitle}${subtitleGap}${ALL_TIME_LABEL.padStart(allTimeWidth)}`,
+    '',
+    ...card.metrics.map((row, index) => metricLine(row, index)),
+  ];
 }
 
 const MIN_HEADING_GAP_WIDTH = 2;
