@@ -30,6 +30,27 @@ import { getOrCreateUserId } from '@/core/telemetry/user.ts';
 
 import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from '../config-constants.ts';
 
+export const ENABLED_INTEGRATIONS = new Set([
+  'EventFilters',
+  'FunctionToString',
+  'LinkedErrors',
+  'Dedupe',
+  'RequestData',
+  'NodeSystemError',
+  'ConversationId',
+  'Console',
+  'Http',
+  'Fetch',
+  'OnUncaughtException',
+  'OnUnhandledRejection',
+  'ContextLines',
+  'Context',
+  'Modules',
+  'ProcessSession',
+  'BunServer',
+  'BunHttpServer',
+]);
+
 /**
  * Initialize Sentry if the user has opted in and egress is production.
  *
@@ -44,6 +65,8 @@ export function initSentry(): void {
     dsn: SENTRY_DSN,
     environment,
     release: process.env.SONARQUBE_CLI_VERSION,
+    integrations: (integrations) =>
+      integrations.filter(({ name }) => ENABLED_INTEGRATIONS.has(name)),
     dataCollection: {
       userInfo: false,
       cookies: false,
