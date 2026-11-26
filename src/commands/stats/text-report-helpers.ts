@@ -19,12 +19,16 @@
  */
 
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
-import type { StatsSinceChoice, StatsSummary } from '@/core/stats/stats-queries.ts';
 import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
-import type { StatsEntitlement } from './entitlement.ts';
+import type {
+  PopulatedStatsViewModel,
+  StatsMetric,
+  StatsMetricRow,
+  StatsUnavailable,
+} from './view-model/index.ts';
 
 const SPARKLINE_BLOCKS = '▁▂▃▄▅▆▇█';
 const SPARKLINE_MAX_LEVEL = SPARKLINE_BLOCKS.length - 2;
@@ -39,68 +43,36 @@ export function sparkline(values: readonly number[]): string {
   return softBlue(line);
 }
 
-const MAX_SPARKLINE_COLUMNS = 30;
-
-function resolveBucketDays(totalDays: number): number {
-  return totalDays > MAX_SPARKLINE_COLUMNS ? Math.ceil(totalDays / MAX_SPARKLINE_COLUMNS) : 1;
-}
-
-function downsampleSum(values: readonly number[], bucketDays: number): number[] {
-  if (bucketDays <= 1) return [...values];
-  const buckets: number[] = [];
-  for (let i = 0; i < values.length; i += bucketDays) {
-    buckets.push(values.slice(i, i + bucketDays).reduce((sum, v) => sum + v, 0));
-  }
-  return buckets;
-}
-
 export const BAR_WIDTH = 18;
 const BAR_FILLED = '▓';
 const BAR_EMPTY = '░';
+const PERCENT_MULTIPLIER = 100;
 
-export function bar(fraction: number): string {
-  const filled = Math.round(Math.min(Math.max(fraction, 0), 1) * BAR_WIDTH);
+export function bar(percent: number): string {
+  const filled = Math.round(Math.min(Math.max(percent / PERCENT_MULTIPLIER, 0), 1) * BAR_WIDTH);
   return softBlue(BAR_FILLED.repeat(filled)) + dim(BAR_EMPTY.repeat(BAR_WIDTH - filled));
 }
 
-const CARD_METRIC_LABELS = ['Analyses run', 'Issues caught'] as const;
-const CARD_TOTAL_LABELS = ['Secrets blocked', 'Dependency risks'] as const;
-
-const VORTEX_NOT_ENTITLED_LABEL = 'vortex analysis';
-const VORTEX_NOT_ENTITLED_MESSAGE = 'not available on this plan';
-const DEPENDENCY_RISKS_NOT_ENABLED_LABEL = 'dependency risks';
-const DEPENDENCY_RISKS_NOT_ENABLED_MESSAGE = 'not enabled for this organization';
-
-interface StatsMetricRow {
-  label: string;
-  windowValue: number;
-  dailySeries: readonly number[];
-  allTimeValue: number;
-}
-
+const CARD_METRIC_LABELS: Record<StatsMetric, string> = {
+  runs: 'Analyses run',
+  findings: 'Issues caught',
+  'secrets-blocked': 'Secrets blocked',
+  'dependency-risks': 'Dependency risks',
+};
 interface StatsPlaceholderRow {
   label: string;
   message: string;
   ctaUrl?: string;
 }
 
-function buildPlaceholderRows(entitlement: StatsEntitlement | null): StatsPlaceholderRow[] {
-  const rows: StatsPlaceholderRow[] = [];
-  if (entitlement?.vortex === 'not_entitled') {
-    rows.push({
-      label: VORTEX_NOT_ENTITLED_LABEL,
-      message: VORTEX_NOT_ENTITLED_MESSAGE,
-      ctaUrl: VORTEX_PRODUCT_URL,
-    });
-  }
-  if (entitlement?.sca === 'not_enabled') {
-    rows.push({
-      label: DEPENDENCY_RISKS_NOT_ENABLED_LABEL,
-      message: DEPENDENCY_RISKS_NOT_ENABLED_MESSAGE,
-    });
-  }
-  return rows;
-}
+const PLACEHOLDER_ROWS: Record<StatsUnavailable, StatsPlaceholderRow> = {
+  'vortex-analysis': {
+    label: 'vortex analysis',
+    message: 'not available on this plan',
+    ctaUrl: VORTEX_PRODUCT_URL,
+  },
+  'dependency-risks': { label: 'dependency risks', message: 'not enabled for this organization' },
+};
 
 const PLACEHOLDER_CTA_INDENT = '  ';
 const PLACEHOLDER_CTA_ACTION = 'Learn more:';
@@ -116,87 +88,36 @@ function formatDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-const SINCE_WINDOW_DAYS: Record<Exclude<StatsSinceChoice, 'all'>, number> = {
-  '7d': 7,
-  '14d': 14,
-  '30d': 30,
-};
-
 const HEADER_COLUMN_GAP_WIDTH = 12;
 
-export function printSummaryCard(
-  summary: StatsSummary,
-  since: StatsSinceChoice,
-  entitlement: StatsEntitlement | null,
-  console: Console,
-): void {
-  const secretsBlockedTotal =
-    since === 'all'
-      ? summary.allTime.secretsBlockedTotal
-      : summary.stopped.reduce((sum, entry) => sum + entry.count, 0);
-  const dependencyRisksTotal =
-    summary.analyzers.find((a) => a.analyzer === 'sca-scanner-cli')?.findings ?? 0;
-
-  const dailyRuns = summary.daily.map((d) => d.runs);
-  const dailyFindings = summary.daily.map((d) => d.findings);
-  const dailySecretsBlocked = summary.dailySecretsBlocked.map((d) => d.count);
-  const dailyDependencyRisks = summary.dailyDependencyRisks.map((d) => d.count);
-
-  const bucketDays = resolveBucketDays(dailyRuns.length);
+export function printSummaryCard(summary: PopulatedStatsViewModel, console: Console): void {
+  const { window, card } = summary;
+  const { bucketDays, metrics: metricRows } = card;
   const columnLabel = bucketDays === 1 ? 'day' : `${bucketDays} days`;
-
-  const metricRows: StatsMetricRow[] = [
-    {
-      label: CARD_METRIC_LABELS[0],
-      windowValue: summary.totalRuns,
-      dailySeries: dailyRuns,
-      allTimeValue: summary.allTime.totalRuns,
-    },
-    {
-      label: CARD_METRIC_LABELS[1],
-      windowValue: summary.totalFindings,
-      dailySeries: dailyFindings,
-      allTimeValue: summary.allTime.totalFindings,
-    },
-    {
-      label: CARD_TOTAL_LABELS[0],
-      windowValue: secretsBlockedTotal,
-      dailySeries: dailySecretsBlocked,
-      allTimeValue: summary.allTime.secretsBlockedTotal,
-    },
-    ...(entitlement?.sca === 'not_enabled'
-      ? []
-      : [
-          {
-            label: CARD_TOTAL_LABELS[1],
-            windowValue: dependencyRisksTotal,
-            dailySeries: dailyDependencyRisks,
-            allTimeValue: summary.allTime.dependencyRisksTotal,
-          },
-        ]),
-  ];
-  const placeholderRows = buildPlaceholderRows(entitlement);
-
+  const placeholderRows = card.unavailable.map((key) => PLACEHOLDER_ROWS[key]);
   const [labelWidth] = columnFormatting([
-    [...metricRows.map((row) => row.label), ...placeholderRows.map((row) => row.label)],
+    [
+      ...metricRows.map((row) => CARD_METRIC_LABELS[row.metric]),
+      ...placeholderRows.map((row) => row.label),
+    ],
   ]);
   const [numberWidth] = columnFormatting([metricRows.map((row) => String(row.windowValue))]);
 
-  if (since === 'all') {
+  if (window.since === 'all') {
     console.note([
-      `◆ sonar stats · since ${formatDate(summary.firstSeenMs ?? Date.now())}`,
+      `◆ sonar stats · since ${formatDate(card.startedAtMs)}`,
       `                one column per ${columnLabel}`,
       '',
       ...metricRows.map(
         (row) =>
-          `${row.label.padEnd(labelWidth)}  ${String(row.windowValue).padStart(numberWidth)}  ${sparkline(downsampleSum(row.dailySeries, bucketDays))}`,
+          `${CARD_METRIC_LABELS[row.metric].padEnd(labelWidth)}  ${String(row.windowValue).padStart(numberWidth)}  ${sparkline(row.series)}`,
       ),
       ...placeholderRows.flatMap((row) => formatPlaceholderLines(row, labelWidth)),
     ]);
     return;
   }
 
-  const windowDaysLabel = `last ${SINCE_WINDOW_DAYS[since]} days`;
+  const windowDaysLabel = `last ${window.days} days`;
   const ALL_TIME_LABEL = 'all time';
 
   const allTimeFormatted = metricRows.map((row) => row.allTimeValue.toLocaleString('en-US'));
@@ -204,7 +125,7 @@ export function printSummaryCard(
 
   const secondLinePrefix = `${windowDaysLabel} · one column per ${columnLabel}`;
   const secondLineIndent = ' '.repeat(labelWidth);
-  const columnsShown = Math.ceil(dailyRuns.length / bucketDays);
+  const columnsShown = card.columnCount;
 
   const rowPrefixVisibleLength = labelWidth + 2 + numberWidth + 2 + columnsShown;
   const header2PrefixVisibleLength = labelWidth + secondLinePrefix.length;
@@ -213,12 +134,12 @@ export function printSummaryCard(
 
   function metricLine(row: StatsMetricRow, allTimeFormattedValue: string): string {
     const gap = allTimeColumnStart - rowPrefixVisibleLength;
-    return `${row.label.padEnd(labelWidth)}  ${String(row.windowValue).padStart(numberWidth)}  ${sparkline(downsampleSum(row.dailySeries, bucketDays))}${' '.repeat(gap)}${allTimeFormattedValue.padStart(allTimeWidth)}`;
+    return `${CARD_METRIC_LABELS[row.metric].padEnd(labelWidth)}  ${String(row.windowValue).padStart(numberWidth)}  ${sparkline(row.series)}${' '.repeat(gap)}${allTimeFormattedValue.padStart(allTimeWidth)}`;
   }
 
   const header2Gap = allTimeColumnStart - header2PrefixVisibleLength;
   console.note([
-    `◆ sonar stats · since ${formatDate(summary.firstSeenMs ?? Date.now())}`,
+    `◆ sonar stats · since ${formatDate(card.startedAtMs)}`,
     `${secondLineIndent}${secondLinePrefix}${' '.repeat(header2Gap)}${ALL_TIME_LABEL.padStart(allTimeWidth)}`,
     '',
     ...metricRows.map((row, i) => metricLine(row, allTimeFormatted[i])),
