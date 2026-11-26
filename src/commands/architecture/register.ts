@@ -77,7 +77,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .alias('arch')
     .description('Read and set the architecture of a project (SonarQube Cloud only)')
     .addHelpText('afterAll', '\n(SonarQube Cloud only)')
-    .rootHelp({ category: 'data', label: 'architecture|arch <command>' });
+    .rootHelp({
+      category: 'guide',
+      summary: "Read and set a project's architecture",
+    });
 
   const currentArchitecture = architecture
     .command('current')
@@ -151,6 +154,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
 
   const directives = architecture
     .command('directives')
+    .rootHelp({ hidden: true })
     .description('Read, create, update and delete project directives');
   directives
     .command('get')
@@ -181,6 +185,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
 
   const findings = architecture
     .command('findings')
+    .rootHelp({ hidden: true })
     .description('Read architecture deviations, flaws and smells');
   findings
     .command('get')

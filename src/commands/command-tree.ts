@@ -339,7 +339,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const auth = COMMAND_TREE.command('auth')
     .description('Manage authentication tokens and credentials')
     .rootHelp({
-      category: 'cli-management',
+      category: 'setup',
+      summary: 'Manage authentication',
     })
     .showUpdateNotification();
 
@@ -384,7 +385,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const list = COMMAND_TREE.command('list')
     .description('List issues, projects and organizations from SonarQube Cloud or Server')
     .rootHelp({
-      category: 'data',
+      category: 'verify',
+      summary: 'Find issues, projects and orgs',
     });
 
   const pageOption = new SonarOption('--page <page>', 'Page number')
@@ -445,7 +447,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .alias('qg')
     .description('Fetch quality gate status from SonarQube Cloud or Server')
     .rootHelp({
-      category: 'data',
+      category: 'verify',
+      summary: "Check a project's quality gate",
+      label: 'quality-gate|qg',
     });
 
   qualityGate
@@ -479,7 +483,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   COMMAND_TREE.command('import')
     .description('Import repositories from a connected DevOps platform into SonarQube')
     .rootHelp({
-      category: 'integrate',
+      category: 'setup',
+      summary: 'Import repos from your DevOps platform',
     })
     .stage(Stage.Beta())
     .option(
@@ -531,7 +536,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.command('api')
     .rootHelp({
-      category: 'data',
+      category: 'verify',
+      summary: 'Call the SonarQube API',
       label: 'api <method> <endpoint>',
     })
     .argument(
@@ -557,7 +563,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const integrateCommand = COMMAND_TREE.command('integrate')
     .description('Setup SonarQube integration for AI coding agents, git and others')
     .rootHelp({
-      category: 'integrate',
+      category: 'setup',
+      summary: 'Set up SonarQube with AI coding agents or Git',
+      label: 'integrate [target]',
+      targets: true,
     })
     .showUpdateNotification((opts) => !opts.nonInteractive)
     .option('--non-interactive', 'Non-interactive mode (no prompts); requires an explicit agent')
@@ -630,7 +639,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   COMMAND_TREE.command('context')
     .description('Augment AI agents with context from your codebase')
     .rootHelp({
-      category: 'data',
+      category: 'guide',
+      summary: 'Give agents codebase context',
+      requiresVortex: true,
       label: 'context [action] [args...]',
     })
     .argument('[action]', 'Action forwarded to sonar-context-augmentation')
@@ -740,7 +751,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const analyze = COMMAND_TREE.command('analyze')
     .description('Analyze code for quality and security issues')
     .rootHelp({
-      category: 'core',
+      category: 'verify',
+      summary: 'Run secrets scan and Vortex analysis',
       expandSubcommands: true,
     })
     .showUpdateNotification()
@@ -750,6 +762,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   analyze
     .command('secrets')
     .description('Scan files or stdin for hardcoded secrets')
+    .rootHelp({ summary: 'Find hardcoded secrets' })
     .argument('[paths...]', 'File or directory paths to scan for secrets')
     .option('--stdin', 'Read from standard input instead of paths')
     .option(
@@ -857,6 +870,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   analyze
     .command('container')
     .description('Analyze a local container image with SonarQube Cloud Advanced Security')
+    .rootHelp({ summary: 'Scan a local container image', cloudOnly: true })
     .argument(
       '<image>',
       'Docker or Podman image reference, Docker or OCI .tar archive, or OCI layout directory',
@@ -916,6 +930,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   analyze
     .command('dependency-risks')
+    .rootHelp({ summary: 'Find dependency risks and license violations' })
     .description('Analyze project dependencies for security and license risks')
     .option('-p, --project <project>', 'Project key (auto-detected when omitted)')
     .addOption(dependencyRisksFormatOption)
@@ -927,7 +942,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   applySqaaOptions(
-    analyze.command('agentic').description('Run server-side Vortex analysis. Limitations apply'),
+    analyze
+      .command('agentic')
+      .description('Run server-side Vortex analysis. Limitations apply')
+      .rootHelp({ summary: 'Run server-side analysis', requiresVortex: true }),
     { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
   );
 
@@ -943,7 +961,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   COMMAND_TREE.command('remediate')
     .description('Trigger AI agent remediation for eligible issues (SonarQube Cloud only)')
     .rootHelp({
-      category: 'core',
+      category: 'solve',
+      summary: 'Send issues to SonarQube Remediation Agent',
+      cloudOnly: true,
     })
     .option(
       '-p, --project <project>',
@@ -961,7 +981,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .stage(Stage.Beta())
     .rootHelp({
-      category: 'core',
+      category: 'setup',
+      summary: 'Set up SonarQube for this project',
       label: 'init',
     })
     .option('--path <directory>', 'Directory to onboard (default: current directory)')
@@ -996,8 +1017,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const linkCommand = COMMAND_TREE.command('link')
     .description('Link a project to the active connection in .sonar-config.json')
     .rootHelp({
-      category: 'core',
-      label: 'link',
+      category: 'setup',
+      summary: 'Link this directory to a project',
+      label: 'link [project-key]',
     })
     .argument(
       '[projectKey]',
@@ -1032,7 +1054,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // Configure things related to the CLI
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
   configure.rootHelp({
-    category: 'cli-management',
+    category: 'cli',
   });
 
   configure
@@ -1085,7 +1107,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const system = COMMAND_TREE.command('system')
     .description('System diagnostics and maintenance commands for the SonarQube CLI installation')
     .rootHelp({
-      category: 'cli-management',
+      category: 'cli',
+      summary: 'Inspect or reset the CLI',
     });
 
   system
@@ -1125,7 +1148,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const allowlist = COMMAND_TREE.command('allowlist')
     .description('Manage local allowlists for SonarQube analyzers')
     .rootHelp({
-      category: 'cli-management',
+      category: 'verify',
+      summary: 'Mark known-safe secrets as allowed',
     });
 
   const allowlistSecretsCmd = allowlist
@@ -1182,7 +1206,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     const updateCommand = COMMAND_TREE.command('update')
       .description('Update SonarQube CLI to the latest version')
       .rootHelp({
-        category: 'cli-management',
+        category: 'cli',
+        summary: 'Update CLI to latest version',
+        label: 'update [status]',
       })
       .enablePositionalOptions()
       .rejectUnknownSubcommands()
