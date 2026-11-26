@@ -25,7 +25,7 @@ import logger from '@/core/observability/logger.ts';
 import { applyAnalyzerEventToAggregates } from './aggregates.ts';
 import { openStatsDb } from './db.ts';
 
-// Mirrors AnalysisTelemetryAnalyzer; not imported — drift is a compile error in facts.ts instead.
+// Subset of AnalysisTelemetryAnalyzer whose runs feed the local stats ledger.
 export type StatsAnalyzer = 'sonar-secrets' | 'sqaa' | 'sca-scanner-cli';
 
 export type StatsTrigger = 'hooks' | 'manual';
