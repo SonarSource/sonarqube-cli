@@ -27,7 +27,7 @@ import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
-import { flushSentry, initSentry } from '@/core/observability/sentry.ts';
+import { ENABLED_INTEGRATIONS, flushSentry, initSentry } from '@/core/observability/sentry.ts';
 import * as fetchModule from '@/core/server/fetch.ts';
 import { ENV_TELEMETRY_EGRESS } from '@/core/telemetry/egress.ts';
 import * as userModule from '@/core/telemetry/user.ts';
@@ -152,6 +152,26 @@ describe('initSentry', () => {
 
       const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
       expect(options.release).toBe('1.10.0.12345');
+    });
+
+    it('only enables allowlisted integrations', () => {
+      initSentry();
+
+      const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
+      type Integrations = NonNullable<Sentry.BunOptions['integrations']>;
+      const integrations = options.integrations as Extract<
+        Integrations,
+        (...args: never[]) => unknown
+      >;
+      const defaults = Sentry.getDefaultIntegrations({});
+      const names = integrations(defaults).map(({ name }) => name);
+
+      expect(names).not.toContain('Express');
+      expect(names).not.toContain('Hono');
+      expect(names.every((name) => ENABLED_INTEGRATIONS.has(name))).toBe(true);
+      // Guards against a typo in the allowlist silently dropping an integration.
+      expect(names).toContain('OnUncaughtException');
+      expect(names).toContain('ProcessSession');
     });
 
     it('calls Sentry.init', () => {
