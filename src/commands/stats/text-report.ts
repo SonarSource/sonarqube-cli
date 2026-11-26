@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { StatsStopPoint } from '@/core/stats/stats-queries.ts';
+import type { StatsStopPoint, StatsTopRule } from '@/core/stats/stats-queries.ts';
 import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
@@ -31,24 +31,42 @@ import {
   printSummaryCard,
 } from './text-report-helpers.ts';
 import {
-  type PopulatedStatsViewModel,
+  type StatsAgentsViewModel,
+  type StatsAnalyzersViewModel,
+  type StatsCallerCommandsViewModel,
+  type StatsStoppedViewModel,
+  type StatsTriggersViewModel,
   type StatsViewModel,
   UNIDENTIFIED_AGENT_LABEL,
-} from './view-model/index.ts';
+} from './view-model/types.ts';
 
-export function renderTextSummary(summary: StatsViewModel, console: Console): void {
-  if (!summary.hasHistory) {
+export function renderTextSummary(viewModel: StatsViewModel, console: Console): void {
+  if (!viewModel.hasHistory) {
     printEmptyState(console);
     return;
   }
 
-  printSummaryCard(summary, console);
-  printAnalyzerBreakdownSection(summary, console);
-  printStoppedSection(summary, console);
-  printAgentBreakdownSection(summary, console);
-  printCallerCommandSection(summary, console);
-  printTopRulesSection(summary, console);
-  printTriggerLine(summary, console);
+  const { window, card, analyzers, stopped, agents, callerCommands, topRules, triggers } =
+    viewModel;
+  printSummaryCard(window, card, console);
+  if (analyzers) {
+    printAnalyzerBreakdownSection(analyzers, console);
+  }
+  if (stopped) {
+    printStoppedSection(stopped, console);
+  }
+  if (agents) {
+    printAgentBreakdownSection(agents, console);
+  }
+  if (callerCommands) {
+    printCallerCommandSection(callerCommands, console);
+  }
+  if (topRules) {
+    printTopRulesSection(topRules, console);
+  }
+  if (triggers) {
+    printTriggerLine(triggers, console);
+  }
 }
 
 function printEmptyState(console: Console): void {
@@ -72,12 +90,11 @@ function analyzerDisplayLabel(analyzer: string): string {
   return ANALYZER_DISPLAY_LABELS[analyzer] ?? analyzer;
 }
 
-function printAnalyzerBreakdownSection(summary: PopulatedStatsViewModel, console: Console): void {
-  if (!summary.analyzers) return;
-  const { total: totalRuns, rows: sorted } = summary.analyzers;
+function printAnalyzerBreakdownSection(analyzers: StatsAnalyzersViewModel, console: Console): void {
+  const { total: totalRuns, rows } = analyzers;
 
-  const [labelWidth] = columnFormatting([[...sorted.map((a) => analyzerDisplayLabel(a.analyzer))]]);
-  const [runsWidth] = columnFormatting([[...sorted.map((a) => String(a.runs))]]);
+  const [labelWidth] = columnFormatting([[...rows.map((a) => analyzerDisplayLabel(a.analyzer))]]);
+  const [runsWidth] = columnFormatting([[...rows.map((a) => String(a.runs))]]);
   const naturalRowEndColumn = 4 + labelWidth + BASE_COLUMN_GAP_WIDTH + runsWidth;
   const { headingLine, rowGap } = computeAlignedTotalsLayout(
     'Analyses run by scanner',
@@ -87,7 +104,7 @@ function printAnalyzerBreakdownSection(summary: PopulatedStatsViewModel, console
 
   console.blank();
   console.print(headingLine);
-  for (const a of sorted) {
+  for (const a of rows) {
     console.print(
       `    ${analyzerDisplayLabel(a.analyzer).padEnd(labelWidth)}${rowGap}${String(a.runs).padStart(runsWidth)}`,
     );
@@ -101,19 +118,18 @@ const STOP_POINT_COPY: Record<StatsStopPoint, { label: string; detail: string }>
   push: { label: 'at push', detail: 'secrets in unpushed commits' },
 };
 
-function printStoppedSection(summary: PopulatedStatsViewModel, console: Console): void {
-  if (!summary.stopped) return;
-  const { total, entries: ordered, topSecretTypes } = summary.stopped;
+function printStoppedSection(stopped: StatsStoppedViewModel, console: Console): void {
+  const { total, entries, topSecretTypes } = stopped;
 
   console.blank();
   console.print(bold(`Secrets blocked · ${total} total`));
 
   const [pointWidth] = columnFormatting([
-    [...ordered.map((entry) => STOP_POINT_COPY[entry.point].label)],
+    [...entries.map((entry) => STOP_POINT_COPY[entry.point].label)],
   ]);
-  const [countWidth] = columnFormatting([[...ordered.map((entry) => String(entry.count))]]);
+  const [countWidth] = columnFormatting([[...entries.map((entry) => String(entry.count))]]);
 
-  for (const entry of ordered) {
+  for (const entry of entries) {
     const { label, detail } = STOP_POINT_COPY[entry.point];
     console.print(
       `    ${label.padEnd(pointWidth)}   ${String(entry.count).padStart(countWidth)}   ${detail}`,
@@ -134,9 +150,8 @@ function agentDisplayLabel(agent: string): string {
   return agent === UNIDENTIFIED_AGENT_LABEL ? NO_AGENT_DISPLAY_LABEL : agent;
 }
 
-function printAgentBreakdownSection(summary: PopulatedStatsViewModel, console: Console): void {
-  if (!summary.agents) return;
-  const { total: totalFindings, rows, hitPercent, hasUnidentified } = summary.agents;
+function printAgentBreakdownSection(agents: StatsAgentsViewModel, console: Console): void {
+  const { total: totalFindings, rows, hitPercent, hasUnidentified } = agents;
 
   const [agentWidth] = columnFormatting([[...rows.map((agent) => agentDisplayLabel(agent.agent))]]);
   const [issuesWidth] = columnFormatting([[...rows.map((agent) => String(agent.findings))]]);
@@ -160,10 +175,9 @@ function printAgentBreakdownSection(summary: PopulatedStatsViewModel, console: C
   console.print(headingLine);
 
   for (const agent of rows) {
-    const share = agent.sharePercent;
-    const percentCell = `${share}%`.padStart(percentWidth);
+    const percentCell = `${agent.sharePercent}%`.padStart(percentWidth);
     console.print(
-      `    ${agentDisplayLabel(agent.agent).padEnd(agentWidth)}   ${bar(share)}${SHARE_BAR_GAP}${percentCell}${rowGap}${String(agent.findings).padStart(issuesWidth)}`,
+      `    ${agentDisplayLabel(agent.agent).padEnd(agentWidth)}   ${bar(agent.sharePercent)}${SHARE_BAR_GAP}${percentCell}${rowGap}${String(agent.findings).padStart(issuesWidth)}`,
     );
   }
 
@@ -176,9 +190,11 @@ function printAgentBreakdownSection(summary: PopulatedStatsViewModel, console: C
   }
 }
 
-function printCallerCommandSection(summary: PopulatedStatsViewModel, console: Console): void {
-  if (!summary.callerCommands) return;
-  const { total: totalRuns, rows } = summary.callerCommands;
+function printCallerCommandSection(
+  callerCommands: StatsCallerCommandsViewModel,
+  console: Console,
+): void {
+  const { total: totalRuns, rows } = callerCommands;
 
   const [commandWidth] = columnFormatting([[...rows.map((c) => c.command)]]);
   const [runsWidth] = columnFormatting([[...rows.map((c) => String(c.runs))]]);
@@ -208,16 +224,15 @@ function wrapMessage(message: string): [string, string | null] {
   return [message.slice(0, MAX_MESSAGE_LINE_LENGTH), message.slice(MAX_MESSAGE_LINE_LENGTH)];
 }
 
-function printTopRulesSection(summary: PopulatedStatsViewModel, console: Console): void {
-  if (!summary.topRules) return;
+function printTopRulesSection(topRules: StatsTopRule[], console: Console): void {
   console.blank();
   console.print(bold('You keep hitting these issues'));
 
-  const wrapped = summary.topRules.map((rule) => wrapMessage(rule.message ?? ''));
-  const [ruleWidth] = columnFormatting([[...summary.topRules.map((rule) => rule.ruleKey)]]);
-  const [countWidth] = columnFormatting([[...summary.topRules.map((rule) => String(rule.count))]]);
+  const wrapped = topRules.map((rule) => wrapMessage(rule.message ?? ''));
+  const [ruleWidth] = columnFormatting([[...topRules.map((rule) => rule.ruleKey)]]);
+  const [countWidth] = columnFormatting([[...topRules.map((rule) => String(rule.count))]]);
 
-  summary.topRules.forEach((rule, i) => {
+  topRules.forEach((rule, i) => {
     const [firstLine, continuation] = wrapped[i];
     console.print(
       `    ${firstLine.padEnd(MAX_MESSAGE_LINE_LENGTH)}   ${rule.ruleKey.padEnd(ruleWidth)}   ${String(rule.count).padStart(countWidth)}`,
@@ -228,10 +243,9 @@ function printTopRulesSection(summary: PopulatedStatsViewModel, console: Console
   });
 }
 
-function printTriggerLine(summary: PopulatedStatsViewModel, console: Console): void {
-  if (!summary.triggers) return;
+function printTriggerLine(triggers: StatsTriggersViewModel, console: Console): void {
   console.blank();
   console.print(
-    `    ${summary.triggers.hooksPercent}% ran from hooks  ·  ${summary.triggers.manualPercent}% ran directly`,
+    `    ${triggers.hooksPercent}% ran from hooks  ·  ${triggers.manualPercent}% ran directly`,
   );
 }

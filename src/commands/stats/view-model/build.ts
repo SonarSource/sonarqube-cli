@@ -18,123 +18,43 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { resolveSinceDays, sumBy } from '@/core/stats/stats-aggregation.ts';
 import type {
+  StatsAgentHitRate,
+  StatsAgentShare,
+  StatsAnalyzerTotal,
   StatsSinceChoice,
   StatsStoppedBreakdown,
   StatsStopPoint,
   StatsSummary,
+  StatsTriggerShare,
 } from '@/core/stats/stats-queries.ts';
 
 import type { StatsEntitlement } from '../entitlement.ts';
 import {
   type PopulatedStatsViewModel,
+  type StatsAgentRow,
+  type StatsAgentsViewModel,
+  type StatsAnalyzerRow,
+  type StatsAnalyzersViewModel,
+  type StatsCallerCommandsViewModel,
   type StatsCardViewModel,
   type StatsMetricRow,
+  type StatsStoppedViewModel,
+  type StatsTotaledRows,
+  type StatsTriggersViewModel,
   type StatsUnavailable,
+  type StatsWindow,
   UNIDENTIFIED_AGENT_LABEL,
-} from './index.ts';
+} from './types.ts';
 
 const MAX_SPARKLINE_COLUMNS = 30;
 const PERCENT_MULTIPLIER = 100;
-const SINCE_WINDOW_DAYS = { '7d': 7, '14d': 14, '30d': 30 } as const;
+const SCA_ANALYZER = 'sca-scanner-cli';
+const HOOKS_TRIGGER = 'hooks';
+const MANUAL_TRIGGER = 'manual';
 const STOP_POINT_ORDER: readonly StatsStopPoint[] = ['commit', 'prompt', 'file-read', 'push'];
 
-function percentOf(count: number, total: number): number {
-  return total > 0 ? Math.round((count / total) * PERCENT_MULTIPLIER) : 0;
-}
-function downsampleSum(values: number[], bucketDays: number): number[] {
-  if (bucketDays <= 1) return values;
-  const buckets: number[] = [];
-  for (let i = 0; i < values.length; i += bucketDays) {
-    buckets.push(values.slice(i, i + bucketDays).reduce((sum, value) => sum + value, 0));
-  }
-  return buckets;
-}
-function buildCard(
-  summary: StatsSummary,
-  since: StatsSinceChoice,
-  entitlement: StatsEntitlement,
-): StatsCardViewModel {
-  const bucketDays = Math.max(1, Math.ceil(summary.daily.length / MAX_SPARKLINE_COLUMNS));
-  const metrics: StatsMetricRow[] = [
-    {
-      metric: 'runs',
-      windowValue: summary.totalRuns,
-      allTimeValue: summary.allTime.totalRuns,
-      series: summary.daily.map((d) => d.runs),
-    },
-    {
-      metric: 'findings',
-      windowValue: summary.totalFindings,
-      allTimeValue: summary.allTime.totalFindings,
-      series: summary.daily.map((d) => d.findings),
-    },
-    {
-      metric: 'secrets-blocked',
-      windowValue:
-        since === 'all'
-          ? summary.allTime.secretsBlockedTotal
-          : summary.stopped.reduce((sum, entry) => sum + entry.count, 0),
-      allTimeValue: summary.allTime.secretsBlockedTotal,
-      series: summary.dailySecretsBlocked.map((d) => d.count),
-    },
-  ];
-  if (entitlement.sca !== 'not_enabled') {
-    metrics.push({
-      metric: 'dependency-risks',
-      windowValue: summary.analyzers.find((a) => a.analyzer === 'sca-scanner-cli')?.findings ?? 0,
-      allTimeValue: summary.allTime.dependencyRisksTotal,
-      series: summary.dailyDependencyRisks.map((d) => d.count),
-    });
-  }
-  for (const metric of metrics) metric.series = downsampleSum(metric.series, bucketDays);
-  const unavailable: StatsUnavailable[] = [];
-  if (entitlement.vortex === 'not_entitled') unavailable.push('vortex-analysis');
-  if (entitlement.sca === 'not_enabled') unavailable.push('dependency-risks');
-  return {
-    startedAtMs: summary.firstSeenMs ?? Date.now(),
-    bucketDays,
-    columnCount: Math.ceil(summary.daily.length / bucketDays),
-    metrics,
-    unavailable,
-  };
-}
-function buildStopped(summary: StatsSummary): PopulatedStatsViewModel['stopped'] {
-  if (summary.stopped.length === 0) return null;
-  const byPoint = new Map(summary.stopped.map((entry) => [entry.point, entry]));
-  const entries = STOP_POINT_ORDER.map((point) => byPoint.get(point)).filter(
-    (entry): entry is StatsStoppedBreakdown => entry !== undefined,
-  );
-  return {
-    total: entries.reduce((sum, entry) => sum + entry.count, 0),
-    entries,
-    topSecretTypes: summary.topSecretTypes,
-  };
-}
-function buildAgents(summary: StatsSummary): PopulatedStatsViewModel['agents'] {
-  if (summary.agentBreakdown.length === 0) return null;
-  const total = summary.agentBreakdown.reduce((sum, row) => sum + row.findings, 0);
-  return {
-    total,
-    rows: summary.agentBreakdown.map(({ agent, findings }) => ({
-      agent,
-      findings,
-      sharePercent: percentOf(findings, total),
-    })),
-    hitPercent: summary.agentHitRate
-      ? percentOf(summary.agentHitRate.runsWithFindings, summary.agentHitRate.totalRuns)
-      : null,
-    hasUnidentified: summary.agentBreakdown.some((row) => row.agent === UNIDENTIFIED_AGENT_LABEL),
-  };
-}
-function buildTriggers(summary: StatsSummary): PopulatedStatsViewModel['triggers'] {
-  const hooks = summary.triggers.find((t) => t.trigger === 'hooks')?.runs ?? 0;
-  const manual = summary.triggers.find((t) => t.trigger === 'manual')?.runs ?? 0;
-  const total = hooks + manual;
-  return total === 0
-    ? null
-    : { hooksPercent: percentOf(hooks, total), manualPercent: percentOf(manual, total) };
-}
 export function buildStatsViewModel(
   summary: StatsSummary,
   since: StatsSinceChoice,
@@ -142,28 +62,208 @@ export function buildStatsViewModel(
 ): PopulatedStatsViewModel {
   return {
     hasHistory: true,
-    window: since === 'all' ? { since } : { since, days: SINCE_WINDOW_DAYS[since] },
+    window: buildWindow(since),
     entitlement,
     card: buildCard(summary, since, entitlement),
-    analyzers:
-      summary.analyzers.length === 0
-        ? null
-        : {
-            total: summary.analyzers.reduce((sum, row) => sum + row.runs, 0),
-            rows: [...summary.analyzers]
-              .sort((a, b) => b.runs - a.runs)
-              .map(({ analyzer, runs }) => ({ analyzer, runs })),
-          },
+    analyzers: buildAnalyzers(summary.analyzers),
     stopped: buildStopped(summary),
     agents: buildAgents(summary),
-    callerCommands:
-      summary.callerCommandBreakdown.length === 0
-        ? null
-        : {
-            total: summary.callerCommandBreakdown.reduce((sum, row) => sum + row.runs, 0),
-            rows: summary.callerCommandBreakdown,
-          },
-    topRules: summary.topRules.length === 0 ? null : summary.topRules,
-    triggers: buildTriggers(summary),
+    callerCommands: buildCallerCommands(summary),
+    topRules: nullIfEmpty(summary.topRules),
+    triggers: buildTriggers(summary.triggers),
   };
+}
+
+function buildWindow(since: StatsSinceChoice): StatsWindow {
+  return since === 'all' ? { since } : { since, days: resolveSinceDays(since) };
+}
+
+function buildCard(
+  summary: StatsSummary,
+  since: StatsSinceChoice,
+  entitlement: StatsEntitlement,
+): StatsCardViewModel {
+  const bucketDays = resolveBucketDays(summary.daily.length);
+  return {
+    startedAtMs: summary.firstSeenMs ?? Date.now(),
+    bucketDays,
+    metrics: buildMetrics(summary, since, entitlement, bucketDays),
+    unavailable: buildUnavailable(entitlement),
+  };
+}
+
+function buildMetrics(
+  summary: StatsSummary,
+  since: StatsSinceChoice,
+  entitlement: StatsEntitlement,
+  bucketDays: number,
+): StatsMetricRow[] {
+  const bucketed = (values: readonly number[]): number[] => downsampleSum(values, bucketDays);
+  const metrics: StatsMetricRow[] = [
+    {
+      metric: 'runs',
+      windowValue: summary.totalRuns,
+      allTimeValue: summary.allTime.totalRuns,
+      series: bucketed(summary.daily.map((day) => day.runs)),
+    },
+    {
+      metric: 'findings',
+      windowValue: summary.totalFindings,
+      allTimeValue: summary.allTime.totalFindings,
+      series: bucketed(summary.daily.map((day) => day.findings)),
+    },
+    {
+      metric: 'secrets-blocked',
+      windowValue: secretsBlockedInWindow(summary, since),
+      allTimeValue: summary.allTime.secretsBlockedTotal,
+      series: bucketed(summary.dailySecretsBlocked.map((day) => day.count)),
+    },
+  ];
+  if (entitlement.sca !== 'not_enabled') {
+    metrics.push({
+      metric: 'dependency-risks',
+      windowValue: dependencyRisksInWindow(summary),
+      allTimeValue: summary.allTime.dependencyRisksTotal,
+      series: bucketed(summary.dailyDependencyRisks.map((day) => day.count)),
+    });
+  }
+  return metrics;
+}
+
+function buildUnavailable(entitlement: StatsEntitlement): StatsUnavailable[] {
+  const unavailable: StatsUnavailable[] = [];
+  if (entitlement.vortex === 'not_entitled') {
+    unavailable.push('vortex-analysis');
+  }
+  if (entitlement.sca === 'not_enabled') {
+    unavailable.push('dependency-risks');
+  }
+  return unavailable;
+}
+
+function secretsBlockedInWindow(summary: StatsSummary, since: StatsSinceChoice): number {
+  return since === 'all' ? summary.allTime.secretsBlockedTotal : sumBy(summary.stopped, countOf);
+}
+
+function dependencyRisksInWindow(summary: StatsSummary): number {
+  return summary.analyzers.find((row) => row.analyzer === SCA_ANALYZER)?.findings ?? 0;
+}
+
+function resolveBucketDays(totalDays: number): number {
+  return Math.max(1, Math.ceil(totalDays / MAX_SPARKLINE_COLUMNS));
+}
+
+function downsampleSum(values: readonly number[], bucketDays: number): number[] {
+  if (bucketDays <= 1) {
+    return [...values];
+  }
+  const buckets: number[] = [];
+  for (let start = 0; start < values.length; start += bucketDays) {
+    buckets.push(sum(values.slice(start, start + bucketDays)));
+  }
+  return buckets;
+}
+
+function buildAnalyzers(analyzers: readonly StatsAnalyzerTotal[]): StatsAnalyzersViewModel | null {
+  const rows = [...analyzers].sort(byRunsDescending).map(toAnalyzerRow);
+  return totaledRows(rows, runsOf);
+}
+
+function byRunsDescending(a: StatsAnalyzerTotal, b: StatsAnalyzerTotal): number {
+  return b.runs - a.runs;
+}
+
+function toAnalyzerRow({ analyzer, runs }: StatsAnalyzerTotal): StatsAnalyzerRow {
+  return { analyzer, runs };
+}
+
+function buildStopped(summary: StatsSummary): StatsStoppedViewModel | null {
+  if (summary.stopped.length === 0) {
+    return null;
+  }
+  const entries = orderStoppedEntries(summary.stopped);
+  return {
+    total: sumBy(entries, countOf),
+    entries,
+    topSecretTypes: summary.topSecretTypes,
+  };
+}
+
+function orderStoppedEntries(entries: readonly StatsStoppedBreakdown[]): StatsStoppedBreakdown[] {
+  const byPoint = new Map(entries.map((entry) => [entry.point, entry]));
+  return STOP_POINT_ORDER.map((point) => byPoint.get(point)).filter(
+    (entry): entry is StatsStoppedBreakdown => entry !== undefined,
+  );
+}
+
+function buildAgents(summary: StatsSummary): StatsAgentsViewModel | null {
+  const { agentBreakdown, agentHitRate } = summary;
+  if (agentBreakdown.length === 0) {
+    return null;
+  }
+  const total = sumBy(agentBreakdown, findingsOf);
+  return {
+    total,
+    rows: agentBreakdown.map((agent) => toAgentRow(agent, total)),
+    hitPercent: hitPercentOf(agentHitRate),
+    hasUnidentified: agentBreakdown.some(isUnidentified),
+  };
+}
+
+function toAgentRow({ agent, findings }: StatsAgentShare, total: number): StatsAgentRow {
+  return { agent, findings, sharePercent: percentOf(findings, total) };
+}
+
+function hitPercentOf(hitRate: StatsAgentHitRate | null): number | null {
+  return hitRate ? percentOf(hitRate.runsWithFindings, hitRate.totalRuns) : null;
+}
+
+function isUnidentified(agent: StatsAgentShare): boolean {
+  return agent.agent === UNIDENTIFIED_AGENT_LABEL;
+}
+
+function buildCallerCommands(summary: StatsSummary): StatsCallerCommandsViewModel | null {
+  return totaledRows(summary.callerCommandBreakdown, runsOf);
+}
+
+function buildTriggers(triggers: readonly StatsTriggerShare[]): StatsTriggersViewModel | null {
+  const hooks = runsForTrigger(triggers, HOOKS_TRIGGER);
+  const manual = runsForTrigger(triggers, MANUAL_TRIGGER);
+  const total = hooks + manual;
+  if (total === 0) {
+    return null;
+  }
+  return { hooksPercent: percentOf(hooks, total), manualPercent: percentOf(manual, total) };
+}
+
+function runsForTrigger(triggers: readonly StatsTriggerShare[], trigger: string): number {
+  return triggers.find((row) => row.trigger === trigger)?.runs ?? 0;
+}
+
+function totaledRows<T>(rows: T[], countFn: (row: T) => number): StatsTotaledRows<T> | null {
+  return rows.length === 0 ? null : { total: sumBy(rows, countFn), rows };
+}
+
+function nullIfEmpty<T>(rows: T[]): T[] | null {
+  return rows.length === 0 ? null : rows;
+}
+
+function percentOf(count: number, total: number): number {
+  return total > 0 ? Math.round((count / total) * PERCENT_MULTIPLIER) : 0;
+}
+
+function sum(values: readonly number[]): number {
+  return sumBy(values, (value) => value);
+}
+
+function countOf(row: { count: number }): number {
+  return row.count;
+}
+
+function runsOf(row: { runs: number }): number {
+  return row.runs;
+}
+
+function findingsOf(row: { findings: number }): number {
+  return row.findings;
 }

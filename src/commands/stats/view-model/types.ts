@@ -19,6 +19,7 @@
  */
 
 import type {
+  StatsCallerCommandRuns,
   StatsSecretTypeBreakdown,
   StatsSinceChoice,
   StatsStoppedBreakdown,
@@ -27,52 +28,82 @@ import type {
 
 import type { StatsEntitlement } from '../entitlement.ts';
 
-export { buildStatsViewModel } from './build.ts';
 export const UNIDENTIFIED_AGENT_LABEL = 'unidentified';
+
 export type StatsWindow =
   { since: 'all' } | { since: Exclude<StatsSinceChoice, 'all'>; days: number };
+
 export type StatsMetric = 'runs' | 'findings' | 'secrets-blocked' | 'dependency-risks';
+
 export type StatsUnavailable = 'vortex-analysis' | 'dependency-risks';
+
 export interface StatsMetricRow {
   metric: StatsMetric;
   windowValue: number;
   allTimeValue: number;
   series: number[];
 }
+
 export interface StatsCardViewModel {
   startedAtMs: number;
   bucketDays: number;
-  columnCount: number;
   metrics: StatsMetricRow[];
   unavailable: StatsUnavailable[];
 }
+
 export interface StatsTotaledRows<T> {
   total: number;
   rows: T[];
 }
+
+export interface StatsAnalyzerRow {
+  analyzer: string;
+  runs: number;
+}
+
+export type StatsAnalyzersViewModel = StatsTotaledRows<StatsAnalyzerRow>;
+
+export interface StatsStoppedViewModel {
+  total: number;
+  entries: StatsStoppedBreakdown[];
+  topSecretTypes: StatsSecretTypeBreakdown[];
+}
+
+export interface StatsAgentRow {
+  agent: string;
+  findings: number;
+  sharePercent: number;
+}
+
+export interface StatsAgentsViewModel extends StatsTotaledRows<StatsAgentRow> {
+  hitPercent: number | null;
+  hasUnidentified: boolean;
+}
+
+export type StatsCallerCommandsViewModel = StatsTotaledRows<StatsCallerCommandRuns>;
+
+export interface StatsTriggersViewModel {
+  hooksPercent: number;
+  manualPercent: number;
+}
+
 export interface PopulatedStatsViewModel {
   hasHistory: true;
   window: StatsWindow;
   entitlement: StatsEntitlement;
   card: StatsCardViewModel;
-  analyzers: StatsTotaledRows<{ analyzer: string; runs: number }> | null;
-  stopped: {
-    total: number;
-    entries: StatsStoppedBreakdown[];
-    topSecretTypes: StatsSecretTypeBreakdown[];
-  } | null;
-  agents:
-    | (StatsTotaledRows<{ agent: string; findings: number; sharePercent: number }> & {
-        hitPercent: number | null;
-        hasUnidentified: boolean;
-      })
-    | null;
-  callerCommands: StatsTotaledRows<{ command: string; runs: number }> | null;
+  analyzers: StatsAnalyzersViewModel | null;
+  stopped: StatsStoppedViewModel | null;
+  agents: StatsAgentsViewModel | null;
+  callerCommands: StatsCallerCommandsViewModel | null;
   topRules: StatsTopRule[] | null;
-  triggers: { hooksPercent: number; manualPercent: number } | null;
+  triggers: StatsTriggersViewModel | null;
 }
+
 export interface EmptyStatsViewModel {
   hasHistory: false;
 }
+
 export type StatsViewModel = EmptyStatsViewModel | PopulatedStatsViewModel;
+
 export const EMPTY_STATS_VIEW_MODEL: EmptyStatsViewModel = { hasHistory: false };

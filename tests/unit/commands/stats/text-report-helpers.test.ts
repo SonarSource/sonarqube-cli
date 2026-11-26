@@ -26,7 +26,8 @@ import {
   printSummaryCard,
   sparkline,
 } from '@/commands/stats/text-report-helpers.ts';
-import { buildStatsViewModel } from '@/commands/stats/view-model/index.ts';
+import { buildStatsViewModel } from '@/commands/stats/view-model/build.ts';
+import type { PopulatedStatsViewModel } from '@/commands/stats/view-model/types.ts';
 import type { StatsSummary } from '@/core/stats/stats-queries.ts';
 import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 
@@ -65,17 +66,23 @@ const summary: StatsSummary = {
   ],
 };
 
+const ENTITLED = { vortex: 'enabled', sca: 'enabled' } as const;
+
+function renderCard(model: PopulatedStatsViewModel): FakeConsole {
+  const console = new FakeConsole();
+  printSummaryCard(model.window, model.card, console);
+  return console;
+}
+
 describe('stats rendering helpers', () => {
   it('keeps sparkline levels, color and empty behavior', () => {
     expect(sparkline([])).toBe('');
     expect(sparkline([0, 0])).toBe(softBlue('▁▁'));
     expect(sparkline([0, 1, 2, 4])).toBe(softBlue('▁▃▄▇'));
   });
-  it.each([-1, 0, 0.5, 1, 2])('clamps and rounds bar fraction %s', (fraction) => {
-    const expected = fraction <= 0 ? [0, 18] : fraction >= 1 ? [18, 0] : [9, 9];
-    expect(bar(fraction * 100)).toBe(
-      softBlue('▓'.repeat(expected[0])) + dim('░'.repeat(expected[1])),
-    );
+  it.each([-100, 0, 50, 100, 200])('clamps and rounds bar percent %s', (percent) => {
+    const expected = percent <= 0 ? [0, 18] : percent >= 100 ? [18, 0] : [9, 9];
+    expect(bar(percent)).toBe(softBlue('▓'.repeat(expected[0])) + dim('░'.repeat(expected[1])));
   });
   it('aligns totals to natural rows or extends them for a long heading', () => {
     expect(computeAlignedTotalsLayout('Runs', 1234, 15)).toEqual({
@@ -88,32 +95,22 @@ describe('stats rendering helpers', () => {
     });
   });
   it.each(['7d', '14d', '30d', 'all'] as const)('preserves the %s summary card', (since) => {
-    const console = new FakeConsole();
-    printSummaryCard(
-      buildStatsViewModel(summary, since, { vortex: 'enabled', sca: 'enabled' }),
-      console,
-    );
+    const console = renderCard(buildStatsViewModel(summary, since, ENTITLED));
     expect(console.calls).toMatchSnapshot();
   });
   it('keeps unavailable-service placeholders and the learn-more line', () => {
-    const console = new FakeConsole();
-    printSummaryCard(
+    const console = renderCard(
       buildStatsViewModel(summary, '30d', { vortex: 'not_entitled', sca: 'not_enabled' }),
-      console,
     );
     expect(console.calls).toMatchSnapshot();
   });
   it('sums long daily series into at most thirty columns', () => {
-    const console = new FakeConsole();
     const daily = Array.from({ length: 31 }, (_, index) => ({
       dayEpoch: 20454 + index,
       runs: 1,
       findings: 0,
     }));
-    printSummaryCard(
-      buildStatsViewModel({ ...summary, daily }, 'all', { vortex: 'enabled', sca: 'enabled' }),
-      console,
-    );
+    const console = renderCard(buildStatsViewModel({ ...summary, daily }, 'all', ENTITLED));
     expect(console.calls).toMatchSnapshot();
   });
 });

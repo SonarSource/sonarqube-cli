@@ -19,17 +19,13 @@
  */
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import type { StatsSummary } from '@/core/stats/stats-queries.ts';
-import { queryStatsSummary } from '@/core/stats/stats-queries.ts';
+import { queryStatsSummary, type StatsSummary } from '@/core/stats/stats-queries.ts';
 import { isDoNotTrackRequested } from '@/core/telemetry/enabled.ts';
 
 import { resolveStatsEntitlement } from './entitlement.ts';
 import { renderTextSummary } from './text-report.ts';
-import {
-  buildStatsViewModel,
-  EMPTY_STATS_VIEW_MODEL,
-  type StatsViewModel,
-} from './view-model/index.ts';
+import { buildStatsViewModel } from './view-model/build.ts';
+import { EMPTY_STATS_VIEW_MODEL, type StatsViewModel } from './view-model/types.ts';
 
 export const STATS_SINCE_CHOICES = ['7d', '14d', '30d', 'all'] as const;
 export type StatsSinceChoice = (typeof STATS_SINCE_CHOICES)[number];
@@ -63,6 +59,8 @@ async function resolveViewModel(
   since: StatsSinceChoice,
   ctx: CommandInvocationContext,
 ): Promise<StatsViewModel> {
-  if (summary.allTime.totalRuns === 0) return EMPTY_STATS_VIEW_MODEL;
+  if (summary.allTime.totalRuns === 0) {
+    return EMPTY_STATS_VIEW_MODEL;
+  }
   return buildStatsViewModel(summary, since, await resolveStatsEntitlement(ctx));
 }

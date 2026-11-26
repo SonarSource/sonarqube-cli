@@ -137,7 +137,7 @@ function fillDailyGaps<T extends { dayEpoch: number }>(
   return filled;
 }
 
-function sumBy<T>(items: readonly T[], fn: (item: T) => number): number {
+export function sumBy<T>(items: readonly T[], fn: (item: T) => number): number {
   return items.reduce((sum, item) => sum + fn(item), 0);
 }
 
@@ -343,9 +343,14 @@ export function windowDailyDependencyRisks(
   return fillDailyGaps(grouped, startDayEpoch, endDayEpoch, (dayEpoch) => ({ dayEpoch, count: 0 }));
 }
 
+export function resolveSinceDays(since: Exclude<StatsSinceChoice, 'all'>): number {
+  return Number.parseInt(since, 10);
+}
+
 export function resolveSinceMs(since: StatsSinceChoice): number {
-  if (since === 'all') return 0;
-  const days = Number.parseInt(since, 10);
+  if (since === 'all') {
+    return 0;
+  }
   const todayStartMs = Math.floor(Date.now() / DAY_MS) * DAY_MS;
-  return todayStartMs - (days - 1) * DAY_MS;
+  return todayStartMs - (resolveSinceDays(since) - 1) * DAY_MS;
 }
