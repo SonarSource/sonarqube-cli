@@ -871,9 +871,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(
       new SonarOption(
         '--fail-on <severity>',
-        'Fail when a finding reaches this severity. Use none to disable the threshold',
+        'Fail when a finding reaches this severity (case-insensitive). Use none to disable the threshold',
       )
         .choices(CONTAINER_SCAN_SEVERITIES)
+        .argParser((value) => {
+          const severity = value.toLowerCase();
+          if (!CONTAINER_SCAN_SEVERITIES.some((choice) => choice === severity)) {
+            throw new InvalidArgumentError(
+              `Allowed choices are ${CONTAINER_SCAN_SEVERITIES.join(', ')}.`,
+            );
+          }
+          return severity;
+        })
         .default(DEFAULT_CONTAINER_FAIL_ON),
     )
     .addOption(formatOption(CONTAINER_SCAN_FORMATS, 'json'))

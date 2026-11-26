@@ -151,7 +151,7 @@ describe('analyze container', () => {
       'SONAR_CONTAINER_SCANNER_ORG',
       'SONAR_HOST_URL',
     ]);
-    const result = await harness.run('analyze container ./my-image.tar --fail-on none', {
+    const result = await harness.run('analyze container ./my-image.tar --fail-on NoNe', {
       extraEnv: {
         SONARQUBE_CLI_TOKEN: 'ci-test-token',
         SONARQUBE_CLI_ORG: 'ci-test-org',
@@ -205,7 +205,7 @@ describe('analyze container', () => {
     );
 
     const result = await harness.run(
-      'analyze container ./my-image.tar --container-engine podman --registry docker.io --repository library/alpine --tag test --timeout-secs 42 --format table',
+      'analyze container ./my-image.tar --fail-on HIGH --container-engine podman --registry docker.io --repository library/alpine --tag test --timeout-secs 42 --format table',
       {
         extraEnv: {
           SONAR_HOST_URL: 'https://unexpected.example',
@@ -310,6 +310,15 @@ describe('analyze container', () => {
     });
     expect(result.stderr).toContain('Native diagnostics: [redacted]');
     expect(result.stderr).not.toContain(TOKEN);
+  });
+
+  it('rejects an unknown fail threshold before attempting to install', async () => {
+    const binaries = await harness.newFakeBinariesServer().noArtifacts().start();
+    const result = await harness.run('analyze container ./my-image.tar --fail-on urgent');
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Allowed choices are none, info, low, medium, high, blocker.');
+    expect(binaries.getRecordedRequests()).toEqual([]);
   });
 
   it.each(['0', '1.5', '2s'])(
