@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 
 import {
@@ -154,14 +155,12 @@ describe('init authentication preflight', () => {
     TIMEOUT,
   );
   it.each([
-    'init',
     'init --bind --non-interactive',
     'init --bind --dry-run --non-interactive',
-    'init --monorepo --root web=web-key',
     'init --monorepo --bind --non-interactive --root web=web-key',
     'init --monorepo --bind --dry-run --non-interactive --root web=web-key',
   ])(
-    'checks Cloud import permissions before any bind prompt: %s',
+    'fails early when explicitly requested Cloud binding is denied: %s',
     async (command) => {
       const server = await harness
         .newFakeServer()
@@ -373,6 +372,126 @@ describe('init authentication preflight', () => {
       const result = await harness.run('init --non-interactive');
       expect(result.exitCode).toBe(0);
       expect(harness.cwd.file('.sonar-config.json').asText()).toBe(config);
+    },
+    TIMEOUT,
+  );
+  it.each([false, true])(
+    'links a generated-key project after optional binding is denied (dryRun=%s)',
+    async (dryRun) => {
+      const remote = 'https://github.com/example/repository.git';
+      initGitRepo(harness.cwd.path);
+      git(['remote', 'add', 'origin', remote], harness.cwd.path);
+      const { projectKey } = generateProjectProposal(harness.cwd.path, remote, ORG);
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(TOKEN)
+        .withOrganizations([{ key: ORG, name: ORG, actions: { admin: false } }])
+        .withProject(projectKey)
+        .start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+      const session = harness.runInteractive(`init --path .${dryRun ? ' --dry-run' : ''}`);
+      await session.accept('Link this directory to it?');
+      if (!dryRun) await session.decline('Set up your coding agents');
+      const result = await session.waitFinish();
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('Bind this repository');
+      expect(result.stderr).toContain('Continuing with existing projects only.');
+      expect(harness.cwd.exists('.sonar-config.json')).toBe(!dryRun);
+      if (!dryRun) {
+        expect(harness.cwd.file('.sonar-config.json').asText()).toContain(projectKey);
+        expect(
+          readInitExecutedEvents(harness.sonarUserHome.path)[0].event_payload.failure_reason,
+        ).toBeNull();
+        expect(readProjectInitEvents(harness.sonarUserHome.path)[0].event_payload).toMatchObject({
+          init_path: 'link_existing',
+          stopped_at: null,
+          failure_reason: null,
+        });
+      } else {
+        expect(readInitExecutedEvents(harness.sonarUserHome.path)).toEqual([]);
+      }
+      expect(server.getRecordedRequests().some((r) => r.method === 'POST')).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it.each([false, true])(
+    'keeps existing monorepo roots linkable when optional binding is denied (dryRun=%s)',
+    async (dryRun) => {
+      const remote = 'https://github.com/example/repository.git';
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(TOKEN)
+        .withOrganizations([{ key: ORG, name: ORG, actions: { admin: false } }])
+        .withProject('existing-key')
+        .start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+      initGitRepo(harness.cwd.path);
+      git(['remote', 'add', 'origin', remote], harness.cwd.path);
+      harness.cwd.writeFile('api/.keep', '');
+      harness.cwd.writeFile('web/.keep', '');
+      const command = `init --monorepo --root api=existing-key --root web=new-key${dryRun ? ' --dry-run' : ''}`;
+      let result;
+      if (dryRun) result = await harness.run(command);
+      else {
+        const session = harness.runInteractive(command);
+        await session.decline('Set up your coding agents');
+        result = await session.waitFinish();
+      }
+      expect(result.stdout).not.toContain('Bind the 1 new project');
+      expect(result.stdout).toContain('existing-key');
+      expect(result.stderr).toContain('Continuing with existing projects only.');
+      expect(harness.cwd.exists('.sonar-config.json')).toBe(!dryRun);
+      if (!dryRun) {
+        const mapping = harness.cwd.file('.sonar-config.json').asText();
+        expect(mapping).toContain('existing-key');
+        expect(mapping).not.toContain('new-key');
+        const roots = readProjectInitEvents(harness.sonarUserHome.path);
+        expect(roots).toHaveLength(2);
+        expect(roots[0].event_payload).toMatchObject({
+          init_path: 'link_existing',
+          failure_reason: null,
+        });
+        expect(roots[1].event_payload).toMatchObject({
+          stopped_at: 'project_bind',
+          failure_reason: 'permission',
+        });
+        expect(
+          readInitExecutedEvents(harness.sonarUserHome.path)[0].event_payload.failure_reason,
+        ).toBeNull();
+      } else {
+        expect(readProjectInitEvents(harness.sonarUserHome.path)).toEqual([]);
+      }
+      expect(server.getRecordedRequests().some((r) => r.method === 'POST')).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'skips optional binding without aborting the existing no-project flow',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(TOKEN)
+        .withOrganizations([{ key: ORG, name: ORG, actions: { admin: false } }])
+        .start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+      initGitRepo(harness.cwd.path);
+      git(
+        ['remote', 'add', 'origin', 'https://github.com/example/repository.git'],
+        harness.cwd.path,
+      );
+      const session = harness.runInteractive('init');
+      await session.decline('Set up your coding agents');
+      const result = await session.waitFinish();
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('Bind this repository');
+      expect(result.stderr).toContain('Continuing with existing projects only.');
+      expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+      expect(server.getRecordedRequests().some((r) => r.method === 'POST')).toBe(false);
     },
     TIMEOUT,
   );

@@ -22,7 +22,11 @@ import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { ImportApiClient } from '@/commands/import/import-api.ts';
-import { resolveOrg } from '@/commands/import/resolve-options.ts';
+import {
+  OrganizationImportPermissionError,
+  type ResolvedOrg,
+  resolveOrg,
+} from '@/commands/import/resolve-options.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   authMatchesRecordedConnection,
@@ -219,8 +223,9 @@ function bindingUnavailable(reason: string): InvalidOptionError {
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { auth, http, console, interactive, intent, telemetry }: DetectDeps,
+  deps: DetectDeps,
 ): Promise<InitPath> {
+  const { auth, console, interactive, intent, telemetry } = deps;
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
   if (repositorySlug === null) {
@@ -248,7 +253,11 @@ async function chooseNewProjectPath(
 
   const project = telemetry?.detected('bound_new');
   project?.begin('project_bind');
-  const organization = await resolveOrg(new ImportApiClient(http), auth.orgKey);
+  const organization = await resolveBindingOrganization(deps);
+  if (!organization) {
+    project?.record('project_bind', 'skipped');
+    return { path: 'no-project', projectRoot, remote };
+  }
   if (intent?.kind === 'bind') {
     project?.record('project_bind', 'success');
     return { path: 'bound-new', projectRoot, remote, repositorySlug, organization };
@@ -260,4 +269,22 @@ async function chooseNewProjectPath(
   return bind
     ? { path: 'bound-new', projectRoot, remote, repositorySlug, organization }
     : { path: 'no-project', projectRoot, remote };
+}
+
+/** An optional bind may be unavailable while an existing project can still be linked. */
+async function resolveBindingOrganization({
+  auth,
+  http,
+  intent,
+  console,
+}: DetectDeps): Promise<ResolvedOrg | undefined> {
+  try {
+    return await resolveOrg(new ImportApiClient(http), auth.orgKey);
+  } catch (error) {
+    if (intent?.kind === 'bind' || !(error instanceof OrganizationImportPermissionError)) {
+      throw error;
+    }
+    console.info(`${error.message} Continuing with existing projects only.`, 'stderr');
+    return undefined;
+  }
 }
