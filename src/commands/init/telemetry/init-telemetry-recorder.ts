@@ -257,24 +257,26 @@ export class InitTelemetryRecorder {
     this.runStop = this.log.fail(error);
   }
 
-  stopAt(step: RunStepId, reason: InitFailureReason): void {
+  stopAt(step: InitStepId, reason: InitFailureReason): void {
     this.runStop ??= { step, reason };
   }
 
   /** The user declined every option, which the run reports as a cancellation at the last refusal. */
-  stopAtDeclined(): void {
+  stopAtDeclined(): boolean {
     const project = this.isMonorepo ? undefined : this.active;
     const projectStep = project?.lastDeclined();
     if (project && projectStep) {
       project.stopAt(projectStep, 'cancelled');
       this.runStop ??= { step: projectStep, reason: 'cancelled' };
-      return;
+      return true;
     }
     const runStep = this.log.lastDeclined();
     // A run that ends with nothing created, but where nothing was declined, was not cancelled.
     if (runStep) {
       this.runStop ??= { step: runStep, reason: 'cancelled' };
+      return true;
     }
+    return false;
   }
 
   /** Records the run's facts on `ctx`, once the run has ended. */

@@ -138,7 +138,12 @@ async function onboard(
     warnIgnoredIntent(intent, console);
   }
   if (outcome.kind === 'declined') {
-    telemetry.stopAtDeclined();
+    const declined = telemetry.stopAtDeclined();
+    const project = telemetry.project(0);
+    if (!declined && project?.initPath() === 'no_project') {
+      project.stopAt('link', 'no_project_available');
+      telemetry.stopAt('link', 'no_project_available');
+    }
   }
   renderInitOutcome(outcome, auth, console, dryRun);
   if (dryRun) {
