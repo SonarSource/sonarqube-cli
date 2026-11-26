@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { OrganizationImportPermissionError } from '@/commands/import/resolve-options.ts';
 import { CancelledByUserError } from '@/core/commands/command-error.ts';
 import { ProjectOrganizationError } from '@/core/errors.ts';
 import {
@@ -49,6 +50,7 @@ export function classifyInitFailure(
 function reasonOf(error: Error): InitFailureReason | undefined {
   if (error instanceof CancelledByUserError) return 'cancelled';
   if (error instanceof OrganizationCreationDeclined) return 'no_org';
+  if (error instanceof OrganizationImportPermissionError) return 'permission';
   if (
     error instanceof RepositoryInOtherOrganizationError ||
     error instanceof ProjectOrganizationError

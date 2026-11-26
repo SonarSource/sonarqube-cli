@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedOrg } from '@/commands/import/resolve-options.ts';
+
 import type { LinkedProjectIssue, LinkedProjectProblem } from './steps/linked-projects.ts';
 import type { InitFailureReason } from './telemetry/init-telemetry.ts';
 
@@ -56,6 +58,8 @@ export type InitPath =
       remote: string;
       /** What `sonar import --repo` expects for the remote: `owner/repo`, or `project/repo` on Azure DevOps. */
       repositorySlug: string;
+      /** Reuses the organization whose import permission was checked before the bind prompt. */
+      organization: ResolvedOrg;
     }
   /**
    * No project was found and none is bound to the repository: there is no git remote (`remote`
