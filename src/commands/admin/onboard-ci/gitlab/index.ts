@@ -198,7 +198,7 @@ async function preflight(
     url: gitlabUrl,
   } = await resolveDopSetting(sqsClient.bindings, 'gitlab', options.bindingName);
   const gitlabClient = new GitLabClient(gitlabUrl, gitlabToken, {
-    onRetry: (message) => {
+    onWarning: (message) => {
       console.warn(message);
     },
   });
@@ -278,7 +278,7 @@ export async function onboardCiGitlab(
     repos,
     (repo) => repo.path_with_namespace,
     (repo, progress) => {
-      const gitlab = ctx.gitlab.withRetryHandler((message) => {
+      const gitlab = ctx.gitlab.withWarningHandler((message) => {
         progress.warn(`${repo.path_with_namespace}: ${message}`);
       });
       return processRepo({ ...ctx, gitlab }, repo, bindingMap);

@@ -50,7 +50,7 @@ describe('GitLabClient', () => {
   beforeEach(() => {
     retryNotices = [];
     client = new GitLabClient(BASE_URL, TOKEN, {
-      onRetry: (message) => retryNotices.push(message),
+      onWarning: (message) => retryNotices.push(message),
     });
   });
 
@@ -330,9 +330,17 @@ describe('GitLabClient', () => {
 
   describe('callWithRetry', () => {
     let setTimeoutSpy: ReturnType<typeof spyOn>;
+    let nowSpy: ReturnType<typeof spyOn>;
+    let now: number;
 
     beforeEach(() => {
-      setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void) => {
+      now = Date.now();
+      nowSpy = spyOn(Date, 'now').mockImplementation(() => now);
+      setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+        fn: () => void,
+        delay = 0,
+      ) => {
+        now += delay;
         fn();
         return 0 as unknown as ReturnType<typeof setTimeout>;
       }) as typeof setTimeout);
@@ -340,6 +348,7 @@ describe('GitLabClient', () => {
 
     afterEach(() => {
       setTimeoutSpy.mockRestore();
+      nowSpy.mockRestore();
     });
 
     it('retries a 429 and succeeds on the next attempt', async () => {
@@ -357,7 +366,7 @@ describe('GitLabClient', () => {
 
     it('routes retries to the repository handler without replacing the default handler', async () => {
       const scopedNotices: string[] = [];
-      const scopedClient = client.withRetryHandler((message) => scopedNotices.push(message));
+      const scopedClient = client.withWarningHandler((message) => scopedNotices.push(message));
       fetchSpy = mockFetchSeq(
         fakeResponse({}, { ok: false, status: 503 }),
         fakeResponse({ ci_config_path: null }),
@@ -369,6 +378,44 @@ describe('GitLabClient', () => {
       expect(retryNotices).toEqual([]);
       await client.getProjectCiConfigPath(2);
       expect(retryNotices).toEqual(scopedNotices);
+    });
+
+    it('serializes and spaces writes across repository-scoped clients', async () => {
+      let finish: (response: Response) => void = () => undefined;
+      const pending = new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockImplementationOnce((() => pending) as unknown as typeof fetch)
+        .mockResolvedValue(new Response(null, { status: 204 }));
+      const start = now;
+      const first = client.createBranch(1, 'first');
+      const second = client.withWarningHandler(() => undefined).createBranch(2, 'second');
+      await Bun.sleep(0);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      finish(new Response(null, { status: 204 }));
+      await Promise.all([first, second]);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(now - start).toBe(1000);
+    });
+
+    it('shares a rejected write cooldown with reads from another scoped client', async () => {
+      const scopedNotices: string[] = [];
+      fetchSpy = mockFetchSeq(
+        fakeResponse({}, { ok: false, status: 429, headers: { 'Retry-After': '2' } }),
+        fakeResponse({ ci_config_path: null }),
+      );
+      const scoped = client.withWarningHandler((message) => scopedNotices.push(message));
+      const start = now;
+      const error = await scoped.createBranch(1, 'first').catch((error: unknown) => error);
+      expect(error).toMatchObject({ status: 429 });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(scopedNotices).toEqual([
+        'GitLab rate limit reached. Pausing shared requests for 3 seconds.',
+      ]);
+      expect(await client.getProjectCiConfigPath(2)).toBeNull();
+      expect(now - start).toBe(3000);
+      expect(retryNotices).toEqual([]);
     });
 
     it('uses DEFAULT_RETRY_AFTER_S when Retry-After is an HTTP-date (NaN)', async () => {

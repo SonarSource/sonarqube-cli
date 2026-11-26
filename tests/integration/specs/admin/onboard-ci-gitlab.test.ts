@@ -74,7 +74,11 @@ describe('sonar admin onboard-ci gitlab', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true', GITLAB_TOKEN: 'gl-token' });
+    harness.withExtraEnv({
+      [ALPHA_ENV_VAR]: 'true',
+      GITLAB_TOKEN: 'gl-token',
+      __SQ_CLI_TEST_FAST_WRITES: '1',
+    });
   });
 
   afterEach(async () => {
