@@ -110,7 +110,7 @@ export async function onboardCiGithub(
     repos,
     (repo) => repo.full_name,
     (repo, progress) => {
-      const github = ctx.github.withRetryHandler((message) => {
+      const github = ctx.github.withWarningHandler((message) => {
         progress.warn(`${repo.full_name}: ${message}`);
       });
       return processRepo({ ...ctx, github }, repo, bindings);

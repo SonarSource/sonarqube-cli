@@ -1420,7 +1420,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       await assertProvisionProjectsPermission(ctx.connection.httpClient);
       const token = await resolveDevOpsToken(ctx.console, 'GitHub');
       const github = new GitHubClient(token, {
-        onRetry: (message) => {
+        onWarning: (message) => {
           ctx.console.warn(message);
         },
       });

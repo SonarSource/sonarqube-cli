@@ -19,7 +19,7 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { RequestScheduler } from '@/core/devops/request-scheduler.ts';
+import { cooldownMessage, RequestScheduler } from '@/core/devops/request-scheduler.ts';
 import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import {
   HTTP_STATUS_BAD_GATEWAY,
@@ -113,12 +113,12 @@ export class GitHubClient {
     private readonly token: string,
     private readonly options: {
       baseUrl?: string;
-      onRetry?: (message: string) => void;
+      onWarning?: (message: string) => void;
     } = {},
   ) {}
 
-  withRetryHandler(onRetry: (message: string) => void): GitHubClient {
-    const client = new GitHubClient(this.token, { ...this.options, onRetry });
+  withWarningHandler(onWarning: (message: string) => void): GitHubClient {
+    const client = new GitHubClient(this.token, { ...this.options, onWarning });
     client.scheduler = this.scheduler;
     return client;
   }
@@ -283,7 +283,11 @@ export class GitHubClient {
         );
         const error = new GitHubApiError(response, operation, errorBody);
         if (error.isRateLimited) {
-          this.scheduler.coolDown(retryDelay(error, response.headers, fallbackRateLimitDelayMs));
+          const delayMs = retryDelay(error, response.headers, fallbackRateLimitDelayMs);
+          this.scheduler.coolDown(delayMs);
+          if (method !== 'GET') {
+            this.options.onWarning?.(cooldownMessage('GitHub', delayMs));
+          }
         }
         return { response, error };
       });
@@ -300,7 +304,7 @@ export class GitHubClient {
       // Writes are issued once; uncertain write outcomes must be reconciled by the lifecycle.
       if (method !== 'GET' || !retryable || attempt >= MAX_RETRIES) throw error;
       const delayMs = retryDelay(error, response.headers, fallbackRateLimitDelayMs);
-      this.options.onRetry?.(retryMessage(error, delayMs, attempt + 1));
+      this.options.onWarning?.(retryMessage(error, delayMs, attempt + 1));
       await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
       fallbackRateLimitDelayMs *= 2;
     }

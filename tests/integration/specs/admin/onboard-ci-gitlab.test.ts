@@ -74,7 +74,11 @@ describe('sonar admin onboard-ci gitlab', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true', GITLAB_TOKEN: 'gl-token' });
+    harness.withExtraEnv({
+      [ALPHA_ENV_VAR]: 'true',
+      GITLAB_TOKEN: 'gl-token',
+      __SQ_CLI_TEST_FAST_WRITES: '1',
+    });
   });
 
   afterEach(async () => {
@@ -911,7 +915,7 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(openedRepos).toContain(40);
       expect(openedRepos).toContain(42);
       expect(openedRepos).not.toContain(41);
-    }, 15_000);
+    });
 
     it('warns for paths not found in group', async () => {
       await startServers(harness, {

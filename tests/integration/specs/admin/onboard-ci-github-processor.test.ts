@@ -54,6 +54,8 @@ describe('GitHub onboarding repository lifecycle', () => {
     const restoreNetwork = isolateNetworkEnv();
     const previousHome = process.env[ENV_SONAR_USER_HOME];
     const previousKeychain = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    const previousFastWrites = process.env.__SQ_CLI_TEST_FAST_WRITES;
+    process.env.__SQ_CLI_TEST_FAST_WRITES = '1';
     process.env[ENV_SONAR_USER_HOME] = harness.sonarUserHome.path;
     process.env.SONARQUBE_CLI_KEYCHAIN_FILE = harness.keychainJsonFile;
     clearSecretCache();
@@ -64,6 +66,7 @@ describe('GitHub onboarding repository lifecycle', () => {
       restoreNetwork();
       restoreEnv(ENV_SONAR_USER_HOME, previousHome);
       restoreEnv('SONARQUBE_CLI_KEYCHAIN_FILE', previousKeychain);
+      restoreEnv('__SQ_CLI_TEST_FAST_WRITES', previousFastWrites);
     };
   });
 
@@ -257,7 +260,7 @@ describe('GitHub onboarding repository lifecycle', () => {
     });
     expect(await ctx.github.getFileContent(REPO, 'leftover.txt', CI_BRANCH)).toBeNull();
     expect(await ctx.github.getFileContent(REPO, BUILD_PATH, CI_BRANCH)).toBe(BUILD);
-  }, 15_000);
+  });
 
   it('validates rendered YAML before writes and commits a correctly quoted template', async () => {
     const projectKey = 'sample-project:';

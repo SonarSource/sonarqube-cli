@@ -21,6 +21,9 @@
 const WRITE_INTERVAL_MS = 1000;
 
 export class RequestScheduler {
+  // Compiled-CLI tests cannot inject a mocked clock.
+  private readonly writeIntervalMs =
+    process.env.__SQ_CLI_TEST_FAST_WRITES === '1' ? 100 : WRITE_INTERVAL_MS;
   private writes: Promise<unknown> = Promise.resolve();
   private resumeAt = 0;
   private nextWriteAt = 0;
@@ -32,7 +35,7 @@ export class RequestScheduler {
         return await request();
       } finally {
         if (write) {
-          this.nextWriteAt = Date.now() + WRITE_INTERVAL_MS;
+          this.nextWriteAt = Date.now() + this.writeIntervalMs;
         }
       }
     };
@@ -58,4 +61,9 @@ export class RequestScheduler {
     await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
     return this.wait(write);
   }
+}
+
+export function cooldownMessage(platform: string, delayMs: number): string {
+  const seconds = Math.ceil(delayMs / 1000);
+  return `${platform} rate limit reached. Pausing shared requests for ${seconds} ${seconds === 1 ? 'second' : 'seconds'}.`;
 }

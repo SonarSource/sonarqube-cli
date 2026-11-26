@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { RequestScheduler } from '@/core/devops/request-scheduler.ts';
+import { cooldownMessage, RequestScheduler } from '@/core/devops/request-scheduler.ts';
 import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import {
   HTTP_STATUS_BAD_GATEWAY,
@@ -58,7 +58,7 @@ const DEFAULT_RETRY_AFTER_S = 5;
 // Only used for idempotent GET requests — writes are issued once without retry.
 async function callWithRetry(
   fn: () => Promise<Response>,
-  onRetry?: (message: string) => void,
+  onWarning?: (message: string) => void,
 ): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const response = await fn();
@@ -77,7 +77,7 @@ async function callWithRetry(
         ? 'GitLab rate limit reached'
         : `GitLab request failed with HTTP ${response.status}`;
     const seconds = Math.ceil(delayMs / 1000);
-    onRetry?.(
+    onWarning?.(
       `${reason}.\nRetrying in ${seconds} ${seconds === 1 ? 'second' : 'seconds'} (retry ${attempt + 1} of ${MAX_RETRIES}).`,
     );
     await new Promise<void>((r) => setTimeout(r, delayMs));
@@ -109,14 +109,14 @@ export class GitLabClient {
   constructor(
     baseUrl: string,
     token: string,
-    private readonly options: { onRetry?: (message: string) => void } = {},
+    private readonly options: { onWarning?: (message: string) => void } = {},
   ) {
     this.baseUrl = baseUrl.replace(/\/api\/v4\/?$/, '').replace(/\/$/, '');
     this.token = token;
   }
 
-  withRetryHandler(onRetry: (message: string) => void): GitLabClient {
-    const client = new GitLabClient(this.baseUrl, this.token, { ...this.options, onRetry });
+  withWarningHandler(onWarning: (message: string) => void): GitLabClient {
+    const client = new GitLabClient(this.baseUrl, this.token, { ...this.options, onWarning });
     client.scheduler = this.scheduler;
     return client;
   }
@@ -134,7 +134,7 @@ export class GitLabClient {
   }
 
   private fetchGet(url: string): Promise<Response> {
-    return callWithRetry(() => this.request(url, 'GET'), this.options.onRetry);
+    return callWithRetry(() => this.request(url, 'GET'), this.options.onWarning);
   }
 
   private fetchWrite(url: string, method: string, body?: string): Promise<Response> {
@@ -153,7 +153,11 @@ export class GitLabClient {
         ),
       );
       if (response.status === HTTP_STATUS_TOO_MANY_REQUESTS) {
-        this.scheduler.coolDown(rateLimitDelay(response));
+        const delayMs = rateLimitDelay(response);
+        this.scheduler.coolDown(delayMs);
+        if (method !== 'GET') {
+          this.options.onWarning?.(cooldownMessage('GitLab', delayMs));
+        }
       }
       return response;
     });

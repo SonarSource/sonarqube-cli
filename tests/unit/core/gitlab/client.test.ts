@@ -50,7 +50,7 @@ describe('GitLabClient', () => {
   beforeEach(() => {
     retryNotices = [];
     client = new GitLabClient(BASE_URL, TOKEN, {
-      onRetry: (message) => retryNotices.push(message),
+      onWarning: (message) => retryNotices.push(message),
     });
   });
 
@@ -366,7 +366,7 @@ describe('GitLabClient', () => {
 
     it('routes retries to the repository handler without replacing the default handler', async () => {
       const scopedNotices: string[] = [];
-      const scopedClient = client.withRetryHandler((message) => scopedNotices.push(message));
+      const scopedClient = client.withWarningHandler((message) => scopedNotices.push(message));
       fetchSpy = mockFetchSeq(
         fakeResponse({}, { ok: false, status: 503 }),
         fakeResponse({ ci_config_path: null }),
@@ -390,7 +390,7 @@ describe('GitLabClient', () => {
         .mockResolvedValue(new Response(null, { status: 204 }));
       const start = now;
       const first = client.createBranch(1, 'first');
-      const second = client.withRetryHandler(() => undefined).createBranch(2, 'second');
+      const second = client.withWarningHandler(() => undefined).createBranch(2, 'second');
       await Bun.sleep(0);
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       finish(new Response(null, { status: 204 }));
@@ -400,15 +400,19 @@ describe('GitLabClient', () => {
     });
 
     it('shares a rejected write cooldown with reads from another scoped client', async () => {
+      const scopedNotices: string[] = [];
       fetchSpy = mockFetchSeq(
         fakeResponse({}, { ok: false, status: 429, headers: { 'Retry-After': '2' } }),
         fakeResponse({ ci_config_path: null }),
       );
-      const scoped = client.withRetryHandler(() => undefined);
+      const scoped = client.withWarningHandler((message) => scopedNotices.push(message));
       const start = now;
       const error = await scoped.createBranch(1, 'first').catch((error: unknown) => error);
       expect(error).toMatchObject({ status: 429 });
       expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(scopedNotices).toEqual([
+        'GitLab rate limit reached. Pausing shared requests for 3 seconds.',
+      ]);
       expect(await client.getProjectCiConfigPath(2)).toBeNull();
       expect(now - start).toBe(3000);
       expect(retryNotices).toEqual([]);

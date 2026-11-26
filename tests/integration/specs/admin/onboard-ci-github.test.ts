@@ -63,11 +63,17 @@ describe('GitHub bulk CI onboarding', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true', GITHUB_TOKEN: 'github-token' });
+    harness.withExtraEnv({
+      [ALPHA_ENV_VAR]: 'true',
+      GITHUB_TOKEN: 'github-token',
+      __SQ_CLI_TEST_FAST_WRITES: '1',
+    });
     console = new FakeConsole();
     const previousCwd = process.cwd();
     const previousHome = process.env[ENV_SONAR_USER_HOME];
     const previousKeychain = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    const previousFastWrites = process.env.__SQ_CLI_TEST_FAST_WRITES;
+    process.env.__SQ_CLI_TEST_FAST_WRITES = '1';
     const restoreNetwork = isolateNetworkEnv();
     mkdirSync(harness.cwd.path, { recursive: true });
     process.chdir(harness.cwd.path);
@@ -82,6 +88,7 @@ describe('GitHub bulk CI onboarding', () => {
       restoreNetwork();
       restoreEnv(ENV_SONAR_USER_HOME, previousHome);
       restoreEnv('SONARQUBE_CLI_KEYCHAIN_FILE', previousKeychain);
+      restoreEnv('__SQ_CLI_TEST_FAST_WRITES', previousFastWrites);
     };
   });
 
@@ -280,7 +287,7 @@ describe('GitHub bulk CI onboarding', () => {
       false,
     );
     expect(console.findCall('warn', "'unknown' from --repos-file not found")).toBeDefined();
-  }, 15_000);
+  });
 
   it('does not open a second PR on a subsequent run', async () => {
     const { run, github, telemetryEvents } = await setup();
