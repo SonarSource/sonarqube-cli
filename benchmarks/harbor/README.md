@@ -23,9 +23,12 @@ To read the trajectories, `bun benchmarks/harbor/report/trajectory-report.ts <jo
 
 The release report turns a run into data. The `report` job builds it with `report/run-json.ts` (below). Every run is published: the `publish` job runs whenever the release report was built and uploaded, even if some trials failed, so a regression stays in the history. SIP replaces the whole site at each upload, so the job rebuilds the full site every time: `report/sip.sh pull <dir>` downloads what is published (`index.json`, then the runs it lists), `report/build-site.ts <published dir> <release-report dir> <out dir>` adds this run, and `report/sip.sh push <dir>` zips the site and publishes it. The site holds the reference run (the one made with the stable CLI) in full, the 10 latest other runs in full (the oldest leaves), and for each former reference only its `run.json`, with one file per trial to stay under the SIP limits (10 MB per served file, 50 MB per upload; `push` checks both). When a run is marked as the reference, the previous reference becomes a former reference. `build-site.ts` also replaces anything that looks like a GitHub, SonarQube, AWS or Anthropic token in the trial files of the new run with `[redacted]`: SIP runs a SonarQube Cloud analysis on the pull request of every upload, and a token-shaped text in an agent output (the example token that `sonar integrate` prints, for instance) fails its quality gate.
 
+The evolution page (`report/evolution-page-template.html`, copied to the site root by `build-site.ts`) reads `index.json`, the `run.json` of the reference run and the `references/<id>.json` of the former references with `fetch`, and draws one column per reference, ordered by date: a box plot and the dots of the trials for one task and one measure, chosen in the side bar. Clicking a column shows that reference below the chart, with its trials. It computes the medians in the page, so a former reference needs nothing more than its `run.json`.
+
 ```
 index.json            reference, latest runs, former references (run ids)
 index.html            lists the runs, each linking to its run.json
+evolution.html        the evolution page, read from index.json and the run files
 runs/<run id>/run.json, runs/<run id>/trials/<trial id>.json
 references/<run id>.json
 ```
