@@ -42,7 +42,7 @@ const ROW_INDENT = 4;
 const TARGET_INDENT = 6;
 const COLUMN_GAP = 2;
 const MIN_DESCRIPTION_WIDTH = 24;
-const DOCS_LINK_GAP = 6;
+const FOOTER_LABEL_WIDTH = 'Feedback'.length;
 const ROOT_DOCUMENTATION_URL = 'https://sonarsource.com/sonarqube/cli';
 const ROOT_FEEDBACK_URL = 'https://forms.gle/jrGic3awT5t5vf7V9';
 
@@ -281,8 +281,8 @@ export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): stri
       (line) =>
         `    ${line.replace(/sonar auth login|sonar integrate/g, (command) => softBlue(command))}`,
     );
-  const footerLink = (label: string, url: string, gap: number) => {
-    const prefix = `  ${label}${' '.repeat(gap)}`;
+  const footerLink = (label: string, url: string) => {
+    const prefix = `  ${padToWidth(label, FOOTER_LABEL_WIDTH)}${' '.repeat(COLUMN_GAP)}`;
     const lines = wrap(url, width - Bun.stringWidth(prefix));
     return [
       `${prefix}${softBlue(lines[0] ?? '')}`,
@@ -311,8 +311,8 @@ export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): stri
     '',
     ...prose('Run sonar <command> --help for options and examples.'),
     '',
-    ...footerLink('Docs', ROOT_DOCUMENTATION_URL, DOCS_LINK_GAP),
-    ...footerLink('Feedback', ROOT_FEEDBACK_URL, 2),
+    ...footerLink('Docs', ROOT_DOCUMENTATION_URL),
+    ...footerLink('Feedback', ROOT_FEEDBACK_URL),
     '',
   ].join('\n');
 }

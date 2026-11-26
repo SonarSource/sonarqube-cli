@@ -512,6 +512,7 @@ describe('SonarCommand', () => {
     it('renders commands in the data category in root help', () => {
       const root = sonarCommand('sonar');
       root.command('badge').description('Print status badges').rootHelp({ category: 'data' });
+      root.command('remediate').description('Fix issues').rootHelp({ category: 'solve' });
       const help = getCustomRootHelp(root, root.createHelp());
       expect(help.indexOf('DATA')).toBeLessThan(help.indexOf('Print status badges'));
       expect(help.indexOf('Print status badges')).toBeLessThan(help.indexOf('SOLVE'));
