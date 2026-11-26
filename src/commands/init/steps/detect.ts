@@ -21,6 +21,8 @@
 import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { ImportApiClient } from '@/commands/import/import-api.ts';
+import { resolveOrg } from '@/commands/import/resolve-options.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   authMatchesRecordedConnection,
@@ -217,7 +219,7 @@ function bindingUnavailable(reason: string): InvalidOptionError {
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { auth, console, interactive, intent, telemetry }: DetectDeps,
+  { auth, http, console, interactive, intent, telemetry }: DetectDeps,
 ): Promise<InitPath> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
@@ -239,22 +241,23 @@ async function chooseNewProjectPath(
     }
     return { path: 'no-project', projectRoot, remote };
   }
-  if (intent?.kind === 'bind') {
-    telemetry?.detected('bound_new').record('project_bind', 'success');
-    return { path: 'bound-new', projectRoot, remote, repositorySlug };
-  }
-  if (intent || !interactive) {
+  if (intent?.kind !== 'bind' && (intent || !interactive)) {
     // Without an intent, the no-project step names the options that would answer it.
     return { path: 'no-project', projectRoot, remote, repositorySlug };
   }
 
   const project = telemetry?.detected('bound_new');
   project?.begin('project_bind');
+  const organization = await resolveOrg(new ImportApiClient(http), auth.orgKey);
+  if (intent?.kind === 'bind') {
+    project?.record('project_bind', 'success');
+    return { path: 'bound-new', projectRoot, remote, repositorySlug, organization };
+  }
   const bind = requireAnswer(
     await console.confirmPrompt('Bind this repository to a new SonarQube project?', true),
   );
   project?.record('project_bind', bind ? 'success' : 'declined');
   return bind
-    ? { path: 'bound-new', projectRoot, remote, repositorySlug }
+    ? { path: 'bound-new', projectRoot, remote, repositorySlug, organization }
     : { path: 'no-project', projectRoot, remote };
 }

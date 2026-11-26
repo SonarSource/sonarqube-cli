@@ -22,6 +22,7 @@ import { authLogin } from '@/commands/auth/login.ts';
 import { AuthResolver, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { UsersClient } from '@/core/server/users.ts';
 
 import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
 import { createOrganizationHook } from './organization.ts';
@@ -43,6 +44,7 @@ export async function resolveInitAuth(
     throw current.error;
   }
   if (current.value) {
+    await validateActiveConnection(ctx, current.value);
     telemetry?.record('login', 'already_done');
     return current.value;
   }
@@ -73,6 +75,32 @@ export async function resolveInitAuth(
     telemetry.record('login', 'success');
   }
   return fresh;
+}
+
+/** Saved credentials may have expired or been revoked since login. */
+async function validateActiveConnection(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
+): Promise<void> {
+  const { httpClient } = ctx.withAuth(auth).connection;
+  const status = await new UsersClient(httpClient)
+    .checkTokenValidity()
+    .mapErr(
+      (cause) =>
+        new CommandFailedError('Could not validate the active SonarQube connection.', {
+          cause,
+          remediationHint:
+            'Check your network connection and the server status, then rerun the command.',
+        }),
+    )
+    .orThrow();
+  if (status === 'invalid') {
+    throw new CommandFailedError('The active SonarQube token is invalid or expired.', {
+      remediationHint: auth.comesFromEnv()
+        ? 'Set SONARQUBE_CLI_TOKEN to a valid user token, then rerun the command.'
+        : "Run 'sonar auth login' to re-authenticate, then rerun the command.",
+    });
+  }
 }
 
 /** The invocation's resolver memoized the pre-login answer, so read the new login with a new one. */

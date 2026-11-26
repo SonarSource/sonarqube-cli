@@ -104,6 +104,17 @@ export async function bindNewRoots(
       : undefined;
   }
   const { auth, http, console, dryRun } = deps;
+  const api = new ImportApiClient(http);
+  let org: ResolvedOrg;
+  try {
+    org = await resolveOrg(api, auth.orgKey);
+  } catch (error) {
+    recordBindDecision(roots, deps, 'failed');
+    for (const { path } of roots) {
+      deps.telemetry?.projectLabelled(path)?.stopAt('project_bind', classifyInitFailure(error));
+    }
+    throw error;
+  }
   const noun = roots.length === 1 ? 'project' : 'projects';
   const consent =
     required ||
@@ -118,8 +129,6 @@ export async function bindNewRoots(
     return undefined;
   }
 
-  const api = new ImportApiClient(http);
-  const org = await resolveOrg(api, auth.orgKey);
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
   // The browser authorization and the import both change things, so a preview stops short of them.
   if (dryRun) {
