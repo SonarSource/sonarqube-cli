@@ -115,9 +115,9 @@ function padToWidth(text: string, width: number): string {
   return text + ' '.repeat(Math.max(0, width - Bun.stringWidth(text)));
 }
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 const LIFECYCLE_BADGES = [ALPHA_HELP_TAG, BETA_HELP_TAG, DEPRECATED_HELP_TAG];
-const AVAILABILITY_BADGES = ['[SonarQube Cloud only]', '[Vortex]'];
+const AVAILABILITY_BADGES = new Set(['[SonarQube Cloud only]', '[Vortex]']);
 const BADGE_PATTERN = new RegExp(
   [...LIFECYCLE_BADGES, ...AVAILABILITY_BADGES].map(escapeRegExp).join('|'),
   'g',
@@ -125,7 +125,7 @@ const BADGE_PATTERN = new RegExp(
 
 function colorBadges(text: string): string {
   return text.replace(BADGE_PATTERN, (badge) =>
-    AVAILABILITY_BADGES.includes(badge) ? cyan(badge) : purple(badge),
+    AVAILABILITY_BADGES.has(badge) ? cyan(badge) : purple(badge),
   );
 }
 
