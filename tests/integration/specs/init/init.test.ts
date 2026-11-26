@@ -26,6 +26,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
 
+import { readInitExecutedEvents } from '../../../_common/telemetry-helpers.ts';
 import type { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../../harness';
 import { TestHarness } from '../../harness';
 import { git, initGitRepo } from '../hook/git-test-helpers.ts';
@@ -37,6 +38,7 @@ const AZURE_REMOTE = 'https://dev.azure.com/example/project/_git/repository';
 const GITLAB_REMOTE = 'https://gitlab.com/example/repository.git';
 const TIMEOUT = { timeout: 30000 };
 const INTEGRATE_PROMPT = 'Set up your coding agents';
+const SELECT_PROMPT = 'Select an organization';
 
 describe('sonar init', () => {
   let harness: TestHarness;
@@ -705,7 +707,7 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain(`Organization '${NEW_ORG}' was created`);
-        expect(output).toContain("run 'sonar init' again");
+        expect(output).toContain('sign in again');
         expect(calls(server, 'POST', '/api/organizations/create')).toHaveLength(1);
       },
       TIMEOUT,
@@ -730,6 +732,159 @@ describe('sonar init', () => {
           server.getRecordedRequests().filter((r) => r.path.startsWith('/billing/subscriptions')),
         ).toHaveLength(0);
         expect(calls(server, 'POST', '/api/organizations/create')).toHaveLength(0);
+        expect(result.stdout).not.toContain(SELECT_PROMPT);
+        const connection = harness.stateJsonFile.asJson().auth.connections[0] as { orgKey: string };
+        expect(connection.orgKey).toBe(ORG);
+        expect(calls(server, 'POST', '/api/projects/create')).toHaveLength(0);
+      },
+      TIMEOUT,
+    );
+  });
+
+  describe('organization creation for an account with organizations', () => {
+    const NEW_ORG = 'brand-new-org';
+    const SECOND_ORG = 'second-org';
+
+    async function startServer(
+      organizations: { key: string; name: string }[],
+      configure: (server: FakeSonarQubeServerBuilder) => void = () => {},
+    ) {
+      harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+      harness.state().withTelemetryEnabled();
+      const builder = newCloudServer().withOrganizations(organizations);
+      configure(builder);
+      const server = await builder.start();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${server.recordedAuthServerUrl()}\n`,
+      );
+      return server;
+    }
+
+    function calls(server: FakeSonarQubeServer, method: string, path: string) {
+      return server.getRecordedRequests().filter((r) => r.method === method && r.path === path);
+    }
+
+    /** Moves past the memberships and manual entry to the creation option, which comes last. */
+    async function chooseCreate(
+      session: ReturnType<typeof harness.runInteractive>,
+      membershipCount: number,
+    ) {
+      await session.waitText(SELECT_PROMPT);
+      for (let i = 0; i <= membershipCount; i++) {
+        session.keyDown();
+      }
+      session.keyEnter();
+    }
+
+    async function nameTheOrganization(session: ReturnType<typeof harness.runInteractive>) {
+      await session.waitText('Organization name');
+      session.write('Brand New Org');
+      session.keyEnter();
+    }
+
+    it.each([
+      [
+        'several memberships',
+        [
+          { key: ORG, name: 'My Org' },
+          { key: SECOND_ORG, name: 'Second Org' },
+        ],
+      ],
+    ])(
+      'creates a Free organization from the list with %s and continues with it',
+      async (_title, organizations) => {
+        const server = await startServer(organizations);
+        initGitRepo(harness.cwd.path);
+
+        const session = harness.runInteractive('init', { browserToken: TOKEN });
+        await chooseCreate(session, organizations.length);
+        await nameTheOrganization(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        const [event] = readInitExecutedEvents(harness.sonarUserHome.path);
+        expect(event.event_payload).toMatchObject({
+          steps: expect.arrayContaining(['login:success', 'create_org:success']),
+        });
+        expect(result.stdout).not.toContain('Create an organization now?');
+        expect(result.stdout).toContain(`Created organization 'Brand New Org' (key: ${NEW_ORG})`);
+        const [creation] = calls(server, 'POST', '/api/organizations/create');
+        expect(new URLSearchParams(creation.body).get('key')).toBe(NEW_ORG);
+        const subscriptions = calls(server, 'POST', '/billing/subscriptions');
+        expect(subscriptions).toHaveLength(1);
+        expect(JSON.parse(subscriptions[0].body ?? '{}')).toMatchObject({
+          entityId: `${NEW_ORG}-uuid-v4`,
+          priceId: 'price-free',
+        });
+        const connection = harness.stateJsonFile.asJson().auth.connections[0] as { orgKey: string };
+        expect(connection.orgKey).toBe(NEW_ORG);
+        expect(calls(server, 'POST', '/api/projects/create')).toHaveLength(0);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'creates nothing when the user cancels at the organization name',
+      async () => {
+        const server = await startServer([
+          { key: ORG, name: 'My Org' },
+          { key: SECOND_ORG, name: 'Second Org' },
+        ]);
+
+        const session = harness.runInteractive('init', { browserToken: TOKEN });
+        await chooseCreate(session, 2);
+        await session.waitText('Organization name');
+        session.keyCtrlC();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).not.toBe(0);
+        const [event] = readInitExecutedEvents(harness.sonarUserHome.path);
+        expect(event.event_payload).toMatchObject({
+          steps: ['login:success', 'create_org:failed'],
+          stopped_at: 'create_org',
+          failure_reason: 'cancelled',
+        });
+        expect(calls(server, 'POST', '/api/organizations/create')).toHaveLength(0);
+        expect(calls(server, 'POST', '/billing/subscriptions')).toHaveLength(0);
+        expect(calls(server, 'POST', '/api/projects/create')).toHaveLength(0);
+      },
+      TIMEOUT,
+    );
+
+    it.each([403, 404])(
+      'falls back to the list without the option when creation answers %d',
+      async (status) => {
+        const server = await startServer(
+          [
+            { key: ORG, name: 'My Org' },
+            { key: SECOND_ORG, name: 'Second Org' },
+          ],
+          (builder) => builder.withOrganizationCreateRejected(status),
+        );
+        initGitRepo(harness.cwd.path);
+
+        const session = harness.runInteractive('init', { browserToken: TOKEN });
+        await chooseCreate(session, 2);
+        await nameTheOrganization(session);
+        await session.accept(SELECT_PROMPT);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        const [event] = readInitExecutedEvents(harness.sonarUserHome.path);
+        expect(event.event_payload).toMatchObject({
+          steps: expect.arrayContaining(['login:success', 'create_org:failed']),
+        });
+        expect(event.event_payload.stopped_at).toBeNull();
+        expect(result.stderr).toContain(
+          'Organization creation is not available for this account. Choose one of your organizations instead.',
+        );
+        expect(calls(server, 'POST', '/billing/subscriptions')).toHaveLength(0);
+        const connection = harness.stateJsonFile.asJson().auth.connections[0] as { orgKey: string };
+        expect(connection.orgKey).toBe(ORG);
+        expect(calls(server, 'POST', '/api/projects/create')).toHaveLength(0);
       },
       TIMEOUT,
     );

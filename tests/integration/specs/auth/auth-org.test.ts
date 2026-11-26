@@ -229,7 +229,9 @@ describe('auth org', () => {
         const server = await cloudServer().start();
         signInToOrgA(server.baseUrl());
 
-        const session = harness.runInteractive('auth org');
+        const session = harness.runInteractive('auth org', {
+          extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+        });
         await session.waitText('Select an organization');
         session.keyDown();
         session.keyEnter();
@@ -250,7 +252,9 @@ describe('auth org', () => {
         const server = await cloudServer().start();
         signInToOrgA(server.baseUrl());
 
-        const session = harness.runInteractive('auth org');
+        const session = harness.runInteractive('auth org', {
+          extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+        });
         await session.waitText('Select an organization');
         session.keyEnter();
         const result = await session.waitFinish();
@@ -288,7 +292,9 @@ describe('auth org', () => {
         const server = await cloudServer().start();
         signInToOrgA(server.baseUrl());
 
-        const session = harness.runInteractive('auth org');
+        const session = harness.runInteractive('auth org', {
+          extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+        });
         await session.waitText('Select an organization');
         session.keyCtrlC();
         const result = await session.waitFinish();
