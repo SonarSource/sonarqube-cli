@@ -65,7 +65,11 @@ describe('sonar init', () => {
   }
 
   function newCloudServer() {
-    return harness.newFakeServer().asSonarCloud().withAuthToken(TOKEN);
+    return harness
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken(TOKEN)
+      .withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }]);
   }
 
   function withRemote(url: string) {

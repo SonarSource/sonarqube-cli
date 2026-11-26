@@ -52,7 +52,11 @@ describe('sonar init telemetry', () => {
   });
 
   function newCloudServer() {
-    return harness.newFakeServer().asSonarCloud().withAuthToken(TOKEN);
+    return harness
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken(TOKEN)
+      .withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }]);
   }
 
   async function signInToCloud(configure: (server: FakeSonarQubeServerBuilder) => void = () => {}) {
