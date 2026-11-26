@@ -237,18 +237,27 @@ export async function getUserSelectedOrganization(
   }
   const choice = await selectOrganization(console, orgOptions, canCreate);
   if (choice === CREATE_NEW && canCreate) {
-    try {
-      return await createFreeOrganization(client, console, progress);
-    } catch (error) {
-      if (!(error instanceof OrganizationCreationUnavailableError)) {
-        throw error;
-      }
-      progress?.record('create_org', 'failed');
-      console.warn(`${error.message} Choose one of your organizations instead.`);
-      return resolveChoice(client, console, await selectOrganization(console, orgOptions, false));
-    }
+    return createOrganizationOrSelectExisting(client, console, orgOptions, progress);
   }
   return resolveChoice(client, console, choice);
+}
+
+async function createOrganizationOrSelectExisting(
+  client: OrganizationsClient,
+  console: Console,
+  orgOptions: SelectOption<string>[],
+  progress?: OrganizationSetupProgress,
+): Promise<string> {
+  try {
+    return await createFreeOrganization(client, console, progress);
+  } catch (error) {
+    if (!(error instanceof OrganizationCreationUnavailableError)) {
+      throw error;
+    }
+    progress?.record('create_org', 'failed');
+    console.warn(`${error.message} Choose one of your organizations instead.`);
+    return resolveChoice(client, console, await selectOrganization(console, orgOptions, false));
+  }
 }
 
 async function selectOrganization(
