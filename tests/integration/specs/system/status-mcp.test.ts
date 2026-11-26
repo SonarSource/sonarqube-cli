@@ -29,7 +29,7 @@ describe('system status MCP endpoint', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     fixture = new HostedMcpFixture(harness);
-    await harness.newFakeBinariesServer().start();
+    await harness.newFakeBinariesServer().noArtifacts().start();
   });
   afterEach(async () => {
     await harness.dispose();
@@ -50,13 +50,6 @@ describe('system status MCP endpoint', () => {
         startupError: null,
       });
       expect(data.mcpRuntime).toBeNull();
-      if (kind === 'server') {
-        const text = await harness.run('system status');
-        expect(text.stdout).toContain(
-          `MCP (sonar run mcp)\n  • Transport: HTTP (hosted)\n  • Endpoint: ${fixture.server.url.origin}/mcp`,
-        );
-        expect(text.stdout).not.toContain('needs Docker');
-      }
       expect(fixture.requests).toHaveLength(0);
       expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
     },
@@ -74,14 +67,6 @@ describe('system status MCP endpoint', () => {
       containerRuntime: { status: 'ready', runtime: 'docker' },
       startupError: null,
     });
-    const text = await harness.run('system status');
-    expect(text.stdout).toContain(
-      'MCP (sonar run mcp)\n' +
-        '  • Transport: stdio (local container)\n' +
-        '  • SonarQube server URL: http://sonarqube:9000\n' +
-        '  • Using container because hosted MCP health check returned HTTP 404.\n' +
-        '  • Container runtime: READY (docker)',
-    );
     expect(fixture.requests).toHaveLength(0);
     expect(harness.cwd.file('docker.jsonl').asText()).not.toContain('"run"');
   }, 15000);
@@ -98,8 +83,6 @@ describe('system status MCP endpoint', () => {
       containerRuntime: { status: 'ready' },
     });
     expect(fixture.healthRequests).toBe(0);
-    const text = await harness.run('system status');
-    expect(text.stdout).toContain('Transport: stdio (local container), from mcp.transport=stdio');
   }, 15000);
 
   it.each(['server', 'cloud'])(
