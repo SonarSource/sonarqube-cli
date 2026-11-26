@@ -1,10 +1,15 @@
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { readJson } from './read-json.ts';
 import { renderRunPage, renderTrialPage } from './run-page.ts';
 
 const SCHEMA_VERSION = 2;
+const EVOLUTION_TEMPLATE = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'evolution-page-template.html',
+);
 const MAX_RECENT_RUNS = 10;
 const SAFE_ID = /^[\w.-]+$/;
 const REDACTED = '[redacted]';
@@ -128,7 +133,7 @@ function renderPage(outDir: string, index: Index): string {
     runSection('Latest runs', index.recent.map(full)),
     runSection('Former references', index.formerReferences.map(former)),
   ].join('');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Harbor benchmark</title></head><body><h1>Harbor benchmark</h1>${sections}</body></html>\n`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Harbor benchmark</title></head><body><h1>Harbor benchmark</h1><p><a href="evolution.html">Evolution by CLI version</a></p>${sections}</body></html>\n`;
 }
 
 function redactTrials(trialsDir: string): void {
@@ -182,6 +187,7 @@ function build(publishedDir: string, newRunDir: string, outDir: string): void {
   }
   writeFileSync(join(outDir, 'run.html'), renderRunPage());
   writeFileSync(join(outDir, 'trial.html'), renderTrialPage());
+  cpSync(EVOLUTION_TEMPLATE, join(outDir, 'evolution.html'));
   writeFileSync(join(outDir, 'index.json'), JSON.stringify(index));
   writeFileSync(join(outDir, 'index.html'), renderPage(outDir, index));
 }
