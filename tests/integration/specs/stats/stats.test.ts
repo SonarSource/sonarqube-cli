@@ -40,6 +40,7 @@ interface StatsJsonMetric {
   metric: string;
   windowValue: number;
   allTimeValue: number;
+  series: number[];
 }
 
 interface StatsJson {
@@ -144,7 +145,12 @@ describe('sonar stats', () => {
       expect(result.exitCode).toBe(0);
       const json = parseStatsJson(result.stdout);
       expect(json.hasHistory).toBe(true);
-      expect(runsMetric(json)).toEqual({ metric: 'runs', windowValue: 1, allTimeValue: 1 });
+      expect(runsMetric(json)).toEqual({
+        metric: 'runs',
+        windowValue: 1,
+        allTimeValue: 1,
+        series: expect.any(Array),
+      });
       expect(json.analyzers).toEqual({ total: 1, rows: [{ analyzer: 'sonar-secrets', runs: 1 }] });
     },
     { timeout: 30000 },
@@ -185,7 +191,12 @@ describe('sonar stats', () => {
       expect(result.exitCode).toBe(0);
       const json = parseStatsJson(result.stdout);
       expect(json.window).toEqual({ since: 'all' });
-      expect(runsMetric(json)).toEqual({ metric: 'runs', windowValue: 1, allTimeValue: 1 });
+      expect(runsMetric(json)).toEqual({
+        metric: 'runs',
+        windowValue: 1,
+        allTimeValue: 1,
+        series: expect.any(Array),
+      });
     },
     { timeout: 30000 },
   );
@@ -209,7 +220,12 @@ describe('sonar stats', () => {
       expect(jsonResult.exitCode).toBe(0);
       const json = parseStatsJson(jsonResult.stdout);
       expect(json.hasHistory).toBe(true);
-      expect(runsMetric(json)).toEqual({ metric: 'runs', windowValue: 0, allTimeValue: 1 });
+      expect(runsMetric(json)).toEqual({
+        metric: 'runs',
+        windowValue: 0,
+        allTimeValue: 1,
+        series: expect.any(Array),
+      });
       expect(json.entitlement).not.toBeNull();
     },
     { timeout: 30000 },
@@ -334,6 +350,7 @@ describe('sonar stats', () => {
         metric: 'runs',
         windowValue: expectedRuns,
         allTimeValue: 1,
+        series: expect.any(Array),
       });
     },
     { timeout: 30000 },
