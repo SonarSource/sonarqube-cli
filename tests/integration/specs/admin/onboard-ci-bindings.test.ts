@@ -79,7 +79,7 @@ describe('CI onboarding Server bindings', () => {
   const newServer = () => harness.newFakeServer().withAuthToken(TOKEN).withDopSettings([GITHUB]);
   const client = (url: string) => new ProjectBindingsClient(new SonarHttpClient(url, TOKEN));
 
-  it('selects a named GitHub integration and keeps its full repository names isolated', async () => {
+  it('normalizes repository names and keeps bindings isolated to the selected integration', async () => {
     const server = await newServer()
       .withDopSettings([
         ENTERPRISE,
@@ -87,10 +87,10 @@ describe('CI onboarding Server bindings', () => {
         { id: 'gitlab-id', key: 'gitlab', type: 'gitlab', url: 'https://gitlab.com' },
       ])
       .withProjectBindings([
-        { repository: 'first-org/shared', projectKey: 'first-project', dopSettingId: GITHUB.id },
+        { repository: 'First-Org/Shared', projectKey: 'First-Project', dopSettingId: GITHUB.id },
         { repository: 'second-org/shared', projectKey: 'second-project', dopSettingId: GITHUB.id },
         {
-          repository: 'first-org/shared',
+          repository: 'First-Org/Shared',
           projectKey: 'another-integration',
           dopSettingId: ENTERPRISE.id,
         },
@@ -102,7 +102,7 @@ describe('CI onboarding Server bindings', () => {
     expect(setting).toEqual(GITHUB);
     expect(await bindings.getAllProjectBindings(setting.id).orThrow()).toEqual(
       new Map([
-        ['first-org/shared', 'first-project'],
+        ['first-org/shared', 'First-Project'],
         ['second-org/shared', 'second-project'],
       ]),
     );
