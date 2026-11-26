@@ -18,15 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
-import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import {
+  type CommandAuthenticatedInvocationContext,
+  TelemetryFact,
+} from '@/core/commands/invocation-context.ts';
 import { installContainerScanner } from '@/core/host/install/container-scanner.ts';
 import logger from '@/core/observability/logger.ts';
 import { ProcessTimedOutError, type SpawnResult } from '@/core/process/process.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
 import {
   containerScanErrorReport,
+  countContainerAnalysisErrors,
   formatContainerScanJson,
   parseContainerScanReport,
 } from './container-scanner-report.ts';
@@ -61,6 +68,7 @@ interface ExecutionFailure {
 interface ContainerScanExecution {
   result: SpawnResult;
   executionFailure?: ExecutionFailure;
+  scanDurationMs?: number;
 }
 
 const EMPTY_SPAWN_RESULT: SpawnResult = { exitCode: null, stdout: '', stderr: '' };
@@ -89,8 +97,12 @@ async function executeContainerScan(
     };
   }
 
+  const startedAt = performance.now();
   try {
-    return { result: await runContainerScanner(binary, image, options, env) };
+    return {
+      result: await runContainerScanner(binary, image, options, env),
+      scanDurationMs: Math.round(performance.now() - startedAt),
+    };
   } catch (error) {
     const isKnownError =
       error instanceof ProcessTimedOutError || error instanceof CommandFailedError;
@@ -100,6 +112,7 @@ async function executeContainerScan(
     }
     return {
       result: EMPTY_SPAWN_RESULT,
+      scanDurationMs: Math.round(performance.now() - startedAt),
       executionFailure: {
         message: isKnownError ? error.message : 'Could not start the container scanner.',
         exitCode: error instanceof ContainerScanCancelledError ? error.exitCode : 1,
@@ -117,7 +130,7 @@ export async function analyzeContainer(
   const env = await prepareContainerScannerEnv(ctx.auth);
   const redact = (message: string): string =>
     ctx.auth.token ? message.replaceAll(ctx.auth.token, '[redacted]') : message;
-  const { result, executionFailure } = await executeContainerScan(
+  const { result, executionFailure, scanDurationMs } = await executeContainerScan(
     image,
     options,
     env,
@@ -138,6 +151,25 @@ export async function analyzeContainer(
       },
       executionFailure?.exitCode,
     );
+  if (scanDurationMs !== undefined) {
+    ctx.recordTelemetry(
+      new TelemetryFact(
+        CLI_ANALYSIS_COMPLETED,
+        {
+          analyzer: 'sonar-container-scanner',
+          caller_command: 'analyze container',
+          analysis_id: randomUUID(),
+          findings_count: report.issues.length,
+          errors_count: countContainerAnalysisErrors(report),
+          failures_count: report.exitCode === 1 ? 1 : 0,
+          exit_code: report.exitCode,
+          scan_duration_ms: scanDurationMs,
+          details: '',
+        } satisfies AnalysisCompletedPayload,
+        { auth: ctx.auth },
+      ),
+    );
+  }
   const terminalText = (message: string): string =>
     redact(sanitizeScannerTerminalText(redact(message)));
   const scannerStderr =

@@ -26,8 +26,8 @@ import { recordStatsEvent } from './store.ts';
 
 export { dedupeAgainstSeen, upsertRuleMessages } from './store.ts';
 
-/** Envelope every analyzer's `CliAnalysisCompleted` fact carries; satisfied structurally
- *  by `AnalysisCompletedPayload`, not imported (src/core can't import src/commands). */
+/** Envelope each stats-tracked analyzer's `CliAnalysisCompleted` fact carries; satisfied
+ *  structurally by `AnalysisCompletedPayload<StatsAnalyzer>` (src/core can't import src/commands). */
 export interface AnalysisFactEnvelope {
   caller_command: string;
   analyzer: StatsAnalyzer;
