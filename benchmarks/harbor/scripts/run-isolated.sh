@@ -8,8 +8,10 @@ WORKDIR="${RUN_ROOT}/work"
 SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_PATH="${WORKDIR}/harbor/scripts/run-isolated.sh"
 AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION,AGENT,CODEX_VERSION
-RUN_ENV=AGENT,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
+INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION,AGENT,CODEX_VERSION,AGENT_PLUGIN,AGENT_PLUGIN_REF
+RUN_ENV=AGENT,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HB_AGENT_PLUGIN_DIR,HB_AGENT_PLUGIN_REF,HARBOR_HOST_ENVIRONMENT_ALLOW
+AGENT_PLUGIN_REPO=https://github.com/SonarSource/sonarqube-agent-plugins.git
+AGENT_PLUGIN_DIR="${AGENT_HOME}/sonarqube-agent-plugins"
 ROOT_DIR_NAMES=(app logs tests solution installed-agent)
 PORTKEY_PROXY_PORT=8787
 PORTKEY_PROXY_PID=
@@ -81,6 +83,12 @@ install_agent() {
   esac
 }
 
+install_agent_plugin() {
+  [[ "${AGENT_PLUGIN}" == with ]] || return 0
+  git clone --quiet --depth 1 --branch "${AGENT_PLUGIN_REF}" "${AGENT_PLUGIN_REPO}" "${AGENT_PLUGIN_DIR}"
+  echo "SonarQube agent plugin: ${AGENT_PLUGIN_REF} ($(git -C "${AGENT_PLUGIN_DIR}" rev-parse --short HEAD))"
+}
+
 install_tools() {
   if [[ -n "${ARTIFACTORY_USER:-}" ]]; then
     export PIP_INDEX_URL="https://${ARTIFACTORY_USER}:${ARTIFACTORY_ACCESS_TOKEN}@repox.jfrog.io/artifactory/api/pypi/sonarsource-pypi/simple"
@@ -91,9 +99,26 @@ install_tools() {
   "${HOME}/uv-venv/bin/uv" tool install --python "${HARBOR_PYTHON_VERSION}" "harbor==${HARBOR_VERSION}"
   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
   install_agent
+  install_agent_plugin
   command -v jq >/dev/null || { echo "jq is required by the task verifiers" >&2; exit 1; }
   install -m 755 "${WORKDIR}/harbor/ci/sonar-wrapper.sh" "${HOME}/.local/bin/sonar"
   echo "sonar CLI: $("${HOME}/.local/share/sonarqube-cli/bin/sonar" --version | tail -n 1)"
+}
+
+codex_config() {
+  local base="${WORKDIR}/harbor/ci/codex-portkey.toml"
+  if [[ -z "${HB_AGENT_PLUGIN_DIR:-}" ]]; then
+    echo "${base}"
+    return
+  fi
+  local config="${WORKDIR}/codex-config.toml"
+  # Harbor writes this file over $CODEX_HOME/config.toml, which drops what `codex plugin add` wrote there.
+  {
+    cat "${base}"
+    printf '\n[marketplaces.sonar]\nsource_type = "local"\nsource = "%s"\n' "${HB_AGENT_PLUGIN_DIR}"
+    printf '\n[plugins."sonarqube@sonar"]\nenabled = true\n'
+  } > "${config}"
+  echo "${config}"
 }
 
 run_benchmark() {
@@ -111,7 +136,7 @@ run_benchmark() {
       expected_integration=codex
       prompt_hook=codex-prompt-submit
       file_hook=""
-      agent_options=(--agent-kwarg dangerously_bypass_hook_trust=true --agent-kwarg "config=${WORKDIR}/harbor/ci/codex-portkey.toml")
+      agent_options=(--agent-kwarg dangerously_bypass_hook_trust=true --agent-kwarg "config=$(codex_config)")
       export OPENAI_API_KEY=placeholder-portkey-handles-auth
       ;;
     *)
@@ -172,9 +197,26 @@ stop_and_collect() {
   collect_results
 }
 
+select_agent_plugin() {
+  export AGENT_PLUGIN="${AGENT_PLUGIN:-without}" HB_AGENT_PLUGIN_DIR= HB_AGENT_PLUGIN_REF=
+  case "${AGENT_PLUGIN}" in
+    without) ;;
+    with)
+      : "${AGENT_PLUGIN_REF:?AGENT_PLUGIN_REF must be set to install the agent plugin}"
+      HB_AGENT_PLUGIN_DIR="${AGENT_PLUGIN_DIR}"
+      HB_AGENT_PLUGIN_REF="${AGENT_PLUGIN_REF}"
+      ;;
+    *)
+      echo "AGENT_PLUGIN must be 'with' or 'without', got '${AGENT_PLUGIN}'" >&2
+      exit 2
+      ;;
+  esac
+}
+
 main() {
   : "${SONAR_RUN_TOKEN_ID_FILE:?SONAR_RUN_TOKEN_ID_FILE must be set}"
   export HARBOR_HOST_ENVIRONMENT_ALLOW=1
+  select_agent_plugin
   prepare
   trap stop_and_collect EXIT
   assert_agent_cannot_sudo
