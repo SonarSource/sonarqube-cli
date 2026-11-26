@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor benchmark - run</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #fafaf8; --ink: #111; --ink-2: #6b6a66; --line: #e6e5e0; --wash: rgba(11, 11, 11, 0.06); --track: rgba(11, 11, 11, 0.10);
+  --blue: #2a78d6; --fail: #d9692f; --select-bg: #184f95; --select-wash: #c3d8f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0f0f0f; --ink: #f0efec; --ink-2: #9a9992; --line: #2a2a28; --wash: rgba(255, 255, 255, 0.07); --track: rgba(255, 255, 255, 0.13);
+    --blue: #3987e5; --fail: #f2884f; --select-bg: #2a78d6; --select-wash: #1f3f6b;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.top { display: flex; gap: 28px; align-items: baseline; padding: 18px 40px; border-bottom: 1px solid var(--line); }
+.top b { font-size: 16px; }
+.top a { color: var(--ink); text-decoration: none; }
+main { max-width: 1180px; margin: 0 auto; padding: 40px; }
+a.back { color: var(--ink-2); text-decoration: none; font-size: 14px; }
+h1 { margin: 8px 0 4px; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; }
+.sub { color: var(--ink-2); }
+#tasks { margin-top: 32px; display: grid; gap: 14px; }
+.task { border: 1px solid var(--line); border-radius: 14px; padding: 6px 18px 16px; cursor: pointer; transition: background 0.15s; }
+.task:hover { background: var(--wash); }
+.task.open { background: var(--wash); }
+.head { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 12px 0; border-radius: 8px; outline-offset: 2px; }
+.head h3 { margin: 0; font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.head .count { color: var(--ink-2); font-size: 14px; }
+.head .score { min-width: 70px; text-align: right; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.head .score small { display: block; color: var(--ink-2); font-size: 12px; font-weight: 400; }
+.chev::before { content: "\25B8"; display: inline-block; color: var(--ink-2); transition: transform 0.15s; }
+.task.open .chev::before { transform: rotate(90deg); }
+.body { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 24px; align-items: start; }
+.measures { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--page); }
+.measures button { display: block; width: 100%; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); border-left: 4px solid transparent; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.measures button:last-child { border-bottom: 0; }
+.measures button:hover { background: var(--wash); }
+.measures button.on { background: var(--select-wash); border-left-color: var(--select-bg); font-weight: 600; }
+.chart .empty, .refnote { color: var(--ink-2); font-size: 13px; margin: 6px 0 0; }
+svg { display: block; width: 100%; overflow: visible; }
+svg text { fill: var(--ink-2); font: 12px system-ui, sans-serif; }
+.dot { cursor: pointer; outline: none; }
+.dot .shape { fill: var(--blue); fill-opacity: 0.85; stroke: var(--page); stroke-width: 2; transition: r 0.12s, fill-opacity 0.12s; }
+.dot .shape.bad { fill: var(--fail); }
+.dot:hover .shape, .dot:focus .shape, .dot.hl .shape { r: 9; fill-opacity: 1; stroke: var(--ink); }
+.box .hit { fill: transparent; }
+.box .body-rect { transition: fill-opacity 0.12s; }
+.box:hover .body-rect { fill-opacity: 0.28; }
+.animate .dot .shape { animation: pop 0.35s ease-out both; animation-delay: calc(var(--i) * 30ms); transform-box: fill-box; transform-origin: center; }
+@keyframes pop { from { transform: scale(0.3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .animate .dot .shape { animation: none; } .chev::before, .task { transition: none; } }
+.trials { margin: 6px 0 0 164px; cursor: default; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0 6px; color: var(--ink-2); font-size: 14px; }
+.controls button { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font: inherit; color: var(--ink-2); cursor: pointer; }
+.controls button.on { border-color: var(--ink); color: var(--ink); }
+.controls label { margin-left: auto; cursor: pointer; }
+.trial { display: grid; grid-template-columns: 80px minmax(0, 1fr) 90px; align-items: center; gap: 16px; padding: 7px 8px; border-radius: 8px; color: var(--ink); text-decoration: none; font-variant-numeric: tabular-nums; }
+.trial:hover, .trial.hl { background: var(--select-wash); }
+.trial .num { font-weight: 600; }
+.trial .track { display: block; height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.trial .track i { display: block; height: 100%; border-radius: 5px; background: var(--blue); }
+.trial .track i.bad, .trial .track i.warn { background: var(--fail); }
+.trial .val { text-align: right; }
+.none { padding: 8px; color: var(--ink-2); }
+.note { margin-top: 22px; color: var(--ink-2); font-size: 13px; }
+.tip { position: fixed; z-index: 10; pointer-events: none; max-width: 280px; padding: 8px 12px; border-radius: 8px; background: var(--ink); color: var(--page); font-size: 13px; line-height: 1.45; white-space: pre-line; opacity: 0; transition: opacity 0.1s; }
+.tip.on { opacity: 1; }
+@media (max-width: 760px) {
+  main { padding: 24px 16px; }
+  .top { padding: 14px 16px; }
+  .task { padding: 4px 12px 14px; }
+  .head { grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .head .count { display: none; }
+  .body { grid-template-columns: 1fr; gap: 12px; }
+  .measures { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .measures button { border-bottom: 0; border-left: 0; border-bottom: 3px solid transparent; text-align: center; }
+  .measures button.on { border-bottom-color: var(--select-bg); }
+  .trials { margin-left: 0; }
+  .controls label { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<div class="top"><b>Harbor benchmark</b><a href="./">Home</a></div>
+<main>
+  <a class="back" href="./">&larr; All runs</a>
+  <h1 id="title"></h1>
+  <div class="sub" id="sub"></div>
+  <div id="tasks"></div>
+  <div class="note" id="note"></div>
+</main>
+<div class="tip" id="tip" role="tooltip"></div>
+<script>
+const SAFE = /^[\w.-]+$/;
+let data = null;
+
+async function fetchJson(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${path}: ${response.status}`);
+  return response.json();
+}
+
+function pointsByTask(file) {
+  const byTask = new Map();
+  for (const trial of file.trials) {
+    const point = { id: trial.id, status: trial.status, seconds: trial.agentSeconds, steps: trial.stepCount, tokens: trial.tokens };
+    byTask.set(trial.task, [...(byTask.get(trial.task) ?? []), point]);
+  }
+  return byTask;
+}
+
+async function loadData() {
+  const runId = new URLSearchParams(location.search).get('run') ?? '';
+  if (!SAFE.test(runId)) throw new Error('This page needs ?run=<run id>.');
+  const [index, file] = await Promise.all([fetchJson('index.json'), fetchJson(`runs/${runId}/run.json`)]);
+  const referenceId = index.reference !== null && index.reference !== runId ? index.reference : null;
+  const reference = referenceId === null ? null : await fetchJson(`runs/${referenceId}/run.json`);
+  const referencePoints = reference === null ? new Map() : pointsByTask(reference);
+  return {
+    run: file.run,
+    referenceVersion: reference === null ? null : reference.run.cliVersion,
+    tasks: [...pointsByTask(file)].map(([id, trials]) => ({ id, trials, reference: referencePoints.get(id) ?? null })),
+  };
+}
+
+const MEASURES = [
+  { key: 'seconds', label: 'Time', unit: '', format: (v) => `${Math.round(v)} s`, full: (v) => `${Math.round(v)} s` },
+  { key: 'tokens', label: 'Tokens', unit: ' tokens', format: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v)}`), full: (v) => `${Math.round(v).toLocaleString('en-US')} tokens` },
+  { key: 'steps', label: 'Steps', unit: ' steps', format: (v) => `${Math.round(v)}`, full: (v) => `${Math.round(v)} steps` },
+];
+const SORTS = [['number', 'Number'], ['seconds', 'Time'], ['tokens', 'Tokens'], ['steps', 'Steps']];
+const taskState = new Map();
+function stateOf(id) {
+  if (!taskState.has(id)) taskState.set(id, { open: false, measure: MEASURES[0], sort: 'number', onlyNotPassed: false, animate: true });
+  return taskState.get(id);
+}
+
+const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const quantile = (values, p) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = (sorted.length - 1) * p;
+  const low = Math.floor(index);
+  return sorted[low] + (sorted[Math.ceil(index)] - sorted[low]) * (index - low);
+};
+const statusLabel = (point) => (point.status === 'PASS' ? 'Passed' : point.status === 'FAIL' ? 'Did not pass' : 'Error');
+
+function trialHref(id) {
+  return `trial.html?run=${encodeURIComponent(data.run.runId)}&trial=${encodeURIComponent(id)}`;
+}
+
+function box(values, x, y, half, color, opacity, name, measure) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const q1 = quantile(values, 0.25);
+  const q3 = quantile(values, 0.75);
+  const median = quantile(values, 0.5);
+  const f = measure.format;
+  const cap = half * 0.5;
+  const tip = `${name}\nMedian ${f(median)}\nMiddle half ${f(q1)} to ${f(q3)}\nRange ${f(min)} to ${f(max)}`;
+  return `<g class="box" data-tip="${esc(tip)}">
+    <rect class="hit" x="${x(min) - 4}" y="${y - half - 4}" width="${x(max) - x(min) + 8}" height="${2 * half + 8}"/>
+    <line x1="${x(min)}" x2="${x(q1)}" y1="${y}" y2="${y}" stroke="${color}" stroke-width="2"/>
+    <line x1="${x(q3)}" x2="${x(max)}" y1="${y}" y2="${y}" stroke="${color}" stroke-width="2"/>
+    <line x1="${x(min)}" x2="${x(min)}" y1="${y - cap}" y2="${y + cap}" stroke="${color}" stroke-width="2"/>
+    <line x1="${x(max)}" x2="${x(max)}" y1="${y - cap}" y2="${y + cap}" stroke="${color}" stroke-width="2"/>
+    <rect class="body-rect" x="${x(q1)}" y="${y - half}" width="${Math.max(3, x(q3) - x(q1))}" height="${2 * half}" fill="${color}" fill-opacity="${opacity}"/>
+    <line x1="${x(q1)}" x2="${x(q1)}" y1="${y - half}" y2="${y + half}" stroke="${color}" stroke-width="3"/>
+    <line x1="${x(q3)}" x2="${x(q3)}" y1="${y - half}" y2="${y + half}" stroke="${color}" stroke-width="3"/>
+    <line x1="${x(median)}" x2="${x(median)}" y1="${y - half}" y2="${y + half}" stroke="${color}" stroke-width="2" stroke-dasharray="4 3"/>
+  </g>`;
+}
+
+const DOT_OFFSETS = [0, -11, 11];
+function placeDots(points, key, x) {
+  const rowEnds = DOT_OFFSETS.map(() => -Infinity);
+  return [...points].sort((a, b) => a[key] - b[key]).map((point) => {
+    const cx = x(point[key]);
+    const free = rowEnds.findIndex((end) => cx - end >= 15);
+    const row = free === -1 ? rowEnds.indexOf(Math.min(...rowEnds)) : free;
+    rowEnds[row] = cx;
+    return { point, cx, offset: DOT_OFFSETS[row] };
+  });
+}
+
+function chart(task, state, animate) {
+  const measure = state.measure;
+  const key = measure.key;
+  const own = task.trials.filter((point) => point[key] !== null);
+  const reference = (task.reference ?? []).filter((point) => point[key] !== null);
+  if (own.length === 0) return `<div class="empty">No value for this measure.</div>`;
+  const hasReference = reference.length > 0;
+  const all = [...own, ...reference].map((point) => point[key]);
+  const low = Math.min(...all) * 0.9;
+  const high = Math.max(Math.max(...all) * 1.05, low + 1);
+  const left = 86;
+  const width = 640;
+  const x = (value) => left + ((value - low) / (high - low)) * (width - left - 16);
+  const runY = 44;
+  const referenceY = runY + 64;
+  const gridEnd = (hasReference ? referenceY : runY) + 34;
+  const axisY = gridEnd + 22;
+  const ticks = [0, 0.5, 1].map((share) => low + share * (high - low));
+  const referenceMedian = hasReference ? quantile(reference.map((point) => point[key]), 0.5) : null;
+  const dotNodes = placeDots(own, key, x).map(({ point, cx, offset }, index) => {
+    const number = task.trials.indexOf(point) + 1;
+    const label = `Trial ${number}: ${measure.full(point[key])}, ${statusLabel(point).toLowerCase()}`;
+    const cy = runY + offset;
+    return `<a class="dot" href="${esc(trialHref(point.id))}" data-trial="${esc(point.id)}" data-tip="${esc(`Trial ${number}\n${measure.full(point[key])}\n${statusLabel(point)}\nClick to open`)}" aria-label="${esc(label)}">
+      <circle class="shape ${point.status === 'PASS' ? '' : 'bad'}" cx="${cx}" cy="${cy}" r="6.5" style="--i: ${index}"/><circle cx="${cx}" cy="${cy}" r="13" fill="transparent"/></a>`;
+  });
+  return `<svg class="${animate ? 'animate' : ''}" viewBox="0 0 ${width} ${axisY + 8}" role="img" aria-label="${esc(measure.label)} of ${esc(task.id)}">
+    ${ticks.map((tick) => `<line x1="${x(tick)}" x2="${x(tick)}" y1="6" y2="${gridEnd}" stroke="var(--line)"/><text x="${x(tick)}" y="${axisY}" text-anchor="middle">${esc(measure.format(tick))}</text>`).join('')}
+    ${hasReference ? `<line x1="${x(referenceMedian)}" x2="${x(referenceMedian)}" y1="6" y2="${gridEnd}" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="3 4" opacity="0.8"/>` : ''}
+    <text x="0" y="${runY + 4}">This run</text>${hasReference ? `<text x="0" y="${referenceY + 4}">Reference</text>` : ''}
+    ${box(own.map((point) => point[key]), x, runY, 18, 'var(--blue)', 0.2, 'This run', measure)}
+    ${hasReference ? box(reference.map((point) => point[key]), x, referenceY, 14, 'var(--ink-2)', 0.18, 'Reference run', measure) : ''}
+    ${dotNodes.join('')}</svg>`;
+}
+
+function visibleTrials(task, state) {
+  const numbered = task.trials.map((point, index) => ({ point, number: index + 1 }));
+  const shown = state.onlyNotPassed ? numbered.filter((item) => item.point.status !== 'PASS') : numbered;
+  if (state.sort === 'number') return shown;
+  return [...shown].sort((a, b) => (b.point[state.sort] ?? -1) - (a.point[state.sort] ?? -1));
+}
+
+function trialRow(item, measure, max) {
+  const value = item.point[measure.key];
+  const width = value === null || max <= 0 ? 0 : Math.max(2, (value / max) * 100);
+  const kind = item.point.status === 'PASS' ? '' : item.point.status === 'FAIL' ? 'bad' : 'warn';
+  return `<a class="trial" href="${esc(trialHref(item.point.id))}" data-trial="${esc(item.point.id)}"><span class="num">Trial ${item.number}</span><span class="track"><i class="${kind}" style="width: ${width}%"></i></span><span class="val">${value === null ? '-' : esc(measure.format(value) + measure.unit)}</span></a>`;
+}
+
+function trialsSection(task, state) {
+  const id = esc(task.id);
+  const measure = state.sort === 'number' ? state.measure : MEASURES.find((item) => item.key === state.sort);
+  const max = Math.max(0, ...task.trials.map((point) => point[measure.key] ?? 0));
+  const hint = state.sort === 'number' ? `Bars show the ${measure.label.toLowerCase()}` : `Highest ${measure.label.toLowerCase()} first`;
+  const items = visibleTrials(task, state);
+  const body = items.length === 0 ? '<div class="none">Every trial passed.</div>' : items.map((item) => trialRow(item, measure, max)).join('');
+  return `<div class="trials"><div class="controls"><span>Sort by</span>${SORTS.map(([key, label]) => `<button type="button" class="${state.sort === key ? 'on' : ''}" data-sort="${key}" data-task="${id}">${label}</button>`).join('')}<span>${hint}</span><label><input type="checkbox" data-only="${id}" ${state.onlyNotPassed ? 'checked' : ''}> Only trials that did not pass</label></div>${body}</div>`;
+}
+
+function taskBlock(task) {
+  const state = stateOf(task.id);
+  const animate = state.animate;
+  state.animate = false;
+  const id = esc(task.id);
+  const passed = task.trials.filter((point) => point.status === 'PASS').length;
+  const missing = task.trials.filter((point) => point[state.measure.key] === null).length;
+  const absent = data.referenceVersion !== null && task.reference === null ? '<p class="refnote">Not in the reference run</p>' : '';
+  return `<section class="task ${state.open ? 'open' : ''}" data-task-id="${id}">
+    <div class="head" role="button" tabindex="0" aria-expanded="${state.open}" data-head="${id}"><span class="chev" aria-hidden="true"></span><h3>${id}</h3><span class="count">${task.trials.length} trials</span><span class="score">${passed} / ${task.trials.length}${missing > 0 ? `<small>${missing} without data</small>` : ''}</span></div>
+    <div class="body">
+      <nav class="measures" aria-label="Measure of ${id}">${MEASURES.map((measure) => `<button type="button" class="${measure === state.measure ? 'on' : ''}" data-key="${measure.key}" data-task="${id}">${measure.label}</button>`).join('')}</nav>
+      <div class="chart">${chart(task, state, animate)}${absent}</div>
+    </div>
+    ${state.open ? trialsSection(task, state) : ''}
+  </section>`;
+}
+
+function render(focusId) {
+  document.getElementById('tasks').innerHTML = data.tasks.map(taskBlock).join('');
+  if (focusId === undefined) return;
+  const head = [...document.querySelectorAll('[data-head]')].find((node) => node.dataset.head === focusId);
+  if (head) head.focus();
+}
+
+function toggle(id, keepFocus) {
+  const state = stateOf(id);
+  state.open = !state.open;
+  render(keepFocus ? id : undefined);
+}
+
+function show() {
+  const date = new Date(data.run.date);
+  const comparison = data.run.isReference
+    ? 'this is the reference run'
+    : data.referenceVersion === null
+      ? 'no reference run to compare with'
+      : `compared with the reference, CLI ${data.referenceVersion}`;
+  document.getElementById('title').textContent = `CLI ${data.run.cliVersion}`;
+  document.getElementById('sub').textContent = [
+    Number.isNaN(date.getTime()) ? data.run.date : date.toISOString().slice(0, 10),
+    `${data.tasks.length} tasks`,
+    `${data.run.attempts} trials per task`,
+    comparison,
+  ].join(' · ');
+  document.getElementById('note').textContent = `Click a task to list its trials. Each dot is one trial of this run, drawn on its box: click it to read what the agent did. A blue dot passed, an orange one did not. The box holds the middle half of the trials, the line goes from the lowest to the highest, the dashed line is the median.${data.referenceVersion === null ? '' : ' The grey box is the reference and the dotted line across the chart is its median.'}`;
+  render();
+}
+
+const tip = document.getElementById('tip');
+function highlight(id, on) {
+  document.querySelectorAll('[data-trial]').forEach((node) => {
+    if (node.dataset.trial === id) node.classList.toggle('hl', on);
+  });
+}
+document.addEventListener('click', (event) => {
+  const measure = event.target.closest('[data-key]');
+  if (measure) {
+    const state = stateOf(measure.dataset.task);
+    state.measure = MEASURES.find((item) => item.key === measure.dataset.key);
+    state.animate = true;
+    render();
+    return;
+  }
+  const sort = event.target.closest('[data-sort]');
+  if (sort) {
+    stateOf(sort.dataset.task).sort = sort.dataset.sort;
+    render();
+    return;
+  }
+  if (event.target.closest('a, label, input, .trials')) return;
+  const block = event.target.closest('[data-task-id]');
+  if (block) toggle(block.dataset.taskId, false);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const head = event.target.closest('[data-head]');
+  if (!head || event.target !== head) return;
+  event.preventDefault();
+  toggle(head.dataset.head, true);
+});
+document.addEventListener('change', (event) => {
+  if (!event.target.dataset.only) return;
+  stateOf(event.target.dataset.only).onlyNotPassed = event.target.checked;
+  render();
+});
+document.addEventListener('mouseover', (event) => {
+  const tipped = event.target.closest('[data-tip]');
+  if (tipped) {
+    tip.textContent = tipped.dataset.tip;
+    tip.classList.add('on');
+  }
+  const trial = event.target.closest('[data-trial]');
+  if (trial) highlight(trial.dataset.trial, true);
+});
+document.addEventListener('mouseout', (event) => {
+  if (event.target.closest('[data-tip]')) tip.classList.remove('on');
+  const trial = event.target.closest('[data-trial]');
+  if (trial) highlight(trial.dataset.trial, false);
+});
+document.addEventListener('mousemove', (event) => {
+  const left = event.clientX + 16 + tip.offsetWidth > innerWidth ? event.clientX - tip.offsetWidth - 16 : event.clientX + 16;
+  tip.style.left = `${left}px`;
+  tip.style.top = `${event.clientY + 16}px`;
+});
+
+loadData()
+  .then((loaded) => {
+    data = loaded;
+    show();
+  })
+  .catch((error) => {
+    document.getElementById('title').textContent = 'This run cannot be shown';
+    document.getElementById('sub').textContent = error.message;
+  });
+</script>
+</body>
+</html>

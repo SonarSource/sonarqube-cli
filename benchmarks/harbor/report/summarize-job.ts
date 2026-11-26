@@ -146,13 +146,6 @@ function present(value: number | null, format: (n: number) => string): string | 
   return value === null ? null : format(value);
 }
 
-function trajectoryLink(row: Row): string | null {
-  const pageUrl = process.env.TRAJECTORY_PAGE_URL;
-  if (!pageUrl || row.trialName === null) return null;
-  const trialKey = encodeURIComponent(row.label + '/' + row.trialName);
-  return `[trajectory](${pageUrl}#${trialKey})`;
-}
-
 const TOKENS_PER_THOUSAND = 1000;
 const TOKENS_WITHOUT_DECIMAL = 10000;
 
@@ -182,7 +175,6 @@ const TRIAL_COLUMNS: Column[] = [
   { header: 'Steps', cell: (row) => present(row.steps, String) },
   { header: 'Tokens', cell: tokensOf },
   { header: 'Cost', cell: (row) => present(row.costUsd, (n) => `$${n.toFixed(4)}`) },
-  { header: '', cell: trajectoryLink },
 ];
 
 function renderTrialsTable(rows: Row[]): string[] {
@@ -270,7 +262,7 @@ function renderTaskSection(group: Row[]): string[] {
     '',
     OPEN_INDENT,
     '<details>',
-    `<summary>${plural(group.length, 'trial')}, open one to read its trajectory</summary>`,
+    `<summary>${plural(group.length, 'trial')}</summary>`,
     '',
     ...renderTrialsTable(failuresFirst(group)),
     '',
@@ -324,11 +316,10 @@ function renderAgentSections(rows: Row[]): string[] {
 }
 
 function renderIntro(): string[] {
-  const pageUrl = process.env.TRAJECTORY_PAGE_URL;
-  const sentence =
-    'Each trial is one attempt by an AI coding agent at a task. An automatic check decides pass or fail.';
-  if (!pageUrl) return [sentence, ''];
-  return [...hardBreaks([sentence, `[Read every trajectory, step by step](${pageUrl})`]), ''];
+  return [
+    'Each trial is one attempt by an AI coding agent at a task. An automatic check decides pass or fail.',
+    '',
+  ];
 }
 
 function renderReport(rows: Row[]): string {
