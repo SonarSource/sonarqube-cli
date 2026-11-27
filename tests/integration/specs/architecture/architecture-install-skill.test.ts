@@ -26,7 +26,6 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { load } from 'js-yaml';
 
-import { ARCHITECTURE_CODING_INSTRUCTIONS } from '@/commands/architecture/coding-instructions.ts';
 import { ARCHITECTURE_SKILL } from '@/commands/architecture/skill-content.ts';
 
 import { TestHarness } from '../../harness';
@@ -35,7 +34,6 @@ const SKILL_PATHS = [
   join('.claude', 'skills', 'sonar-architecture', 'SKILL.md'),
   join('.agents', 'skills', 'sonar-architecture', 'SKILL.md'),
 ];
-const INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'];
 
 describe('sonar architecture install-skill', () => {
   let harness: TestHarness;
@@ -56,7 +54,6 @@ describe('sonar architecture install-skill', () => {
     const installerHelp = await harness.run('architecture install-skill --help');
     expect(installerHelp.exitCode).toBe(0);
     expect(installerHelp.stdout).toContain('[BETA]');
-    expect(installerHelp.stdout).toContain('instructions in CLAUDE.md and AGENTS.md');
     expect(help.stdout).not.toContain('[ALPHA]');
     const current = await harness.run('architecture current get --help');
     expect(current.exitCode).toBe(0);
@@ -144,32 +141,20 @@ describe('sonar architecture install-skill', () => {
   );
 
   it(
-    'adds the coding instructions to CLAUDE.md and AGENTS.md, keeping what is already there',
+    'removes the legacy coding instructions block from CLAUDE.md and AGENTS.md',
     async () => {
-      harness.cwd.writeFile('AGENTS.md', '# Team rules\n\nKeep functions small.\n');
+      const legacyBlock =
+        '<!-- sonar:begin:sonarqube-architecture-coding -->\n# Architecture while coding\n<!-- sonar:end:sonarqube-architecture-coding -->\n';
+      harness.cwd.writeFile('AGENTS.md', `# Team rules\n\nKeep functions small.\n\n${legacyBlock}`);
+      harness.cwd.writeFile('CLAUDE.md', legacyBlock);
 
-      const first = await harness.run('arch install-skill');
+      const result = await harness.run('arch install-skill');
 
-      expect(first.exitCode).toBe(0);
-      for (const file of INSTRUCTION_FILES) {
-        const content = readFileSync(join(harness.cwd.path, file), 'utf8');
-        expect(content).toContain('<!-- sonar:begin:sonarqube-architecture-coding -->');
-        expect(content).toContain(ARCHITECTURE_CODING_INSTRUCTIONS.trimEnd());
-        expect(content).toContain('This repository may have an intended architecture');
-        expect(content).toContain('If the project manages its intended architecture in a file');
-        expect(content).not.toContain('If it reports that a file manages');
-        expect(content).toContain('<!-- sonar:end:sonarqube-architecture-coding -->');
-        expect(first.stdout).toContain(`Updated ${join(harness.cwd.path, file)}`);
-      }
-      expect(readFileSync(join(harness.cwd.path, 'AGENTS.md'), 'utf8')).toStartWith(
+      expect(result.exitCode).toBe(0);
+      expect(readFileSync(join(harness.cwd.path, 'AGENTS.md'), 'utf8')).toBe(
         '# Team rules\n\nKeep functions small.\n',
       );
-
-      const second = await harness.run('arch install-skill');
-      expect(second.exitCode).toBe(0);
-      expect(second.stdout).not.toContain('Updated');
-      const agents = readFileSync(join(harness.cwd.path, 'AGENTS.md'), 'utf8');
-      expect(agents.split('sonar:begin:sonarqube-architecture-coding')).toHaveLength(2);
+      expect(harness.cwd.exists('CLAUDE.md')).toBe(false);
     },
     { timeout: 15000 },
   );
@@ -183,10 +168,6 @@ describe('sonar architecture install-skill', () => {
       expect(harness.userHome.exists(SKILL_PATHS[0])).toBe(true);
       expect(harness.userHome.exists(SKILL_PATHS[1])).toBe(true);
       expect(harness.cwd.exists(SKILL_PATHS[0])).toBe(false);
-      for (const file of INSTRUCTION_FILES) {
-        expect(harness.cwd.exists(file)).toBe(false);
-        expect(harness.userHome.exists(file)).toBe(false);
-      }
     },
     { timeout: 15000 },
   );
