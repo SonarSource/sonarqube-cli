@@ -28,7 +28,6 @@ import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.
 import {
   agentDisplayName,
   detectInstalledAgents,
-  isDetectedAgentId,
   SUPPORTED_AGENT_IDS,
 } from '@/core/host/environment/installed-agent-detector.ts';
 
@@ -123,28 +122,5 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('opencode')).toBe('OpenCode');
     expect(agentDisplayName('devin')).toBe('Devin');
     expect(agentDisplayName('pi')).toBe('Pi');
-  });
-});
-
-describe('isDetectedAgentId', () => {
-  it('returns true only for an agent actually installed in the given home directory', () => {
-    mkdirSync(join(home, '.cursor'));
-
-    expect(isDetectedAgentId('cursor', home)).toBe(true);
-    expect(isDetectedAgentId('claude', home)).toBe(false);
-  });
-
-  it('returns false for a supported agent id that is not installed anywhere', () => {
-    expect(isDetectedAgentId('cursor', home)).toBe(false);
-  });
-
-  it('returns false for a value that is not a supported agent id at all', () => {
-    mkdirSync(join(home, '.cursor'));
-
-    expect(isDetectedAgentId('not-an-agent', home)).toBe(false);
-  });
-
-  it('defaults to the real user home directory when none is given', () => {
-    expect(typeof isDetectedAgentId('cursor')).toBe('boolean');
   });
 });

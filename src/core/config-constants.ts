@@ -59,12 +59,6 @@ export const SONAR_USER_HOME = getSonarUserHome();
 export const CLI_DIR = getCliDir();
 
 // ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-
-export const STATE_FILE = join(CLI_DIR, 'state.json');
-
-// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
@@ -215,13 +209,11 @@ export const SONARCLOUD_SCA_SCANNER_CDN_URL =
 // Documentation
 // ---------------------------------------------------------------------------
 
-export const DOCS_URL = 'https://docs.sonarsource.com/sonarqube-cli';
 export const CLOUD_API_DOCS_URL = 'https://docs.sonarsource.com/sonarqube-cloud/appendices/web-api';
 export const AI_REMEDIATION_DOCS_URL =
   'https://docs.sonarsource.com/sonarqube-cloud/administering-sonarcloud/ai-features/sonarqube-remediation-agent';
 export const SERVER_API_DOCS_URL =
   'https://docs.sonarsource.com/sonarqube-server/extension-guide/web-api';
-export const SUPPORT_URL = 'https://community.sonarsource.com';
 export const VORTEX_PRODUCT_URL = 'https://www.sonarsource.com/products/sonar-vortex';
 export const AGENTIC_PACK_URL = 'https://www.sonarsource.com/products/agent-essentials/';
 
