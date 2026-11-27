@@ -933,10 +933,6 @@ function renderNetworkSection(network: ResolvedNetworkConfig, console: Console):
     console.text('  No advanced network configuration detected.');
     return;
   }
-  console.text(
-    '  Note: Not all CLI features currently support proxy and certificate configuration. ' +
-      'Secrets hook, Vortex Context and Software Composition Analysis might currently not pick up the network configuration.',
-  );
   if (network.proxy) {
     renderProxySubsection(network.proxy, console);
   }

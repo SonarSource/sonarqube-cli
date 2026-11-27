@@ -1644,7 +1644,7 @@ command = "another-tool stop"
     { timeout: 15000 },
   );
 
-  it('shows NETWORK section with proxy and note when HTTPS_PROXY is set', async () => {
+  it('shows NETWORK section with proxy when HTTPS_PROXY is set', async () => {
     const server = await harness.newFakeServer().withAuthToken('my-token').start();
     harness.state().withAuth(server.baseUrl(), 'my-token');
 
@@ -1656,7 +1656,7 @@ command = "another-tool stop"
     expect(result.stdout).toContain('NETWORK');
     expect(result.stdout).toContain('HTTPS_PROXY, HTTP_PROXY, NO_PROXY environment variables');
     expect(result.stdout).toContain('***:***@proxy.corp.com');
-    expect(result.stdout).toContain('Not all CLI features currently support');
+    expect(result.stdout).not.toContain('Not all CLI features currently support');
   });
 
   it('shows NETWORK section with no-config message when no network env vars are set', async () => {
