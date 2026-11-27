@@ -27,11 +27,9 @@ import { renderTextSummary } from './text-report.ts';
 import { buildStatsViewModel } from './view-model/build.ts';
 import { EMPTY_STATS_VIEW_MODEL, type StatsViewModel } from './view-model/types.ts';
 
-export const STATS_SINCE_CHOICES = ['7d', '14d', '30d', 'all'] as const;
-export type StatsSinceChoice = (typeof STATS_SINCE_CHOICES)[number];
+const STATS_WINDOW = '30d';
 
 export interface StatsOptions {
-  since?: StatsSinceChoice;
   json?: boolean;
 }
 
@@ -39,12 +37,11 @@ const DO_NOT_TRACK_DISCLAIMER =
   'DO_NOT_TRACK is set, sonar stats is unaffected: this data never leaves your machine.';
 
 export async function stats(options: StatsOptions, ctx: CommandInvocationContext): Promise<void> {
-  const since = options.since ?? '30d';
-  const summary = queryStatsSummary(since);
+  const summary = queryStatsSummary(STATS_WINDOW);
   if (isDoNotTrackRequested()) {
     ctx.console.info(DO_NOT_TRACK_DISCLAIMER, options.json ? 'stderr' : undefined);
   }
-  const viewModel = await resolveViewModel(summary, since, ctx);
+  const viewModel = await resolveViewModel(summary, ctx);
 
   if (options.json) {
     ctx.console.print(JSON.stringify(viewModel, null, 2));
@@ -56,11 +53,10 @@ export async function stats(options: StatsOptions, ctx: CommandInvocationContext
 
 async function resolveViewModel(
   summary: StatsSummary,
-  since: StatsSinceChoice,
   ctx: CommandInvocationContext,
 ): Promise<StatsViewModel> {
   if (summary.allTime.totalRuns === 0) {
     return EMPTY_STATS_VIEW_MODEL;
   }
-  return buildStatsViewModel(summary, since, await resolveStatsEntitlement(ctx));
+  return buildStatsViewModel(summary, STATS_WINDOW, await resolveStatsEntitlement(ctx));
 }
