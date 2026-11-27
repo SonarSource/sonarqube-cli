@@ -39,7 +39,7 @@ jobs:
         with:
           version: 2026.10.21
 
-      - uses: SonarSource/ci-github-actions/get-build-number@c3a85ac3a2f67f86966e2fb1fdf9a7c1bdc997dc # 2.2.0
+      - uses: SonarSource/ci-github-actions/get-build-number@43609e4795f6400aa0b66dc1f5277f1fc3fb4768 # 2.6.0
         id: get-build-number
 
       - name: Update package.json version with build number
