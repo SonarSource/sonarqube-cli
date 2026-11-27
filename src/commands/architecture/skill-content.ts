@@ -173,12 +173,16 @@ and smells from the analyzed main branch. Use MCP \`architecture_get\` with \`ta
 the installed tool definition lists that target; otherwise use the CLI. Zero counts are measured; an
 empty summary means no visible summary, not a clean architecture. Unsupported languages are skipped
 and counted in the response. Numeric coverage and artifact counts are included when the public API provides them.
+Deviations break down into \`structuralDeviation\`, \`relationshipDeviation\` and \`assertionDeviation\`. A
+dependency flagged by both an assertion and the intended model counts in both, and twice in the total. Servers
+that do not report assertion deviations omit \`assertionDeviation\`; treat its absence as unknown, not zero.
 
 ## Findings
 
 Read deviations, flaws and smells from the latest analysis with \`sonar architecture findings get\`,
 optionally \`--category deviation|flaw|smell\`, \`--type <type>\` or \`--language <language>\`.
 Every row includes its category, type, language, details and files; findings have no IDs or separate detail lookup.
+An \`assertionDeviation\` row names the violated assertion and the \`fromNodeKey\` to \`toNodeKey\` dependency that breaks it.
 Findings use the analyzed main branch and are read-only. Use \`--page-size 0\` only to count findings; do not request further count-only pages.
 To read findings, use a positive page size. Retain \`pageIndex\`, \`pageSize\` and \`total\` from each response.
 Keep the same filters and page size, and increment \`--page\` while \`pageIndex * pageSize < total\`.

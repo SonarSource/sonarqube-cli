@@ -155,7 +155,12 @@ describe('current architecture summary', () => {
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout).summaries[0]).toEqual({
       language: 'java',
-      deviations: { total: 0, structuralDeviation: 0, relationshipDeviation: 0 },
+      deviations: {
+        total: 0,
+        structuralDeviation: 0,
+        relationshipDeviation: 0,
+        assertionDeviation: 0,
+      },
       flaws: { total: 0, tangle: 0, oversizedComponent: 0 },
       smells: { total: 0, weakTangle: 0, splitResponsibility: 0 },
     });
@@ -231,9 +236,50 @@ describe('current architecture summary', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('java:');
     expect(result.stdout).toContain(
-      'deviations: 4 (structuralDeviation: 2, relationshipDeviation: 2)',
+      'deviations: 5 (structuralDeviation: 2, relationshipDeviation: 2, assertionDeviation: 1)',
     );
     expect(result.stdout).not.toContain('{"language"');
+  });
+
+  it('keeps reading summaries from servers that do not report assertion deviations', async () => {
+    await configured(true, (api) => api.withFindings(findings).withoutSummaryAssertionDeviations());
+    const json = await h.run('arch current get --summary -p shop --language java --format json');
+    expect(json.exitCode).toBe(0);
+    expect(JSON.parse(json.stdout).summaries[0].deviations).toEqual({
+      total: 4,
+      structuralDeviation: 2,
+      relationshipDeviation: 2,
+    });
+    const toon = await h.run('arch current get --summary -p shop --language java --format toon');
+    expect(toon.exitCode).toBe(0);
+    expect(toon.stdout).toContain('relationshipDeviation: 2');
+    expect(toon.stdout).not.toContain('assertionDeviation');
+    const text = await h.run('arch current get --summary -p shop --language java --format text');
+    expect(text.exitCode).toBe(0);
+    expect(text.stdout).toContain(
+      'deviations: 4 (structuralDeviation: 2, relationshipDeviation: 2)',
+    );
+    expect(text.stdout).not.toContain('assertionDeviation');
+  });
+
+  it('rejects an invalid assertion deviation count', async () => {
+    const row = {
+      language: 'java',
+      deviations: {
+        total: 0,
+        structuralDeviation: 0,
+        relationshipDeviation: 0,
+        assertionDeviation: -1,
+      },
+      flaws: { total: 0, tangle: 0, oversizedComponent: 0 },
+      smells: { total: 0, weakTangle: 0, splitResponsibility: 0 },
+    };
+    await configured(true, (api) =>
+      api.withStatus('project-summaries', 200, JSON.stringify({ projectSummaries: [row] })),
+    );
+    const result = await h.run('arch current get --summary -p shop --format json');
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Invalid public architecture summary response');
   });
 
   it('reads summary counts with the public branch scope and language filter', async () => {
@@ -245,7 +291,12 @@ describe('current architecture summary', () => {
       summaries: [
         {
           language: 'java',
-          deviations: { total: 4, structuralDeviation: 2, relationshipDeviation: 2 },
+          deviations: {
+            total: 5,
+            structuralDeviation: 2,
+            relationshipDeviation: 2,
+            assertionDeviation: 1,
+          },
           flaws: { total: 2, tangle: 1, oversizedComponent: 1 },
           smells: { total: 0, weakTangle: 0, splitResponsibility: 0 },
         },
