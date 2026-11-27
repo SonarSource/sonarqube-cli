@@ -29,6 +29,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SecretsCallerCommand } from '@/core/config-constants.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
+import { AUTH_LOGIN_HINT } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import {
@@ -42,12 +43,10 @@ export interface HookDependencies {
   binaryPath: string;
 }
 
-export const SECRETS_INACTIVE_UNAUTHENTICATED =
-  "SonarQube secret scanning is inactive: not authenticated. Run 'sonar auth login'.";
+export const SECRETS_INACTIVE_UNAUTHENTICATED = `SonarQube secret scanning is inactive: not authenticated. ${AUTH_LOGIN_HINT}`;
 export const SECRETS_INACTIVE_BINARY_MISSING =
   "SonarQube secret scanning is inactive: analyzer not installed. Re-run 'sonar integrate'.";
-export const HOOK_INACTIVE_UNAUTHENTICATED =
-  "SonarQube code scanning is inactive: not authenticated. Run 'sonar auth login'.";
+export const HOOK_INACTIVE_UNAUTHENTICATED = `SonarQube code scanning is inactive: not authenticated. ${AUTH_LOGIN_HINT}`;
 
 export class MissingDependenciesError extends Error {
   constructor(message: string) {
