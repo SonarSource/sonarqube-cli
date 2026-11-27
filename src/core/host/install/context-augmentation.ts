@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -43,6 +43,7 @@ import { extractFileFromTarGz } from '@/core/io/tar.ts';
 import { recordInstalledDependency } from '@/core/state/state-manager.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { cleanupStagingDirectory, publishBinary } from './binary.ts';
 import {
   cleanupOldVersionBinaries,
   ensureBinDirectory,
@@ -110,45 +111,45 @@ export async function resolveContextAugmentationBinary(
   console.text(`     Installing sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`);
   console.text(`     Platform: ${platform.os}-${platform.arch}`);
 
-  const archivePath = `${binaryPath}.tar.gz`;
+  const stagingDir = mkdtempSync(join(resolvedBinDir, '.install-'));
+  const stagedPath = join(stagingDir, localName);
+  const archivePath = `${stagedPath}.tar.gz`;
   const ascPath = `${archivePath}.asc`;
   const archiveUrl = buildCagDownloadUrl(SONAR_CONTEXT_AUGMENTATION_VERSION, platform);
   const ascUrl = `${archiveUrl}.asc`;
 
-  await console.withSpinner(
-    `Downloading sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
-    () => Promise.all([downloadBinary(archiveUrl, archivePath), downloadBinary(ascUrl, ascPath)]),
-  );
-
-  const archiveBytes = readFileSync(archivePath);
-  const armoredSignature = readFileSync(ascPath, 'utf-8');
-
+  let published: boolean;
   try {
+    await console.withSpinner(
+      `Downloading sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
+      async () => {
+        // Wait for both writers before removing their staging directory on failure.
+        const downloads = await Promise.allSettled([
+          downloadBinary(archiveUrl, archivePath),
+          downloadBinary(ascUrl, ascPath),
+        ]);
+        for (const download of downloads) {
+          if (download.status === 'rejected') throw download.reason;
+        }
+      },
+    );
+
+    const archiveBytes = readFileSync(archivePath);
+    const armoredSignature = readFileSync(ascPath, 'utf-8');
     await console.withSpinner('Verifying signature', () =>
       verifySignatureForPlatform(archiveBytes, armoredSignature, platform),
     );
-  } catch (err) {
-    rmSync(archivePath, { force: true });
-    rmSync(ascPath, { force: true });
-    throw err;
-  }
-
-  try {
-    extractCagBinary(archiveBytes, binaryPath, platform);
+    extractCagBinary(archiveBytes, stagedPath, platform);
+    if (platform.os !== 'windows') {
+      await makeExecutable(stagedPath);
+    }
+    await console.withSpinner('Verifying installation', () => verifyInstallation(stagedPath));
+    published = publishBinary(stagedPath, binaryPath, options.force ?? false);
   } finally {
-    rmSync(archivePath, { force: true });
-    rmSync(ascPath, { force: true });
+    cleanupStagingDirectory(stagingDir);
   }
-
-  if (platform.os !== 'windows') {
-    await makeExecutable(binaryPath);
-  }
-
-  try {
-    await console.withSpinner('Verifying installation', () => verifyInstallation(binaryPath));
-  } catch (err) {
-    rmSync(binaryPath, { force: true });
-    throw err;
+  if (!published) {
+    return { binaryPath, freshlyInstalled: false };
   }
 
   recordInstalledDependency(
