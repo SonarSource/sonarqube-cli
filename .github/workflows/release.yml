@@ -18,7 +18,7 @@ jobs:
     permissions:
       id-token: write
       contents: write
-    uses: SonarSource/gh-action_release/.github/workflows/main.yaml@bf4faffefea8fce5e434a3b185d2ac03fba5592c # 7.7.1
+    uses: SonarSource/gh-action_release/.github/workflows/main.yaml@1bcca53e8f2da38e1e131d6d23224a3f613160cb # 7.10.4
     with:
       version: ${{ inputs.version }}
       dryRun: ${{ inputs.dryRun }}
@@ -35,7 +35,7 @@ jobs:
       id-token: write # OIDC → Vault
       contents: read
     steps:
-      - uses: SonarSource/ci-github-actions/update-release-channel@c3a85ac3a2f67f86966e2fb1fdf9a7c1bdc997dc # master
+      - uses: SonarSource/ci-github-actions/update-release-channel@cd228f1d8cd84e341efb928b19c5f1d3b62d5590 # master
         with:
           version: ${{ inputs.version }}
           channel: stable

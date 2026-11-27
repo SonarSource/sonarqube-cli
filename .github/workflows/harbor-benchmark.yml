@@ -84,7 +84,7 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+        uses: SonarSource/vault-action-wrapper@20728776e291b4027acb3618091a31fa15c61a30 # 3.9.0
         with:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload Harbor jobs
         if: ${{ !cancelled() && steps.revoke.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-${{ matrix.attempt }}
           path: harbor-jobs
@@ -145,7 +145,7 @@ jobs:
 
       - name: Upload the missing trial record
         if: ${{ !cancelled() && steps.revoke.outcome != 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-${{ matrix.attempt }}
           path: missing-jobs
@@ -162,7 +162,7 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+        uses: SonarSource/vault-action-wrapper@20728776e291b4027acb3618091a31fa15c61a30 # 3.9.0
         with:
           secrets: |
             development/kv/data/repox url | ARTIFACTORY_URL;
@@ -175,7 +175,7 @@ jobs:
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Download Harbor jobs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: harbor-jobs-*
           path: harbor-jobs
@@ -196,7 +196,7 @@ jobs:
       - name: Upload the trajectory page
         id: trajectories
         if: ${{ !cancelled() && hashFiles('report.html') != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: report.html
           archive: false
@@ -235,7 +235,7 @@ jobs:
       - name: Upload the release report
         id: release-report-upload
         if: ${{ !cancelled() && steps.release-report.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-report
           path: release-report
@@ -270,7 +270,7 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+        uses: SonarSource/vault-action-wrapper@20728776e291b4027acb3618091a31fa15c61a30 # 3.9.0
         with:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
@@ -282,7 +282,7 @@ jobs:
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Download the release report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-report
           path: release-report
