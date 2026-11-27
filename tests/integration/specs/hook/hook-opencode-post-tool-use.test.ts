@@ -210,17 +210,6 @@ describe('sonar hook opencode-post-tool-use', () => {
   );
 
   it(
-    'exits 0 with an empty result when stdin is malformed JSON',
-    async () => {
-      const result = await harness.runWithStdin('hook opencode-post-tool-use', 'not valid json');
-
-      expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout.trim())).toEqual({});
-    },
-    { timeout: 15000 },
-  );
-
-  it(
     'exits 0 with an empty result when not authenticated',
     async () => {
       const result = await harness.runWithStdin(
@@ -341,6 +330,29 @@ describe('sonar hook opencode-post-tool-use', () => {
         analysisEvent.event_payload.invocation_id,
       );
       expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('sonar hook opencode-post-tool-use malformed input', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'exits 0 with an empty result when stdin is malformed JSON',
+    async () => {
+      const result = await harness.runWithStdin('hook opencode-post-tool-use', 'not valid json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toEqual({});
     },
     { timeout: 15000 },
   );
