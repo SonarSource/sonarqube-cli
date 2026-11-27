@@ -855,7 +855,7 @@ function renderIntegrationsSection(
   if (containerRuntime) console.text(`  • MCP Runtime: ${runtimeStatusLine(containerRuntime)}`);
 }
 
-function renderMcpEndpoint(status: McpEndpointStatus, console: Console): void {
+export function renderMcpEndpoint(status: McpEndpointStatus, console: Console): void {
   console.blank();
   console.text('MCP (sonar run mcp)');
   if (status.startupError) {

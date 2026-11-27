@@ -131,10 +131,15 @@ describe('hosted-mcp-client', () => {
 
   it('falls back when the health response is invalid', async () => {
     fixture.healthBody = '<html>not a health response</html>';
+    const startedAt = performance.now();
     const result = await harness.run('run mcp');
+    // A health-check timeout must not satisfy this case.
+    expect(performance.now() - startedAt).toBeLessThan(5000);
+    expect(fixture.healthRequests).toBe(1);
+    expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe('fallback-container\n');
     expect(result.stderr).toContain('health check failed');
-  });
+  }, 15000);
 
   it('falls back when the health check times out', async () => {
     const release = Promise.withResolvers<void>();

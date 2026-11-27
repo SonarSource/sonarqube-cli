@@ -17,6 +17,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+import { setProperty } from '@/core/io/properties.ts';
+
 import type { InteractiveSession, TestHarness } from '../../../harness';
 import { IS_WINDOWS } from '../../../harness';
 import { installRecordingStub } from '../../../harness/recording-stub.ts';
@@ -110,6 +112,12 @@ export class HostedMcpFixture {
     });
     harness.withExtraEnv({ PATH: bin.path + (IS_WINDOWS ? ';' : ':') + (process.env.PATH ?? '') });
   }
+  setConfig(key: string, value: string): void {
+    const file = this.harness.cliHome.file('cli-config.properties');
+    const content = file.exists() ? file.asText() : '';
+    this.harness.cliHome.writeFile('cli-config.properties', setProperty(content, key, value));
+  }
+
   async connect(command = 'run mcp', timeoutMs = 15000): Promise<InteractiveSession> {
     const session = this.harness.runInteractive(command, { timeoutMs });
     session.write(line(INITIALIZE));

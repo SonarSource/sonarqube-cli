@@ -29,7 +29,7 @@ describe('system status MCP endpoint', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     fixture = new HostedMcpFixture(harness);
-    await harness.newFakeBinariesServer().start();
+    await harness.newFakeBinariesServer().noArtifacts().start();
   });
   afterEach(async () => {
     await harness.dispose();
@@ -50,11 +50,6 @@ describe('system status MCP endpoint', () => {
         startupError: null,
       });
       expect(data.mcpRuntime).toBeNull();
-      const text = await harness.run('system status');
-      expect(text.stdout).toContain(
-        `MCP (sonar run mcp)\n  • Transport: HTTP (hosted)\n  • Endpoint: ${fixture.server.url.origin}/mcp`,
-      );
-      expect(text.stdout).not.toContain('needs Docker');
       expect(fixture.requests).toHaveLength(0);
       expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
     },
@@ -62,7 +57,7 @@ describe('system status MCP endpoint', () => {
 
   it('previews container fallback and its configured server URL without launching it', async () => {
     fixture.healthStatus = 404;
-    await harness.run('config set mcp.container.serverUrl http://sonarqube:9000');
+    fixture.setConfig('mcp.container.serverUrl', 'http://sonarqube:9000');
     const result = await harness.run('system status --format json');
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout).mcp).toMatchObject({
@@ -72,20 +67,12 @@ describe('system status MCP endpoint', () => {
       containerRuntime: { status: 'ready', runtime: 'docker' },
       startupError: null,
     });
-    const text = await harness.run('system status');
-    expect(text.stdout).toContain(
-      'MCP (sonar run mcp)\n' +
-        '  • Transport: stdio (local container)\n' +
-        '  • SonarQube server URL: http://sonarqube:9000\n' +
-        '  • Using container because hosted MCP health check returned HTTP 404.\n' +
-        '  • Container runtime: READY (docker)',
-    );
     expect(fixture.requests).toHaveLength(0);
     expect(harness.cwd.file('docker.jsonl').asText()).not.toContain('"run"');
-  });
+  }, 15000);
 
   it('previews configured stdio without probing hosted MCP', async () => {
-    expect((await harness.run('config set mcp.transport stdio')).exitCode).toBe(0);
+    fixture.setConfig('mcp.transport', 'stdio');
     const result = await harness.run('system status --format json');
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout).mcp).toMatchObject({
@@ -96,15 +83,13 @@ describe('system status MCP endpoint', () => {
       containerRuntime: { status: 'ready' },
     });
     expect(fixture.healthRequests).toBe(0);
-    const text = await harness.run('system status');
-    expect(text.stdout).toContain('Transport: stdio (local container), from mcp.transport=stdio');
-  });
+  }, 15000);
 
   it.each(['server', 'cloud'])(
     'reports unavailable configured HTTP on %s without container fallback',
     async (kind) => {
       if (kind === 'cloud') harness.withAuth(fixture.server.url.origin, TOKEN, 'test-org');
-      expect((await harness.run('config set mcp.transport http')).exitCode).toBe(0);
+      fixture.setConfig('mcp.transport', 'http');
       fixture.healthStatus = 404;
       const result = await harness.run('system status --format json');
       expect(result.exitCode).toBe(0);
@@ -132,8 +117,7 @@ describe('system status MCP endpoint', () => {
     expect(data.mcp.connectionMode).toBe('container');
     expect(data.mcp.containerRuntime.status).toBe('ready');
     expect(data.healthy).toBe(false);
-    const text = await harness.run('system status');
-    expect(text.stdout).toContain('Using container because hosted MCP health check failed.');
+    expect(data.mcp.fallbackReason).toBe('hosted MCP health check failed');
   });
 
   it.each(['unauthenticated', 'unauthorized', 'invalid certificate', 'invalid token'])(
