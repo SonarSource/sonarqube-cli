@@ -20,11 +20,18 @@
 
 // Shared deny helpers for Cursor secrets hook handlers.
 
+import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { Readable } from 'node:stream';
+
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 
-import { runSecretsBinaryOnText } from '../analyze/secrets.ts';
-import { appendToCursorIgnore } from './cursor-ignore.ts';
+import {
+  runSecretsBinaryOnStream,
+  runSecretsBinaryOnText,
+  SCAN_TIMEOUT_MS,
+} from '../analyze/secrets.ts';
+import { appendToCursorIgnore, workspaceRootToPath } from './cursor-ignore.ts';
 import type { HookDependencies } from './hook-dependencies.ts';
 
 // Cursor treats exit code 2 as a structured block ("equivalent to returning permission: deny"
@@ -40,8 +47,30 @@ export const SECRETS_IN_FILE_MESSAGE = 'SonarQube detected secrets in this file'
 export async function scanTextForSecrets(
   deps: HookDependencies,
   content: string,
+  filePath?: string,
+  workspaceRoots: string[] = [],
 ): ReturnType<typeof runSecretsBinaryOnText> {
-  return runSecretsBinaryOnText(deps.binaryPath, content, deps.auth);
+  if (!filePath) return runSecretsBinaryOnText(deps.binaryPath, content, deps.auth);
+
+  const absolutePath = resolve(filePath);
+  const relativePaths = workspaceRoots
+    .filter(Boolean)
+    .map((root) => relative(workspaceRootToPath(root), absolutePath))
+    .filter((path) => path && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+  relativePaths.sort((a, b) => a.length - b.length);
+  const path = (relativePaths[0] ?? filePath).replaceAll('\\', '/');
+  // Batch headers cannot encode newlines; text mode still scans these files.
+  if (path.includes('\n') || path.includes('\r')) {
+    return runSecretsBinaryOnText(deps.binaryPath, content, deps.auth);
+  }
+
+  const bytes = Buffer.from(content, 'utf-8');
+  const batch = Readable.from([
+    Buffer.from(`scan cursor\n${bytes.length} ${path}\n`, 'utf-8'),
+    bytes,
+    Buffer.from('\n'),
+  ]);
+  return runSecretsBinaryOnStream(deps.binaryPath, batch, deps.auth, SCAN_TIMEOUT_MS);
 }
 
 export function secretsFoundInScan(result: { exitCode: number | null }): boolean {

@@ -652,6 +652,14 @@ describe('runSecretsBinaryOnStream', () => {
     ]);
   });
 
+  it('keeps the push timeout by default and accepts a shorter read timeout', async () => {
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', emptyBatch(), FAKE_AUTH);
+    expect(spawnSpy.mock.calls[0][3]).toBe(120_000);
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', emptyBatch(), FAKE_AUTH, 60_000);
+    expect(spawnSpy.mock.calls[1][3]).toBe(60_000);
+    expect(spawnSpy.mock.calls[1][4]).toBe('Scan timed out after 60000ms');
+  });
+
   it('hands the batch to the process as its stdin data', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
     const batch = emptyBatch();

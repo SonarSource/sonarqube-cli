@@ -42,7 +42,7 @@ import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
 import { buildSecretsScanArgs, type SecretsScanRunOptions } from './secrets-scan-args.ts';
 
 // Agent hooks are killed by their host after 60s, so this deadline stays inside that budget.
-const SCAN_TIMEOUT_MS = 60 * 1000;
+export const SCAN_TIMEOUT_MS = 60 * 1000;
 const PUSH_SCAN_TIMEOUT_MS = 2 * 60 * 1000;
 
 export interface AnalyzeSecretsOptions {
@@ -236,6 +236,7 @@ export async function runSecretsBinaryOnStream(
   binaryPath: string,
   batch: AsyncIterable<Buffer>,
   auth: ResolvedAuth,
+  timeoutMs: number = PUSH_SCAN_TIMEOUT_MS,
 ): Promise<SpawnResult> {
   const settings = await loadSecretsScanSettings();
   return spawnProcessWithTimeout(
@@ -248,8 +249,8 @@ export async function runSecretsBinaryOnStream(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    PUSH_SCAN_TIMEOUT_MS,
-    `Scan timed out after ${PUSH_SCAN_TIMEOUT_MS}ms`,
+    timeoutMs,
+    `Scan timed out after ${timeoutMs}ms`,
   );
 }
 

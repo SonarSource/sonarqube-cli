@@ -25,13 +25,18 @@
 // `analyze secrets` subcommand uses `analyze secrets`.
 
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
-import { EXIT_CODE_SECRETS_FOUND, type SecretsCallerCommand } from '@/core/config-constants.ts';
+import {
+  EXIT_CODE_SECRETS_FOUND,
+  SECRETS_CALLER_COMMANDS,
+  type SecretsCallerCommand,
+} from '@/core/config-constants.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 import {
   buildStatsFromTelemetry,
@@ -187,9 +192,17 @@ export async function scanAndEmitSecrets(
       auth,
     );
     ctx.recordTelemetry(fact);
-    ctx.recordStats(() =>
-      buildStatsFromTelemetry(fact, summarizeNewSecretsFindings(parsed.issues, source)),
-    );
+    ctx.recordStats(() => {
+      // Cursor batch paths are relative for test detection; statistics need a global identity.
+      const singleFileSource =
+        source &&
+        (callerCommand === SECRETS_CALLER_COMMANDS.cursorPreFileRead ||
+          callerCommand === SECRETS_CALLER_COMMANDS.cursorPreToolUse);
+      const issues = singleFileSource
+        ? parsed.issues.map((issue) => ({ ...issue, file: resolve(source) }))
+        : parsed.issues;
+      return buildStatsFromTelemetry(fact, summarizeNewSecretsFindings(issues, source));
+    });
     return { result, parsed };
   } catch (err) {
     const { fact } = buildSecretsAnalysisTelemetryFact(
