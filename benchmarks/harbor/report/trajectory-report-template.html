@@ -306,8 +306,9 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   const rewardOf = (trial) => (trial.rewards && trial.rewards.reward !== undefined ? trial.rewards.reward : null);
   const keyOf = (trial) => trial.group + '/' + trial.name;
   const linkTo = (trial) => '#' + encodeURIComponent(keyOf(trial));
-  const passed = (trial) => !trial.leak && !trial.exception && rewardOf(trial) !== null && rewardOf(trial) >= 1;
+  const passed = (trial) => !trial.leak && !trial.exception && trial.pluginLoaded !== false && rewardOf(trial) !== null && rewardOf(trial) >= 1;
   const agentLabel = (agent) => ({ 'claude-code': 'Claude Code', codex: 'Codex' })[agent] || agent || 'Unknown agent';
+  const pluginLabel = (plugin) => (!plugin ? '' : plugin === 'without' ? 'without plugin' : 'with plugin ' + plugin.slice('with '.length));
   const sumCost = (members) => members.reduce((sum, trial) => sum + (trial.costUsd || 0), 0);
   const sumSeconds = (members) => members.reduce((sum, trial) => sum + (trial.seconds.agent || 0), 0);
   function average(values) {
@@ -317,6 +318,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   function statusOf(trial) {
     if (trial.leak) return { text: 'Secret found', kind: 'bad' };
     if (trial.exception) return { text: 'Error', kind: 'warn' };
+    if (trial.pluginLoaded === false) return { text: 'Error: plugin not loaded', kind: 'warn' };
     if (rewardOf(trial) === null) return { text: 'No result', kind: 'warn' };
     return passed(trial) ? { text: 'Passed', kind: 'good' } : { text: 'Failed', kind: 'bad' };
   }
@@ -340,7 +342,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   }
   function siblingsOf(trial) {
     return trials
-      .filter((t) => t.task === trial.task && t.agent === trial.agent && t.model === trial.model)
+      .filter((t) => t.task === trial.task && t.agent === trial.agent && t.model === trial.model && t.plugin === trial.plugin)
       .sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)) || a.name.localeCompare(b.name));
   }
   function groupBy(items, keyFn) {
@@ -479,6 +481,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     const rows = [
       ['Agent', agentLabel(trial.agent) + (trial.agentVersion ? ' ' + trial.agentVersion : '')],
       ['Model', trial.model || '-'],
+      ...(trial.plugin ? [['SonarQube agent plugin', pluginLabel(trial.plugin) + (trial.pluginLoaded === false ? ' (installed, but Claude Code did not load it)' : '')]] : []),
       ['Tokens in / cached / out', fmtNumber(trial.inputTokens) + ' / ' + fmtNumber(trial.cachedTokens) + ' / ' + fmtNumber(trial.outputTokens)],
       ['Time: environment', fmtSeconds(s.environment) || '-'],
       ['Time: agent setup', fmtSeconds(s.agentSetup) || '-'],
@@ -566,13 +569,13 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     ]);
   }
   let selectedKey = null;
-  const comboKey = (trial) => (trial.agent || '') + '|' + (trial.model || '');
+  const comboKey = (trial) => (trial.agent || '') + '|' + (trial.model || '') + '|' + (trial.plugin || '');
   const shortModel = (model) => (model ? String(model).split('/').pop() : 'unknown model');
-  const comboLabel = (trial) => agentLabel(trial.agent) + ' · ' + shortModel(trial.model);
+  const comboLabel = (trial) => agentLabel(trial.agent) + ' · ' + shortModel(trial.model) + (trial.plugin ? ' · ' + pluginLabel(trial.plugin) : '');
   function combos() {
     return [...groupBy(trials, comboKey).entries()]
-      .map(([key, members]) => ({ key, agent: members[0].agent, model: members[0].model, members }))
-      .sort((a, b) => agentLabel(a.agent).localeCompare(agentLabel(b.agent)) || shortModel(a.model).localeCompare(shortModel(b.model)));
+      .map(([key, members]) => ({ key, agent: members[0].agent, model: members[0].model, plugin: members[0].plugin, members }))
+      .sort((a, b) => agentLabel(a.agent).localeCompare(agentLabel(b.agent)) || shortModel(a.model).localeCompare(shortModel(b.model)) || String(a.plugin || '').localeCompare(String(b.plugin || '')));
   }
   function failuresFirst(groups) {
     const allPassed = (key) => groups.get(key).every(passed);
@@ -594,7 +597,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     const on = combo.key === selectedKey;
     const hasFailures = !combo.members.every(passed);
     return el('button', { type: 'button', class: 'tab' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: () => chooseCombo(combo.key) }, [
-      el('span', { class: 'tab-name', text: shortModel(combo.model) }),
+      el('span', { class: 'tab-name', text: shortModel(combo.model) + (combo.plugin ? ' · ' + pluginLabel(combo.plugin) : '') }),
       hasFailures ? el('i', { class: 'dot-bad', role: 'img', 'aria-label': 'has failed trials' }) : null,
     ]);
   }
@@ -667,7 +670,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     const status = el('span', { class: 'pill' }, [failing ? failing + ' of ' + plural(byTask.size, 'task') + ' failed' : 'All ' + plural(byTask.size, 'task') + ' passed']);
     return el('section', { class: 'panel' }, [
       el('div', { class: 'panel-head' }, [
-        el('h2', {}, [agentLabel(combo.agent), el('span', { class: 'model', text: shortModel(combo.model) })]),
+        el('h2', {}, [agentLabel(combo.agent), el('span', { class: 'model', text: shortModel(combo.model) }), combo.plugin ? el('span', { class: 'model', text: pluginLabel(combo.plugin) }) : null]),
         status,
         el('span', { class: 'panel-facts', text: (fmtCost(sumCost(combo.members)) || '-') + ' · ' + (fmtSeconds(sumSeconds(combo.members)) || '-') }),
       ]),
