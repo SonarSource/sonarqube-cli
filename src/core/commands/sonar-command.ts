@@ -20,8 +20,7 @@
 
 // SonarCommand — Commander Command subclass with built-in error handling and auth support
 
-import type { CommandOptions } from 'commander';
-import { Command, Help, Option } from 'commander';
+import { Command, type CommandOptions, Help, type Option } from 'commander';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
@@ -50,7 +49,9 @@ import {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
 } from './invocation-context.ts';
+import { SonarOption } from './sonar-option.ts';
 
+export { SonarOption } from './sonar-option.ts';
 export {
   type CliRuntime,
   createCliRuntime,
@@ -69,7 +70,7 @@ export {
 
 const betaWarningsShownWithoutState = new Set<string>();
 
-export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
+export const COMMAND_CATEGORIES = ['setup', 'guide', 'verify', 'data', 'solve', 'cli'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
 function isPrivateBetaGated(lifecycle: LifecycleState): boolean {
@@ -83,52 +84,12 @@ function recordPrivateBetaFlagKey(runtime: CliRuntime, lifecycle: LifecycleState
   runtime.privateBetaFlags.record(lifecycle.betaFlagKey);
 }
 
-/**
- * Commander Option subclass that can be marked Alpha, Beta, or Deprecated.
- *
- * `.option()` returns the command, so `.option().stage()` cannot type-check.
- * Stage options by passing a {@link SonarOption} to {@link SonarCommand.addOption}:
- *
- * @example
- * .addOption(
- *   new SonarOption('--preview', 'Preview the plan without applying it')
- *     .stage(Stage.Alpha),
- * )
- */
-export class SonarOption extends Option {
-  private _lifecycle = STABLE_LIFECYCLE;
-
-  /**
-   * Mark this option as Stable, Alpha, Beta (optionally Private Beta via a flag
-   * key), or Deprecated. Required options cannot be staged as Alpha or Beta;
-   * when the caller is not entitled the option is omitted from help and treated
-   * as unknown. Deprecated options stay registered and warn on every use.
-   */
-  stage(stage: StageDescriptor): this {
-    if (this.mandatory && (stage.name === 'alpha' || stage.name === 'beta')) {
-      throw new Error(`Cannot stage a required option as Alpha or Beta: '${this.flags}'`);
-    }
-
-    const next = resolveLifecycle(stage);
-    if (isSameLifecycle(this._lifecycle, next)) {
-      return this;
-    }
-    this._lifecycle = next;
-
-    if (next.stage === 'alpha') {
-      this.helpGroup(ALPHA_HELP_GROUP);
-    } else {
-      this.helpGroupHeading = undefined;
-    }
-    return this;
-  }
-
-  get lifecycle(): LifecycleState {
-    return this._lifecycle;
-  }
-}
-
 export interface RootHelpMetadata {
+  hidden?: boolean;
+  summary?: string;
+  targets?: boolean;
+  cloudOnly?: boolean;
+  requiresVortex?: boolean;
   category?: CommandCategory;
   expandSubcommands?: boolean;
   label?: string;
@@ -498,15 +459,11 @@ export class SonarCommand extends Command {
     }
   }
 
-  description(str: string, argsDescription?: Record<string, string>): this;
+  description(str: string): this;
   description(): string;
-  description(str?: string, argsDescription?: Record<string, string>): this | string {
+  description(str?: string): this | string {
     if (str !== undefined) {
-      // Preserve Commander's deprecated argument-description overload for substitutability.
-      return argsDescription === undefined
-        ? super.description(str)
-        : // eslint-disable-next-line @typescript-eslint/no-deprecated
-          super.description(str, argsDescription);
+      return super.description(str);
     }
 
     return withLifecycleTag(super.description(), this._lifecycle.stage);
