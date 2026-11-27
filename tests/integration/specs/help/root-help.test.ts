@@ -48,7 +48,6 @@ function getExpectedRootHelp(): string {
     '  COMMANDS',
     '    analyze                                                                    Analyze code for quality and security issues',
     '    analyze secrets                                                            Scan files or stdin for hardcoded secrets',
-    '    analyze container                                                          Analyze a local container image with SonarQube Cloud Advanced Security',
     '    analyze dependency-risks                                                   Analyze project dependencies for security and license risks',
     '    analyze agentic                                                            Run server-side Vortex analysis. Limitations apply',
     '    remediate                                                                  Trigger AI agent remediation for eligible issues (SonarQube Cloud only)',

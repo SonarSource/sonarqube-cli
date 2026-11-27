@@ -857,6 +857,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   analyze
     .command('container')
     .description('Analyze a local container image with SonarQube Cloud Advanced Security')
+    .stage(Stage.Alpha)
     .argument(
       '<image>',
       'Docker or Podman image reference, Docker or OCI .tar archive, or OCI layout directory',

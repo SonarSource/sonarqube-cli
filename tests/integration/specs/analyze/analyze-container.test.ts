@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName, resolveBinaryArtifact } from '@/core/host/install/binary.ts';
 import { CONTAINER_SCANNER_SPEC } from '@/core/host/install/container-scanner.ts';
@@ -65,6 +66,7 @@ describe('analyze container', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    harness.withExtraEnv({ [ALPHA_ENV_VAR]: '1' });
     const cloud = await harness.newFakeServer().withAuthToken(TOKEN).start();
     cloudUrl = cloud.baseUrl();
     harness.withAuth(cloudUrl, TOKEN, ORGANIZATION);
@@ -74,10 +76,23 @@ describe('analyze container', () => {
     await harness.dispose();
   });
 
+  it('shows container scanning in analyze help only when Alpha is enabled', async () => {
+    const disabled = await harness.run('analyze --help', { extraEnv: { [ALPHA_ENV_VAR]: '0' } });
+    expect(disabled.exitCode).toBe(0);
+    expect(disabled.stdout).not.toContain('container [options] <image>');
+
+    const enabled = await harness.run('analyze --help');
+    expect(enabled.exitCode).toBe(0);
+    expect(enabled.stdout.replaceAll(/\s+/g, ' ')).toContain(
+      'container [options] <image> Analyze a local container image with SonarQube Cloud Advanced Security [ALPHA]',
+    );
+  });
+
   it('installs the signed scanner on first use, keeps JSON stdout clean, and reuses its cache', async () => {
     const binaries = await harness.newFakeBinariesServer().start();
     const result = await harness.run('analyze container ./missing-image.tar');
     expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("'sonar analyze container' is in alpha");
     expect(result.stderr).toContain('Installing sonar-container-scanner');
     expect(JSON.parse(result.stdout)).toMatchObject({
       issues: [],
