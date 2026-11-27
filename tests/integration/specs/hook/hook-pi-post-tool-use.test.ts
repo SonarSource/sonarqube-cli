@@ -222,17 +222,6 @@ describe('sonar hook pi-post-tool-use', () => {
   );
 
   it(
-    'exits 0 with an empty result when stdin is malformed JSON',
-    async () => {
-      const result = await harness.runWithStdin('hook pi-post-tool-use', 'not valid json');
-
-      expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout.trim())).toEqual({});
-    },
-    { timeout: 15000 },
-  );
-
-  it(
     'exits 0 with an empty result when not authenticated',
     async () => {
       const result = await harness.runWithStdin(
@@ -547,6 +536,29 @@ describe('sonar hook pi-post-tool-use', () => {
       expect(sqaaCalls(server)).toHaveLength(0);
       const [analysisEvent] = readAnalysisEvents(harness.sonarUserHome.path);
       expect(analysisEvent.event_payload.failures_count).toBe(1);
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('sonar hook pi-post-tool-use malformed input', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'exits 0 with an empty result when stdin is malformed JSON',
+    async () => {
+      const result = await harness.runWithStdin('hook pi-post-tool-use', 'not valid json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toEqual({});
     },
     { timeout: 15000 },
   );
