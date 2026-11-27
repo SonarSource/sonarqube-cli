@@ -141,6 +141,25 @@ describe('sonar architecture install-skill', () => {
   );
 
   it(
+    'removes the legacy coding instructions block from CLAUDE.md and AGENTS.md',
+    async () => {
+      const legacyBlock =
+        '<!-- sonar:begin:sonarqube-architecture-coding -->\n# Architecture while coding\n<!-- sonar:end:sonarqube-architecture-coding -->\n';
+      harness.cwd.writeFile('AGENTS.md', `# Team rules\n\nKeep functions small.\n\n${legacyBlock}`);
+      harness.cwd.writeFile('CLAUDE.md', legacyBlock);
+
+      const result = await harness.run('arch install-skill');
+
+      expect(result.exitCode).toBe(0);
+      expect(readFileSync(join(harness.cwd.path, 'AGENTS.md'), 'utf8')).toBe(
+        '# Team rules\n\nKeep functions small.\n',
+      );
+      expect(harness.cwd.exists('CLAUDE.md')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     '--global installs in the home directory',
     async () => {
       const result = await harness.run('architecture install-skill --global');

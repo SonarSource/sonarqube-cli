@@ -27,16 +27,21 @@ import { join } from 'node:path';
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { IntegrationContext } from '@/core/framework/features/types.ts';
+import { textSnippetRemover } from '@/core/framework/resources/text-snippet.ts';
 import { wholeFile } from '@/core/framework/resources/whole-file.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 
+import { sonarBeginMarker, sonarEndMarker } from '../integrate/_common/instructions-templates.ts';
 import { ARCHITECTURE_SKILL, ARCHITECTURE_SKILL_MARKER } from './skill-content.ts';
 
 const SKILL_DIRS = [
   ['.claude', 'skills'],
   ['.agents', 'skills'],
 ];
+// 1.13.0 wrote a managed coding block here; remove it when users re-run install-skill.
+const LEGACY_INSTRUCTION_FILES = ['CLAUDE.md', 'AGENTS.md'];
+const LEGACY_INSTRUCTIONS_MARKER = 'sonarqube-architecture-coding';
 
 export interface InstallSkillOptions {
   global?: boolean;
@@ -63,6 +68,19 @@ export async function installSkill(
     (previous, dir) =>
       previous.then(() =>
         installAt(join(targetRoot, ...dir, 'sonar-architecture', 'SKILL.md'), context),
+      ),
+    Promise.resolve(),
+  );
+  if (global) return;
+  await LEGACY_INSTRUCTION_FILES.reduce(
+    (previous, file) =>
+      previous.then(() =>
+        textSnippetRemover({
+          id: LEGACY_INSTRUCTIONS_MARKER,
+          targetPath: join(targetRoot, file),
+          startMarker: sonarBeginMarker(LEGACY_INSTRUCTIONS_MARKER),
+          endMarker: sonarEndMarker(LEGACY_INSTRUCTIONS_MARKER),
+        }).remove(context),
       ),
     Promise.resolve(),
   );
