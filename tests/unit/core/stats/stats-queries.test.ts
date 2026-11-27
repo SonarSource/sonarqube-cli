@@ -24,7 +24,7 @@ import { describe, expect, it } from 'bun:test';
 import { openStatsDb } from '@/core/stats/db.ts';
 import { queryStatsSummary } from '@/core/stats/stats-queries.ts';
 
-import { useTempSonarUserHome } from './_helpers.ts';
+import { useTempSonarUserHome } from '../../../_common/temp-sonar-user-home.ts';
 
 const DAY_MS = 86_400_000;
 

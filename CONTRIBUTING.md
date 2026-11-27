@@ -81,7 +81,7 @@ bun run test:coverage
 
 ### Integration tests
 
-Integration tests run the compiled binary against fake servers in isolated temporary environments. They do not require real SonarQube Server or Cloud tokens.
+Most integration tests run the compiled CLI against fake servers in isolated temporary environments. Others exercise specific boundaries, such as SQLite persistence or parsing output from the real secrets scanner. The suite does not require real SonarQube Server or Cloud tokens.
 
 `bun run test:integration` automatically runs `pretest:integration` to build the binary and prepare test resources. To run one integration test file, prepare the resources first:
 

@@ -28,7 +28,7 @@ import * as dbModule from '@/core/stats/db.ts';
 import { dedupeAgainstSeen, recordStatsEvent, upsertRuleMessages } from '@/core/stats/store.ts';
 
 import { readStatsAggregate } from '../../../_common/stats-helpers.ts';
-import { useTempSonarUserHome } from './_helpers.ts';
+import { useTempSonarUserHome } from '../../../_common/temp-sonar-user-home.ts';
 
 useTempSonarUserHome('cli-stats-store-test-');
 

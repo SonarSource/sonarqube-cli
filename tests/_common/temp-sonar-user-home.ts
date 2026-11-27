@@ -26,7 +26,7 @@ import { afterEach, beforeEach } from 'bun:test';
 
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 
-import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
+import { restoreEnv } from './isolated-cli-env.ts';
 
 const IS_WINDOWS = process.platform === 'win32';
 
