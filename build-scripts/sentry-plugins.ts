@@ -33,7 +33,7 @@ export function createSentryPlugins(): Bun.BunPlugin[] {
   const plugin = sentryBunPlugin({
     telemetry: false,
     sourcemaps: { disable: true },
-    release: { create: false, inject: false },
+    release: { create: false, finalize: false, inject: false },
   }) as Bun.BunPlugin;
   return [plugin];
 }
