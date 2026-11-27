@@ -19,7 +19,7 @@
  */
 
 /**
- * E2E tests for parseSecretsJson against the real sonar-secrets binary.
+ * Integration tests for parseSecretsJson against the real sonar-secrets binary.
  *
  * Verify that our JSON stdout parser correctly handles the actual binary
  * output format. If the binary changes its output format, these tests catch it.
@@ -41,13 +41,13 @@ import {
   setDefaultTimeout,
 } from 'bun:test';
 
+import { parseSecretsJson, runSecretsBinary } from '@/commands/analyze/secrets.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 
-import { parseSecretsJson, runSecretsBinary } from '../../src/commands/analyze/secrets.ts';
-import { FakeSonarQubeServerBuilder } from '../integration/harness';
-import { resolveBinaryFixturePath } from '../integration/harness/environment-builder.ts';
+import { FakeSonarQubeServerBuilder } from '../../harness';
+import { resolveBinaryFixturePath } from '../../harness/environment-builder.ts';
 
 const TEST_TIMEOUT_MS = 30_000;
 setDefaultTimeout(TEST_TIMEOUT_MS);
@@ -71,7 +71,7 @@ describe('parseSecretsJson — real binary', () => {
   });
 
   beforeEach(async () => {
-    tempDir = join(tmpdir(), `sonar-e2e-secrets-parser-${crypto.randomUUID()}`);
+    tempDir = join(tmpdir(), `sonar-integration-secrets-parser-${crypto.randomUUID()}`);
     mkdirSync(tempDir, { recursive: true });
 
     server = await new FakeSonarQubeServerBuilder().withAuthToken('e2e-token').start();

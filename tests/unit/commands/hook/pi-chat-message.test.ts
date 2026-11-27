@@ -31,7 +31,7 @@ import { piChatMessage } from '../../../../src/commands/hook/pi-chat-message.ts'
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
-import { useTempSonarUserHome } from '../../core/stats/_helpers.ts';
+import { useTempSonarUserHome } from '../../../_common/temp-sonar-user-home.ts';
 
 const PROMPT_TEXT = 'my token is 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, use it';
 

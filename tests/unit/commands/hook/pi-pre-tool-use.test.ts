@@ -32,7 +32,7 @@ import { piPreToolUse } from '../../../../src/commands/hook/pi-pre-tool-use.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
-import { useTempSonarUserHome } from '../../core/stats/_helpers.ts';
+import { useTempSonarUserHome } from '../../../_common/temp-sonar-user-home.ts';
 
 const TEST_FILE = '/sonar-test/test.ts';
 

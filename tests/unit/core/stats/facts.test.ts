@@ -41,7 +41,7 @@ import {
 } from '@/core/config-constants.ts';
 import { type AnalyzerStatsFactPayload, commitStatsFacts } from '@/core/stats/facts.ts';
 
-import { useTempSonarUserHome } from './_helpers.ts';
+import { useTempSonarUserHome } from '../../../_common/temp-sonar-user-home.ts';
 
 useTempSonarUserHome('cli-stats-facts-test-');
 
