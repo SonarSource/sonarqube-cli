@@ -36,6 +36,43 @@ const VALID_TOKEN = 'fake-token';
 const FAKE_SERVER = 'http://localhost:19999';
 const EXIT_CODE_SECRETS_FOUND = 51;
 
+interface StatsJsonMetric {
+  metric: string;
+  windowValue: number;
+  allTimeValue: number;
+  series: number[];
+}
+
+interface StatsJson {
+  hasHistory: boolean;
+  window: unknown;
+  entitlement: unknown;
+  card: { metrics: StatsJsonMetric[] };
+  analyzers: unknown;
+}
+
+const STATS_JSON_KEYS = [
+  'analyzers',
+  'agents',
+  'callerCommands',
+  'card',
+  'entitlement',
+  'hasHistory',
+  'stopped',
+  'topRules',
+  'triggers',
+  'window',
+];
+const STATS_JSON_CARD_KEYS = ['bucketDays', 'metrics', 'startedAtMs', 'unavailable'];
+
+function parseStatsJson(stdout: string): StatsJson {
+  return JSON.parse(stdout) as StatsJson;
+}
+
+function runsMetric(json: StatsJson): StatsJsonMetric | undefined {
+  return json.card.metrics.find((row) => row.metric === 'runs');
+}
+
 describe('sonar stats', () => {
   let harness: TestHarness;
 
@@ -61,19 +98,12 @@ describe('sonar stats', () => {
   );
 
   it(
-    '--json on an empty ledger reports zero totals and no entitlement lookup',
+    '--json reports no history without requiring entitlement lookup',
     async () => {
       const result = await harness.run('stats --json');
 
       expect(result.exitCode).toBe(0);
-      const json = JSON.parse(result.stdout) as {
-        totalRuns: number;
-        totalFindings: number;
-        entitlement: unknown;
-      };
-      expect(json.totalRuns).toBe(0);
-      expect(json.totalFindings).toBe(0);
-      expect(json.entitlement).toBeNull();
+      expect(JSON.parse(result.stdout)).toEqual({ hasHistory: false });
     },
     { timeout: 15000 },
   );
@@ -113,14 +143,35 @@ describe('sonar stats', () => {
       const result = await harness.run('stats --json');
 
       expect(result.exitCode).toBe(0);
-      const json = JSON.parse(result.stdout) as {
-        totalRuns: number;
-        allTime: { totalRuns: number; secretsBlockedTotal: number };
-        analyzers: Array<{ analyzer: string; runs: number; findings: number }>;
-      };
-      expect(json.totalRuns).toBe(1);
-      expect(json.allTime.totalRuns).toBe(1);
-      expect(json.analyzers).toEqual([{ analyzer: 'sonar-secrets', runs: 1, findings: 1 }]);
+      const json = parseStatsJson(result.stdout);
+      expect(json.hasHistory).toBe(true);
+      expect(runsMetric(json)).toEqual({
+        metric: 'runs',
+        windowValue: 1,
+        allTimeValue: 1,
+        series: expect.any(Array),
+      });
+      expect(json.analyzers).toEqual({ total: 1, rows: [{ analyzer: 'sonar-secrets', runs: 1 }] });
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    '--json exposes exactly the documented top-level and card fields',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const scan = await harness.run('analyze secrets secrets.js');
+      expect(scan.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+      const result = await harness.run('stats --json');
+
+      expect(result.exitCode).toBe(0);
+      const json = parseStatsJson(result.stdout);
+      expect(Object.keys(json).sort()).toEqual([...STATS_JSON_KEYS].sort());
+      expect(Object.keys(json.card).sort()).toEqual([...STATS_JSON_CARD_KEYS].sort());
     },
     { timeout: 30000 },
   );
@@ -138,12 +189,14 @@ describe('sonar stats', () => {
       const result = await harness.run('stats --since all --json');
 
       expect(result.exitCode).toBe(0);
-      const json = JSON.parse(result.stdout) as {
-        totalRuns: number;
-        allTime: { totalRuns: number };
-      };
-      expect(json.totalRuns).toBe(1);
-      expect(json.allTime.totalRuns).toBe(1);
+      const json = parseStatsJson(result.stdout);
+      expect(json.window).toEqual({ since: 'all' });
+      expect(runsMetric(json)).toEqual({
+        metric: 'runs',
+        windowValue: 1,
+        allTimeValue: 1,
+        series: expect.any(Array),
+      });
     },
     { timeout: 30000 },
   );
@@ -165,13 +218,14 @@ describe('sonar stats', () => {
 
       const jsonResult = await harness.run('stats --json');
       expect(jsonResult.exitCode).toBe(0);
-      const json = JSON.parse(jsonResult.stdout) as {
-        totalRuns: number;
-        allTime: { totalRuns: number };
-        entitlement: unknown;
-      };
-      expect(json.totalRuns).toBe(0);
-      expect(json.allTime.totalRuns).toBe(1);
+      const json = parseStatsJson(jsonResult.stdout);
+      expect(json.hasHistory).toBe(true);
+      expect(runsMetric(json)).toEqual({
+        metric: 'runs',
+        windowValue: 0,
+        allTimeValue: 1,
+        series: expect.any(Array),
+      });
       expect(json.entitlement).not.toBeNull();
     },
     { timeout: 30000 },
@@ -267,6 +321,37 @@ describe('sonar stats', () => {
       expect(result.stdout).toContain('at commit');
       expect(result.stdout).toContain('secrets in staged files');
       expect(result.stdout).toMatch(/\d+ .+ token/i);
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    { since: '7d', expectedRuns: 0, expectedWindow: { since: '7d', days: 7 } },
+    { since: '14d', expectedRuns: 1, expectedWindow: { since: '14d', days: 14 } },
+    { since: '30d', expectedRuns: 1, expectedWindow: { since: '30d', days: 30 } },
+    { since: 'all', expectedRuns: 1, expectedWindow: { since: 'all' } },
+  ])(
+    '--since $since filters reported runs while preserving all-time totals',
+    async ({ since, expectedRuns, expectedWindow }) => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      harness.cwd.writeFile('clean.js', 'const value = 1;');
+      const scan = await harness.run('analyze secrets clean.js');
+      expect(scan.exitCode).toBe(0);
+      backdateStatsEvents(harness.sonarUserHome.path, Date.now() - 10 * DAY_MS);
+      harness.clearAuth();
+
+      const result = await harness.run(`stats --since ${since} --json`);
+
+      expect(result.exitCode).toBe(0);
+      const json = parseStatsJson(result.stdout);
+      expect(json.window).toEqual(expectedWindow);
+      expect(runsMetric(json)).toEqual({
+        metric: 'runs',
+        windowValue: expectedRuns,
+        allTimeValue: 1,
+        series: expect.any(Array),
+      });
     },
     { timeout: 30000 },
   );
