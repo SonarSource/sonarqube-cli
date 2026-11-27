@@ -213,7 +213,7 @@ import {
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
 import { type McpRunOptions, runMcp } from './run/mcp.ts';
-import { stats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
+import { stats, type StatsOptions } from './stats/index.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import {
   systemStatus,
@@ -1071,11 +1071,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   COMMAND_TREE.command('stats')
     .stage(Stage.Alpha)
     .description('Show what the CLI has caught or prevented for you')
-    .addOption(
-      new SonarOption('--since <window>', 'Time window: 7d|14d|30d|all')
-        .choices(STATS_SINCE_CHOICES)
-        .default('30d'),
-    )
     .option('--json', 'Output as JSON for machine consumption')
     .anonymousAction((ctx, options: StatsOptions) => stats(options, ctx));
 
