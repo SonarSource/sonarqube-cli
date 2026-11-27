@@ -38,6 +38,8 @@ export interface CliRuntime {
   privateBetaFlags: PrivateBetaFlagRegistry;
   /** Private Beta registration gate; Open Beta ignores this. */
   isPrivateBetaEnabled: (flagKey: string) => boolean;
+  /** Resolves an organization-scoped LaunchDarkly flag on demand; false when unresolved. */
+  resolveFeatureFlag: (flagKey: string) => Promise<boolean>;
   /** Single construction site for `ctx.connection.httpClient`. */
   httpClientFactory: (auth: ResolvedAuth) => SonarHttpClient;
 }
@@ -63,13 +65,19 @@ export function createCliRuntime(options?: {
   const authResolver = options?.authResolver ?? new AuthResolver({ console: options?.console });
   const flagsResolver = options?.flagsResolver ?? new FlagsResolver(authResolver, privateBetaFlags);
 
+  const isPrivateBetaEnabled =
+    options?.isPrivateBetaEnabled ?? ((flagKey) => flagsResolver.isPrivateBetaEnabled(flagKey));
+
   return {
     isAlphaEnabled: options?.isAlphaEnabled ?? isAlphaEnabledFromEnv(),
     authResolver,
     flagsResolver,
     privateBetaFlags,
-    isPrivateBetaEnabled:
-      options?.isPrivateBetaEnabled ?? ((flagKey) => flagsResolver.isPrivateBetaEnabled(flagKey)),
+    isPrivateBetaEnabled,
+    resolveFeatureFlag: async (flagKey) => {
+      await flagsResolver.ensureResolved(flagKey);
+      return isPrivateBetaEnabled(flagKey);
+    },
     httpClientFactory:
       options?.httpClientFactory ?? ((auth) => new SonarHttpClient(auth.serverUrl, auth.token)),
   };
