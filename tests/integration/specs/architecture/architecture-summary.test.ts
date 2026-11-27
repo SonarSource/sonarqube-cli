@@ -46,16 +46,52 @@ describe('current architecture summary', () => {
     h.withAuth(server.recordedAuthServerUrl(), 'findings-token', cloud ? 'my-org' : undefined);
     return server;
   }
-  it('keeps the existing Cloud-only gate for summary reads', async () => {
-    const server = await configured(false);
-    const result = await h.run('arch current get --summary -p shop --format json');
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain(
-      'The sonar architecture command requires a SonarQube Cloud connection.',
+  it('reads Server summaries without inferring coverage from the legacy text', async () => {
+    const server = await configured(false, (api) =>
+      api.withStatus(
+        'project-summaries',
+        200,
+        JSON.stringify({
+          projectSummaries: [
+            {
+              coverage: {
+                percentage: '100',
+                summary:
+                  'A coverage of 100% was achieved — all 10 code leaves map to a declared model component.',
+              },
+              deviations: { relationshipDeviation: 1, structuralDeviation: 1, total: 2 },
+              flaws: { oversizedComponent: 1, tangle: 1, total: 2 },
+              language: 'ts',
+              smells: { splitResponsibility: 2, total: 3, weakTangle: 1 },
+            },
+          ],
+        }),
+      ),
     );
-    expect(server.getRecordedRequests().some((r) => r.path.includes('project-summaries'))).toBe(
-      false,
-    );
+    const json = await h.run('arch current get --summary -p shop --format json');
+    expect(json.exitCode).toBe(0);
+    expect(JSON.parse(json.stdout)).toEqual({
+      project: 'shop',
+      summaries: [
+        {
+          language: 'ts',
+          deviations: { total: 2, structuralDeviation: 1, relationshipDeviation: 1 },
+          flaws: { total: 2, tangle: 1, oversizedComponent: 1 },
+          smells: { total: 3, weakTangle: 1, splitResponsibility: 2 },
+        },
+      ],
+    });
+    const request = server
+      .getRecordedRequests()
+      .find((r) => r.path === '/api/v2/architecture/project-summaries');
+    expect(request?.query).toMatchObject({
+      organizationId: '00000000-0000-4000-0000-000000000000',
+      branchId: 'shop-branch-id',
+    });
+    const text = await h.run('arch current get --summary -p shop --format text');
+    expect(text.exitCode).toBe(0);
+    expect(text.stdout).toContain('smells: 3 (weakTangle: 1, splitResponsibility: 2)');
+    expect(text.stdout).not.toContain('coverage');
   });
 
   it.each(['--component app', '--depth 2', '--from a --to b', '--page 1', '--page-size 1'])(

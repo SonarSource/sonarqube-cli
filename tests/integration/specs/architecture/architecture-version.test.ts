@@ -25,6 +25,7 @@ describe('Architecture Server version', () => {
   describe.each(['2025.1', '2026.5.4', '26.11'])('Server %s', (version) => {
     it.each([
       'arch current get -p shop',
+      'arch current get --summary -p shop',
       'arch intended get -p shop',
       'arch intended set -p shop --file intended.json --dry-run',
       'arch directives get -p shop',
@@ -44,16 +45,13 @@ describe('Architecture Server version', () => {
         h.cwd.writeFile('directives.json', JSON.stringify({ create: [] }));
         const result = await h.run(command);
         expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain(
-          'The sonar architecture command requires a SonarQube Cloud connection.',
-        );
-        expect(result.stderr).toContain(
-          'Authenticate against SonarQube Cloud with ‘sonar auth login’ and retry.',
-        );
+        expect(result.stderr).toContain('2026.6 or later is required');
+        if (version === '26.11') {
+          expect(result.stderr).toContain('Community Build 26.11 does not include Architecture');
+          expect(result.stderr).toContain('Use SonarQube Server or SonarQube Cloud');
+        }
         expect(
-          server
-            .getRecordedRequests()
-            .filter((r) => r.path.includes('/architecture/') || r.path === '/api/system/status'),
+          server.getRecordedRequests().filter((r) => r.path.includes('/architecture/')),
         ).toHaveLength(0);
       } finally {
         await h.dispose();
@@ -79,7 +77,7 @@ describe('Architecture Server version', () => {
     }
   });
 
-  it('rejects Server without checking an unavailable version', async () => {
+  it('uses the API compatibility check if the Server version cannot be read', async () => {
     const h = await TestHarness.create();
     try {
       const server = await h
@@ -90,21 +88,16 @@ describe('Architecture Server version', () => {
         .start();
       h.withAuth(server.baseUrl(), 'test-token');
       const result = await h.run('arch current get -p shop --language java --format json');
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain(
-        'The sonar architecture command requires a SonarQube Cloud connection.',
+      expect(result.exitCode).toBe(0);
+      expect(server.getRecordedRequests().some((r) => r.path.includes('/architecture/'))).toBe(
+        true,
       );
-      expect(
-        server
-          .getRecordedRequests()
-          .some((r) => r.path.includes('/architecture/') || r.path === '/api/system/status'),
-      ).toBe(false);
     } finally {
       await h.dispose();
     }
   });
 
-  it('rejects Server before checking an unavailable Architecture API', async () => {
+  it('reports an unavailable Architecture API when the Server version cannot be read', async () => {
     const h = await TestHarness.create();
     try {
       const server = await h
@@ -120,14 +113,8 @@ describe('Architecture Server version', () => {
       h.withAuth(server.baseUrl(), 'test-token');
       const result = await h.run('arch current get -p shop --language java --format json');
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain(
-        'The sonar architecture command requires a SonarQube Cloud connection.',
-      );
-      expect(
-        server
-          .getRecordedRequests()
-          .some((r) => r.path.includes('/architecture/') || r.path === '/api/system/status'),
-      ).toBe(false);
+      expect(result.stderr).toContain('The public Architecture API endpoint was not found');
+      expect(result.stderr).toContain('Server build that exposes the public Architecture APIs');
     } finally {
       await h.dispose();
     }
