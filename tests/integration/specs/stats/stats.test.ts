@@ -177,31 +177,6 @@ describe('sonar stats', () => {
   );
 
   it(
-    '--since all runs without error and keeps the all-time headline in sync with the window',
-    async () => {
-      harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
-      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-
-      const scan = await harness.run('analyze secrets secrets.js');
-      expect(scan.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
-
-      const result = await harness.run('stats --since all --json');
-
-      expect(result.exitCode).toBe(0);
-      const json = parseStatsJson(result.stdout);
-      expect(json.window).toEqual({ since: 'all' });
-      expect(runsMetric(json)).toEqual({
-        metric: 'runs',
-        windowValue: 1,
-        allTimeValue: 1,
-        series: expect.any(Array),
-      });
-    },
-    { timeout: 30000 },
-  );
-
-  it(
     'does not show the empty state when only the 30d window is empty but all-time history exists',
     async () => {
       harness.state().withSecretsBinaryInstalled();
@@ -232,7 +207,7 @@ describe('sonar stats', () => {
   );
 
   it(
-    'renders the --since all text card with bucketed sparklines once history spans more than 30 days',
+    'keeps the text card at 30 days when history spans more than 30 days',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
@@ -245,11 +220,12 @@ describe('sonar stats', () => {
       const recentScan = await harness.run('analyze secrets secrets.js');
       expect(recentScan.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
-      const result = await harness.run('stats --since all');
+      const result = await harness.run('stats');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('sonar stats · since');
-      expect(result.stdout).toContain('one column per 2 days');
+      expect(result.stdout).toContain('last 30 days');
+      expect(result.stdout).toMatch(/Analyses run\s+1\s+\S+\s+2/);
+      expect(result.stdout).not.toContain('one column per 2 days');
     },
     { timeout: 30000 },
   );
@@ -326,46 +302,57 @@ describe('sonar stats', () => {
   );
 
   it.each([
-    { since: '7d', expectedRuns: 0, expectedWindow: { since: '7d', days: 7 } },
-    { since: '14d', expectedRuns: 1, expectedWindow: { since: '14d', days: 14 } },
-    { since: '30d', expectedRuns: 1, expectedWindow: { since: '30d', days: 30 } },
-    { since: 'all', expectedRuns: 1, expectedWindow: { since: 'all' } },
+    { daysAgo: 29, expectedRuns: 1 },
+    { daysAgo: 30, expectedRuns: 0 },
   ])(
-    '--since $since filters reported runs while preserving all-time totals',
-    async ({ since, expectedRuns, expectedWindow }) => {
+    'limits text and JSON to 30 UTC days for an event $daysAgo days ago',
+    async ({ daysAgo, expectedRuns }) => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
       harness.cwd.writeFile('clean.js', 'const value = 1;');
       const scan = await harness.run('analyze secrets clean.js');
       expect(scan.exitCode).toBe(0);
-      backdateStatsEvents(harness.sonarUserHome.path, Date.now() - 10 * DAY_MS);
+      const todayStartMs = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+      backdateStatsEvents(harness.sonarUserHome.path, todayStartMs - daysAgo * DAY_MS);
       harness.clearAuth();
 
-      const result = await harness.run(`stats --since ${since} --json`);
+      const result = await harness.run('stats --json');
 
       expect(result.exitCode).toBe(0);
       const json = parseStatsJson(result.stdout);
-      expect(json.window).toEqual(expectedWindow);
+      expect(json.window).toEqual({ since: '30d', days: 30 });
       expect(runsMetric(json)).toEqual({
         metric: 'runs',
         windowValue: expectedRuns,
         allTimeValue: 1,
         series: expect.any(Array),
       });
+      const text = await harness.run('stats');
+      expect(text.exitCode).toBe(0);
+      expect(text.stdout).toContain('last 30 days');
+      expect(text.stdout).toMatch(new RegExp(`Analyses run\\s+${expectedRuns}\\s+\\S+\\s+1`));
     },
     { timeout: 30000 },
   );
 
-  it(
-    'rejects an invalid --since value',
-    async () => {
-      const result = await harness.run('stats --since 90d');
+  it.each(['7d', '14d', '30d', 'all', '90d'])(
+    'rejects --since %s as an unknown option',
+    async (since) => {
+      const result = await harness.run(`stats --since ${since}`);
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.stderr).toContain('Allowed choices are 7d, 14d, 30d, all');
+      expect(result.stderr).toContain("unknown option '--since'");
     },
     { timeout: 15000 },
   );
+
+  it('omits --since from help', async () => {
+    const result = await harness.run('stats --help');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('--json');
+    expect(result.stdout).not.toContain('--since');
+  });
 
   it(
     'shows a local-only disclaimer when DO_NOT_TRACK is set',
