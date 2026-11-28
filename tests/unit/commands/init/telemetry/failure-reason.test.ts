@@ -20,6 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import { OrganizationImportPermissionError } from '@/commands/import/resolve-options.ts';
 import { OnboardingCancelledError } from '@/commands/init/answer.ts';
 import { RepositoryInOtherOrganizationError } from '@/commands/init/steps/detect.ts';
 import { OrganizationCreationDeclined } from '@/commands/init/steps/organization.ts';
@@ -94,5 +95,8 @@ describe('classifyInitFailure()', () => {
     expect(classifyInitFailure(new CommandFailedError('Not signed in.'))).toBe('unknown');
     expect(classifyInitFailure('not an error')).toBe('unknown');
     expect(classifyInitFailure(new CommandFailedError('Not signed in.'), 'auth')).toBe('auth');
+  });
+  it('classifies denied Cloud import permissions as permission', () => {
+    expect(classifyInitFailure(new OrganizationImportPermissionError('my-org'))).toBe('permission');
   });
 });

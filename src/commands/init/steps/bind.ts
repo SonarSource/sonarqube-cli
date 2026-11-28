@@ -20,7 +20,7 @@
 
 import { CloudBackend } from '@/commands/import/cloud-backend.ts';
 import { ImportApiClient } from '@/commands/import/import-api.ts';
-import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/resolve-options.ts';
+import { resolveAlmKey, type ResolvedOrg } from '@/commands/import/resolve-options.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { waitInBrowser } from '@/core/host/browser.ts';
@@ -162,14 +162,13 @@ async function importRepository(
  * created: `--bind` ends as declined, and otherwise the no-project step says how to go on.
  */
 export async function runBoundNew(
-  { projectRoot, remote, repositorySlug }: BoundNewPath,
+  { projectRoot, remote, repositorySlug, organization: org }: BoundNewPath,
   deps: DetectDeps,
 ): Promise<InitOutcome | NoProjectPath> {
   const { auth, http, console, intent, telemetry } = deps;
   const project = telemetry?.project(0);
   project?.begin('create_project');
   const api = new ImportApiClient(http);
-  const org = await resolveOrg(api, auth.orgKey);
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
   // The browser authorization and the import both change things, so a preview stops short of them.
   if (deps.dryRun) {

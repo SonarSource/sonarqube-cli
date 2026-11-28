@@ -23,7 +23,13 @@
 import { CloudBackend } from '@/commands/import/cloud-backend.ts';
 import { ImportApiClient } from '@/commands/import/import-api.ts';
 import type { ImportPlan } from '@/commands/import/import-backend.ts';
-import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/resolve-options.ts';
+import {
+  OrganizationImportPermissionError,
+  resolveAlmKey,
+  type ResolvedOrg,
+  resolveOrg,
+} from '@/commands/import/resolve-options.ts';
+import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
@@ -104,6 +110,11 @@ export async function bindNewRoots(
       : undefined;
   }
   const { auth, http, console, dryRun } = deps;
+  const api = new ImportApiClient(http);
+  const org = await resolveBindingOrganization(roots, api, deps);
+  if (!org) {
+    return undefined;
+  }
   const noun = roots.length === 1 ? 'project' : 'projects';
   const consent =
     required ||
@@ -118,17 +129,10 @@ export async function bindNewRoots(
     return undefined;
   }
 
-  const api = new ImportApiClient(http);
-  const org = await resolveOrg(api, auth.orgKey);
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
   // The browser authorization and the import both change things, so a preview stops short of them.
   if (dryRun) {
-    if (!linkedAlmKey) {
-      console.info(
-        `Organization '${org.key}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
-      );
-    }
-    return roots.map(({ path, projectKey }) => ({ path, kind: 'would-bind', projectKey }));
+    return previewBindings(roots, org.key, !linkedAlmKey, console);
   }
   // One authorization serves every root: the batch below reuses the key it returns.
   const almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
@@ -138,6 +142,43 @@ export async function bindNewRoots(
       : undefined;
   }
   return importBatch(roots, slug, noun, { ...org, almKey }, api, deps);
+}
+
+function previewBindings(
+  roots: readonly BindableRoot[],
+  organizationKey: string,
+  authorizationNeeded: boolean,
+  console: Console,
+): MonorepoRootResult[] {
+  if (authorizationNeeded) {
+    console.info(
+      `Organization '${organizationKey}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
+    );
+  }
+  return roots.map(({ path, projectKey }) => ({ path, kind: 'would-bind', projectKey }));
+}
+
+/** A denied optional bind blocks only the new roots, not existing-project onboarding. */
+async function resolveBindingOrganization(
+  roots: readonly BindableRoot[],
+  api: ImportApiClient,
+  deps: DetectDeps,
+): Promise<ResolvedOrg | undefined> {
+  try {
+    return await resolveOrg(api, deps.auth.orgKey);
+  } catch (error) {
+    const optionalDenial =
+      deps.intent?.kind !== 'bind' && error instanceof OrganizationImportPermissionError;
+    recordBindDecision(roots, deps, optionalDenial ? 'skipped' : 'failed');
+    for (const { path } of roots) {
+      deps.telemetry?.projectLabelled(path)?.stopAt('project_bind', classifyInitFailure(error));
+    }
+    if (optionalDenial) {
+      deps.console.info(`${error.message} Continuing with existing projects only.`, 'stderr');
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 async function importBatch(

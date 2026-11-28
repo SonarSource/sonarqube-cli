@@ -33,6 +33,16 @@ import {
 
 const GITHUB_ALM_KEY = 'github';
 
+/** Importing repositories requires administrator access to the selected organization. */
+export class OrganizationImportPermissionError extends CommandFailedError {
+  constructor(orgKey: string) {
+    super(`You must be an administrator of organization '${orgKey}' to import repositories.`, {
+      remediationHint: 'Ask an administrator of this organization to run the import instead.',
+    });
+    this.name = 'OrganizationImportPermissionError';
+  }
+}
+
 export interface ResolvedOrg {
   key: string;
   /** Undefined if the org has no DevOps platform connected. */
@@ -128,10 +138,7 @@ async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise
   }
 
   if (org.actions?.admin !== true) {
-    throw new CommandFailedError(
-      `You must be an administrator of organization '${orgKey}' to import repositories.`,
-      { remediationHint: 'Ask an administrator of this organization to run the import instead.' },
-    );
+    throw new OrganizationImportPermissionError(orgKey);
   }
 
   return {
