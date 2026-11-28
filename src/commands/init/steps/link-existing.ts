@@ -28,7 +28,6 @@ import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 
 import { requireAnswer } from '../answer.ts';
-import { missingDecision } from '../decision.ts';
 import type { InitOutcome, LinkExistingPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import { chooseLinkFolder } from './folder-selection.ts';
@@ -40,9 +39,9 @@ import { showAnalysisResults, writeMapping } from './mapping.ts';
  * declines, they are asked whether to link another existing project, picked with the `sonar link`
  * picker. Declining that ends the run with nothing linked, and leaving the picker asks whether to
  * abandon linking (default no, which reopens the picker) before doing the same. The chosen project
- * is mapped in `.sonar-config.json` and its existing results are shown. `--link` answers the first
- * question, and `--link <key>` names the project instead. `--bind`, or no answer to ask, fail
- * instead, so no second project is created for a repository that already has one.
+ * is mapped in `.sonar-config.json` and its existing results are shown. `--link`, or a run without a
+ * terminal, answers the first question, and `--link <key>` names the project instead. `--bind`
+ * fails instead, so no second project is created for a repository that already has one.
  */
 export async function runLinkExisting(
   { projectRoot, projectKey: foundKey, requested }: LinkExistingPath,
@@ -54,7 +53,7 @@ export async function runLinkExisting(
     return linkProject(foundKey, projectRoot, deps);
   }
   const situation = `A SonarQube project already exists for this repository: '${foundKey}'.`;
-  if (intent?.kind === 'link') {
+  if (intent?.kind === 'link' || (!intent && !interactive)) {
     const linked = await linkInChosenFolder(foundKey, projectRoot, deps);
     if (linked === null) {
       throw new FolderSelectionCancelledError();
@@ -67,10 +66,6 @@ export async function runLinkExisting(
       "Run 'sonar init' again with --link to link it.",
     );
   }
-  if (!interactive) {
-    throw missingDecision(situation, ['--link']);
-  }
-
   const declined: InitOutcome = { kind: 'declined' };
   const link = requireAnswer(
     await console.confirmPrompt(`${situation} Link this directory to it?`, true),
